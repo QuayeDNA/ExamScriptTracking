@@ -18,6 +18,7 @@ export interface User {
   isSuperAdmin: boolean;
   isActive: boolean;
   passwordChanged: boolean;
+  profilePicture?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -60,6 +61,144 @@ export interface UpdateUserData {
   name?: string;
   department?: string;
   role?: Role;
+}
+
+// Session Types
+export interface Session {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface SessionsResponse {
+  sessions: Session[];
+}
+
+// Audit Log Types
+export interface AuditLog {
+  id: string;
+  userId: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  details?: Record<string, any>;
+  ipAddress?: string;
+  timestamp: string;
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: Role;
+  };
+}
+
+export interface AuditLogsResponse {
+  logs: AuditLog[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+export interface AuditLogFilters {
+  userId?: string;
+  action?: string;
+  entity?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+// Bulk Operations Types
+export interface BulkUserCreate {
+  email: string;
+  role: Role;
+  name: string;
+  department: string;
+}
+
+export interface BulkCreateResponse {
+  message: string;
+  success: Array<{ email: string; temporaryPassword: string }>;
+  failed: Array<{ email: string; error: string }>;
+}
+
+export interface BulkDeactivateRequest {
+  userIds: string[];
+}
+
+export interface BulkUpdateRolesRequest {
+  updates: Array<{ userId: string; role: Role }>;
+}
+
+export interface BulkUpdateRolesResponse {
+  message: string;
+  success: Array<{ userId: string; newRole: string }>;
+  failed: Array<{ userId: string; error: string }>;
+}
+
+// Admin Actions Types
+export interface AdminResetPasswordResponse {
+  message: string;
+  temporaryPassword: string;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
+}
+
+// Password Reset Types
+export interface PasswordResetRequest {
+  email: string;
+}
+
+export interface PasswordResetResponse {
+  message: string;
+  resetToken: string;
+  expiresAt: string;
+}
+
+export interface PasswordResetWithTokenRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface PasswordResetWithTokenResponse {
+  message: string;
+}
+
+// User Statistics Types
+export interface UsersByRole {
+  role: Role;
+  _count: number;
+}
+
+export interface UserStatistics {
+  totalUsers: number;
+  activeUsers: number;
+  inactiveUsers: number;
+  recentLogins: number;
+  usersByRole: UsersByRole[];
+  lockedAccounts: number;
+}
+
+// Profile Picture Types
+export interface ProfilePictureUpdate {
+  profilePicture: string;
+}
+
+export interface ProfilePictureResponse {
+  message: string;
+  profilePicture: string;
 }
 
 export interface UsersListResponse {

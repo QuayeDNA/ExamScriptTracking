@@ -47,13 +47,27 @@ export const DashboardLayout = () => {
             >
               Dashboard
             </button>
+            <button
+              onClick={() => navigate("/dashboard/sessions")}
+              className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+            >
+              My Sessions
+            </button>
             {(user?.isSuperAdmin || user?.role === "ADMIN") && (
-              <button
-                onClick={() => navigate("/dashboard/users")}
-                className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
-              >
-                User Management
-              </button>
+              <>
+                <button
+                  onClick={() => navigate("/dashboard/users")}
+                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                >
+                  User Management
+                </button>
+                <button
+                  onClick={() => navigate("/dashboard/audit-logs")}
+                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                >
+                  Audit Logs
+                </button>
+              </>
             )}
           </nav>
         </div>

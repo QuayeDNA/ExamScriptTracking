@@ -485,3 +485,473 @@ export const getHandlers = async (
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// Bulk create users
+export const bulkCreateUsers = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[BULK_CREATE_USERS] Request from:", req.user?.email);
+
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { users } = req.body;
+
+    if (!Array.isArray(users) || users.length === 0) {
+      res.status(400).json({ error: "Users array is required" });
+      return;
+    }
+
+    const results: {
+      success: Array<{ email: string; temporaryPassword: string }>;
+      failed: Array<{ email: string; error: string }>;
+    } = { success: [], failed: [] };
+
+    for (const userData of users) {
+      try {
+        const { email, role, name, department } = userData;
+
+        // Check if user exists
+        const existing = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (existing) {
+          results.failed.push({
+            email,
+            error: "Email already exists",
+          });
+          continue;
+        }
+
+        // Generate password
+        const temporaryPassword = generateRandomPassword();
+        const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+        // Parse name
+        const nameParts = name.trim().split(" ");
+        const firstName =
+          nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : name;
+        const lastName =
+          nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+
+        // Create user
+        const newUser = await prisma.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            role: role as Role,
+            firstName,
+            lastName,
+            phone: department || "",
+            passwordChanged: false,
+            isActive: true,
+          },
+        });
+
+        // Log audit
+        await prisma.auditLog.create({
+          data: {
+            userId: req.user.userId,
+            action: "BULK_CREATE_USER",
+            entity: "User",
+            entityId: newUser.id,
+            details: { email, role },
+            ipAddress: req.ip,
+          },
+        });
+
+        results.success.push({ email, temporaryPassword });
+      } catch (error) {
+        results.failed.push({
+          email: userData.email,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    console.log(
+      "[BULK_CREATE_USERS] Created:",
+      results.success.length,
+      "Failed:",
+      results.failed.length
+    );
+
+    res.json({
+      message: "Bulk user creation completed",
+      ...results,
+    });
+  } catch (error) {
+    console.error("Bulk create users error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Bulk deactivate users
+export const bulkDeactivateUsers = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[BULK_DEACTIVATE_USERS] Request from:", req.user?.email);
+
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { userIds } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      res.status(400).json({ error: "User IDs array is required" });
+      return;
+    }
+
+    // Prevent deactivating super admins
+    const superAdmins = await prisma.user.findMany({
+      where: {
+        id: { in: userIds },
+        isSuperAdmin: true,
+      },
+      select: { id: true, email: true },
+    });
+
+    if (superAdmins.length > 0) {
+      res.status(400).json({
+        error: "Cannot deactivate super admin accounts",
+        superAdmins: superAdmins.map((u) => u.email),
+      });
+      return;
+    }
+
+    const result = await prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { isActive: false },
+    });
+
+    // Log audit (use first user ID as entityId for bulk operations)
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.userId,
+        action: "BULK_DEACTIVATE_USERS",
+        entity: "User",
+        entityId: userIds[0] || req.user.userId,
+        details: { count: result.count, userIds },
+        ipAddress: req.ip,
+      },
+    });
+
+    console.log("[BULK_DEACTIVATE_USERS] Deactivated:", result.count);
+
+    res.json({
+      message: "Users deactivated successfully",
+      count: result.count,
+    });
+  } catch (error) {
+    console.error("Bulk deactivate users error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Bulk update roles
+export const bulkUpdateRoles = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[BULK_UPDATE_ROLES] Request from:", req.user?.email);
+
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { updates } = req.body;
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      res.status(400).json({
+        error: "Updates array is required (format: [{ userId, role }])",
+      });
+      return;
+    }
+
+    const results: {
+      success: Array<{ userId: string; newRole: string }>;
+      failed: Array<{ userId: string; error: string }>;
+    } = { success: [], failed: [] };
+
+    for (const { userId, role } of updates) {
+      try {
+        // Check if user is super admin
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { isSuperAdmin: true },
+        });
+
+        if (user?.isSuperAdmin) {
+          results.failed.push({
+            userId,
+            error: "Cannot change super admin role",
+          });
+          continue;
+        }
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { role: role as Role },
+        });
+
+        // Log audit
+        await prisma.auditLog.create({
+          data: {
+            userId: req.user.userId,
+            action: "BULK_UPDATE_ROLE",
+            entity: "User",
+            entityId: userId,
+            details: { newRole: role },
+            ipAddress: req.ip,
+          },
+        });
+
+        results.success.push({ userId, newRole: role });
+      } catch (error) {
+        results.failed.push({
+          userId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    console.log(
+      "[BULK_UPDATE_ROLES] Updated:",
+      results.success.length,
+      "Failed:",
+      results.failed.length
+    );
+
+    res.json({
+      message: "Bulk role update completed",
+      ...results,
+    });
+  } catch (error) {
+    console.error("Bulk update roles error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Upload profile picture
+export const uploadProfilePicture = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[UPLOAD_PROFILE_PICTURE] Request from:", req.user?.email);
+
+    if (!req.user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { profilePicture } = req.body;
+
+    if (!profilePicture) {
+      res.status(400).json({ error: "Profile picture data is required" });
+      return;
+    }
+
+    // Update user profile picture
+    const user = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { profilePicture },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        role: true,
+        profilePicture: true,
+        isActive: true,
+        isSuperAdmin: true,
+        passwordChanged: true,
+      },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.userId,
+        action: "UPDATE_PROFILE_PICTURE",
+        entity: "User",
+        entityId: req.user.userId,
+        ipAddress: req.ip,
+      },
+    });
+
+    console.log(
+      "[UPLOAD_PROFILE_PICTURE] Profile picture updated:",
+      req.user.email
+    );
+
+    res.json({ message: "Profile picture updated", user });
+  } catch (error) {
+    console.error("Upload profile picture error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Export users to CSV
+export const exportUsers = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[EXPORT_USERS] Request from:", req.user?.email);
+
+    const { role, isActive, search, dateFrom, dateTo } = req.query;
+
+    const where: any = {};
+
+    if (role) where.role = role as Role;
+    if (isActive !== undefined) where.isActive = isActive === "true";
+    if (search) {
+      where.OR = [
+        { email: { contains: search as string, mode: "insensitive" } },
+        { firstName: { contains: search as string, mode: "insensitive" } },
+        { lastName: { contains: search as string, mode: "insensitive" } },
+      ];
+    }
+
+    if (dateFrom || dateTo) {
+      where.createdAt = {};
+      if (dateFrom) where.createdAt.gte = new Date(dateFrom as string);
+      if (dateTo) where.createdAt.lte = new Date(dateTo as string);
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        isSuperAdmin: true,
+        passwordChanged: true,
+        lastLogin: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Convert to CSV
+    const headers = [
+      "ID",
+      "Email",
+      "First Name",
+      "Last Name",
+      "Department",
+      "Role",
+      "Active",
+      "Super Admin",
+      "Password Changed",
+      "Last Login",
+      "Created At",
+    ];
+
+    const csvRows = [headers.join(",")];
+
+    users.forEach((user) => {
+      const row = [
+        user.id,
+        user.email,
+        user.firstName,
+        user.lastName,
+        user.phone || "",
+        user.role,
+        user.isActive,
+        user.isSuperAdmin,
+        user.passwordChanged,
+        user.lastLogin ? user.lastLogin.toISOString() : "",
+        user.createdAt.toISOString(),
+      ];
+      csvRows.push(row.join(","));
+    });
+
+    const csv = csvRows.join("\n");
+
+    console.log("[EXPORT_USERS] Exported", users.length, "users");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=users-export.csv"
+    );
+    res.send(csv);
+  } catch (error) {
+    console.error("Export users error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Get user statistics (for dashboards)
+export const getUserStatistics = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("[GET_USER_STATISTICS] Request from:", req.user?.email);
+
+    const [
+      totalUsers,
+      activeUsers,
+      inactiveUsers,
+      recentLogins,
+      usersByRole,
+      lockedAccounts,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.user.count({ where: { isActive: false } }),
+      prisma.user.count({
+        where: {
+          lastLogin: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+          },
+        },
+      }),
+      prisma.user.groupBy({
+        by: ["role"],
+        _count: true,
+      }),
+      prisma.user.count({
+        where: {
+          lockedUntil: {
+            gt: new Date(),
+          },
+        },
+      }),
+    ]);
+
+    res.json({
+      totalUsers,
+      activeUsers,
+      inactiveUsers,
+      recentLogins,
+      usersByRole: usersByRole.map((r) => ({
+        role: r.role,
+        count: r._count,
+      })),
+      lockedAccounts,
+    });
+  } catch (error) {
+    console.error("Get user statistics error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

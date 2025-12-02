@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLogin } from "@/hooks/useAuth";
+import { Link } from "react-router";
 
 export const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -65,6 +66,14 @@ export const LoginPage = () => {
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 disabled={isPending}
               />
+              <div className="mt-2 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-500"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </div>
           </div>
 

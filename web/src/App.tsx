@@ -4,7 +4,11 @@ import { LoginPage } from "@/pages/LoginPage";
 import { ChangePasswordRequiredPage } from "@/pages/ChangePasswordRequiredPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
+import DashboardStatsPage from "@/pages/DashboardStatsPage";
 import { UsersPage } from "@/pages/UsersPage";
+import SessionsPage from "@/pages/SessionsPage";
+import AuditLogsPage from "@/pages/AuditLogsPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
@@ -24,6 +28,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route
             path="/change-password-required"
             element={<ChangePasswordRequiredPage />}
@@ -32,13 +37,15 @@ function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<DashboardPage />} />
+              <Route index element={<DashboardStatsPage />} />
+              <Route path="sessions" element={<SessionsPage />} />
             </Route>
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={[Role.ADMIN]} />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route path="users" element={<UsersPage />} />
+              <Route path="audit-logs" element={<AuditLogsPage />} />
             </Route>
           </Route>
 

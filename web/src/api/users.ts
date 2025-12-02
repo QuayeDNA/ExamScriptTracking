@@ -7,6 +7,14 @@ import type {
   UsersListResponse,
   HandlersListResponse,
   UserFilters,
+  BulkUserCreate,
+  BulkCreateResponse,
+  BulkDeactivateRequest,
+  BulkUpdateRolesRequest,
+  BulkUpdateRolesResponse,
+  UserStatistics,
+  ProfilePictureUpdate,
+  ProfilePictureResponse,
 } from "@/types";
 
 export const usersApi = {
@@ -54,5 +62,63 @@ export const usersApi = {
 
   getHandlers: async (): Promise<HandlersListResponse> => {
     return apiClient.get<HandlersListResponse>("/users/handlers");
+  },
+
+  bulkCreateUsers: async (
+    users: BulkUserCreate[]
+  ): Promise<BulkCreateResponse> => {
+    return apiClient.post<BulkCreateResponse>("/users/bulk/create", { users });
+  },
+
+  bulkDeactivateUsers: async (
+    data: BulkDeactivateRequest
+  ): Promise<{ message: string; count: number }> => {
+    return apiClient.post<{ message: string; count: number }>(
+      "/users/bulk/deactivate",
+      data
+    );
+  },
+
+  bulkUpdateRoles: async (
+    data: BulkUpdateRolesRequest
+  ): Promise<BulkUpdateRolesResponse> => {
+    return apiClient.post<BulkUpdateRolesResponse>(
+      "/users/bulk/update-roles",
+      data
+    );
+  },
+
+  uploadProfilePicture: async (
+    data: ProfilePictureUpdate
+  ): Promise<ProfilePictureResponse> => {
+    return apiClient.post<ProfilePictureResponse>(
+      "/users/profile-picture",
+      data
+    );
+  },
+
+  getStatistics: async (): Promise<UserStatistics> => {
+    return apiClient.get<UserStatistics>("/users/statistics");
+  },
+
+  exportUsers: (filters?: {
+    role?: string;
+    isActive?: boolean;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): string => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined) {
+          params.append(key, String(value));
+        }
+      });
+    }
+
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    const queryString = params.toString();
+    return `${API_URL}/api/users/export${queryString ? `?${queryString}` : ""}`;
   },
 };

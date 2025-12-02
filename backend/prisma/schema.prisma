@@ -19,6 +19,7 @@ model User {
   firstName         String
   lastName          String
   phone             String?
+  profilePicture    String?  // URL or path to profile picture
   isActive          Boolean  @default(true)
   isSuperAdmin      Boolean  @default(false)
   passwordChanged   Boolean  @default(false)
@@ -33,6 +34,31 @@ model User {
   createdExams    ExamSession[]
   auditLogs       AuditLog[]
   refreshTokens   RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+// Password Reset Tokens
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Blacklisted Access Tokens (for immediate session revocation)
+model BlacklistedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime // When the token would naturally expire
+  createdAt DateTime @default(now())
+  
+  @@index([token])
+  @@index([expiresAt])
 }
 
 enum Role {

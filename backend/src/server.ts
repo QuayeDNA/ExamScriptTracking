@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
+import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 
 // Load environment variables
 dotenv.config();
@@ -71,6 +72,11 @@ io.on("connection", (socket) => {
 // Start Express server
 app.listen(PORT, () => {
   console.log(`✅ Express server running on http://localhost:${PORT}`);
+
+  // Start blacklisted token cleanup (runs every hour)
+  console.log("🧹 Starting token blacklist cleanup service...");
+  cleanupBlacklistedTokens(); // Run immediately on startup
+  setInterval(cleanupBlacklistedTokens, 60 * 60 * 1000); // Then every hour
 });
 
 // Start Socket.io server
