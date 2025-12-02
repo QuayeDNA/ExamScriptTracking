@@ -12,20 +12,27 @@ datasource db {
 
 // Users & Roles
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  role      Role
-  firstName String
-  lastName  String
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(uuid())
+  email             String   @unique
+  password          String
+  role              Role
+  firstName         String
+  lastName          String
+  phone             String?
+  isActive          Boolean  @default(true)
+  isSuperAdmin      Boolean  @default(false)
+  passwordChanged   Boolean  @default(false)
+  lastLogin         DateTime?
+  failedLoginAttempts Int    @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   
   handledBatches  BatchTransfer[] @relation("Handler")
   receivedBatches BatchTransfer[] @relation("Receiver")
   createdExams    ExamSession[]
   auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
 }
 
 enum Role {
@@ -150,4 +157,17 @@ model AuditLog {
   
   @@index([entityId])
   @@index([timestamp])
+}
+
+// Refresh Tokens
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
 }

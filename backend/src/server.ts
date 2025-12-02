@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import authRoutes from "./routes/auth";
+import userRoutes from "./routes/users";
 
 // Load environment variables
 dotenv.config();
@@ -33,9 +35,19 @@ app.get("/api", (req: Request, res: Response) => {
     version: "1.0.0",
     endpoints: {
       health: "/health",
-      api: "/api",
+      auth: "/api/auth",
+      users: "/api/users",
     },
   });
+});
+
+// API Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: "Route not found" });
 });
 
 // Create HTTP server for Socket.io
