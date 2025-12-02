@@ -1,0 +1,19 @@
+{
+  "name": "exam-script-tracking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exam Script Tracking System - Monorepo",
+  "scripts": {
+    "dev": "concurrently -n backend,web,mobile -c blue,green,yellow \"npm run dev:backend\" \"npm run dev:web\" \"npm run dev:mobile\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "dev:mobile": "cd mobile && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../web && npm install && cd ../mobile && npm install",
+    "backend": "npm run dev:backend",
+    "web": "npm run dev:web",
+    "mobile": "npm run dev:mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

@@ -41,6 +41,9 @@ const firstTimePasswordSchema = z.object({
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log("[LOGIN] Login attempt for email:", req.body.email);
+    console.log("[LOGIN] Request IP:", req.ip);
+
     const { email, password } = loginSchema.parse(req.body);
 
     // Find user
@@ -49,6 +52,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!user) {
+      console.log("[LOGIN] User not found:", email);
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
@@ -65,6 +69,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
+      console.log("[LOGIN] Invalid password for user:", email);
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
@@ -97,6 +102,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       },
     });
 
+    console.log("[LOGIN] Successful login:", email, "Role:", user.role);
+
     res.json({
       message: "Login successful",
       token,
@@ -104,11 +111,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        department: user.phone || "",
         role: user.role,
         isSuperAdmin: user.isSuperAdmin,
+        isActive: user.isActive,
         passwordChanged: user.passwordChanged,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt?.toISOString(),
       },
     });
   } catch (error) {
@@ -128,7 +138,10 @@ export const changePassword = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[CHANGE_PASSWORD] Request from:", req.user?.email);
+
     if (!req.user) {
+      console.log("[CHANGE_PASSWORD] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -209,7 +222,10 @@ export const firstTimePasswordChange = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[FIRST_TIME_PASSWORD] Request from:", req.user?.email);
+
     if (!req.user) {
+      console.log("[FIRST_TIME_PASSWORD] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -292,7 +308,10 @@ export const getProfile = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[GET_PROFILE] Request from:", req.user?.email);
+
     if (!req.user) {
+      console.log("[GET_PROFILE] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -310,15 +329,32 @@ export const getProfile = async (
         isActive: true,
         passwordChanged: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
     if (!user) {
+      console.log("[GET_PROFILE] User not found:", req.user.userId);
       res.status(404).json({ error: "User not found" });
       return;
     }
 
-    res.json({ user });
+    console.log("[GET_PROFILE] Profile retrieved for:", user.email);
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        department: user.phone || "",
+        role: user.role,
+        isSuperAdmin: user.isSuperAdmin,
+        isActive: user.isActive,
+        passwordChanged: user.passwordChanged,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt?.toISOString(),
+      },
+    });
   } catch (error) {
     console.error("Get profile error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -327,7 +363,10 @@ export const getProfile = async (
 
 export const logout = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log("[LOGOUT] User logging out:", req.user?.email);
+
     if (!req.user) {
+      console.log("[LOGOUT] Unauthorized logout attempt");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }

@@ -9,18 +9,14 @@ const prisma = new PrismaClient();
 // Validation schemas
 const createUserSchema = z.object({
   email: z.string().email("Invalid email address"),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  phone: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  department: z.string().min(1, "Department is required"),
   role: z.nativeEnum(Role),
-  autoGeneratePassword: z.boolean().optional().default(true),
-  password: z.string().optional(),
 });
 
 const updateUserSchema = z.object({
-  firstName: z.string().min(1).optional(),
-  lastName: z.string().min(1).optional(),
-  phone: z.string().optional(),
+  name: z.string().min(1).optional(),
+  department: z.string().optional(),
   role: z.nativeEnum(Role).optional(),
 });
 
@@ -54,12 +50,20 @@ export const createUser = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[CREATE_USER] Request received from:", req.user?.email);
+    console.log("[CREATE_USER] Request body:", {
+      ...req.body,
+      password: "[REDACTED]",
+    });
+
     if (!req.user) {
+      console.log("[CREATE_USER] Unauthorized - no user in request");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
     const data = createUserSchema.parse(req.body);
+    console.log("[CREATE_USER] Validated data:", { ...data });
 
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
@@ -67,16 +71,13 @@ export const createUser = async (
     });
 
     if (existingUser) {
+      console.log("[CREATE_USER] Email already exists:", data.email);
       res.status(400).json({ error: "Email already exists" });
       return;
     }
 
-    // Generate or use provided password
-    const plainPassword = data.autoGeneratePassword
-      ? generateRandomPassword()
-      : data.password || generateRandomPassword();
-
-    // Hash password
+    // Generate password
+    const plainPassword = generateRandomPassword();
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     // Create user
@@ -84,13 +85,13 @@ export const createUser = async (
       data: {
         email: data.email,
         password: hashedPassword,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        phone: data.phone,
+        firstName: data.name.split(" ")[0] || data.name,
+        lastName: data.name.split(" ").slice(1).join(" ") || "",
+        phone: data.department, // Store department in phone field for now
         role: data.role,
         isSuperAdmin: false,
         isActive: true,
-        passwordChanged: false, // Force password change on first login
+        passwordChanged: false,
       },
       select: {
         id: true,
@@ -104,6 +105,12 @@ export const createUser = async (
         createdAt: true,
       },
     });
+
+    console.log(
+      "[CREATE_USER] User created successfully:",
+      user.id,
+      user.email
+    );
 
     // Log audit
     await prisma.auditLog.create({
@@ -124,12 +131,8 @@ export const createUser = async (
     // Return user with temporary credentials
     res.status(201).json({
       message: "User created successfully",
-      user,
-      credentials: {
-        email: user.email,
-        temporaryPassword: plainPassword,
-        note: "Please share these credentials securely with the user. They will be required to change their password on first login.",
-      },
+      email: user.email,
+      temporaryPassword: plainPassword,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -145,6 +148,9 @@ export const createUser = async (
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log("[GET_USERS] Request from:", req.user?.email);
+    console.log("[GET_USERS] Query params:", req.query);
+
     const { role, isActive, search } = req.query;
 
     const where: any = {};
@@ -185,7 +191,22 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
       },
     });
 
-    res.json({ users, count: users.length });
+    // Transform to match frontend format
+    const formattedUsers = users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      department: user.phone || "",
+      role: user.role,
+      isSuperAdmin: user.isSuperAdmin,
+      isActive: user.isActive,
+      passwordChanged: user.passwordChanged,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt?.toISOString(),
+    }));
+
+    console.log("[GET_USERS] Returning", formattedUsers.length, "users");
+    res.json({ users: formattedUsers });
   } catch (error) {
     console.error("Get users error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -194,6 +215,9 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 
 export const getUser = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log("[GET_USER] Request from:", req.user?.email);
+    console.log("[GET_USER] User ID:", req.params.id);
+
     const { id } = req.params;
 
     const user = await prisma.user.findUnique({
@@ -230,7 +254,12 @@ export const updateUser = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[UPDATE_USER] Request from:", req.user?.email);
+    console.log("[UPDATE_USER] User ID:", req.params.id);
+    console.log("[UPDATE_USER] Update data:", req.body);
+
     if (!req.user) {
+      console.log("[UPDATE_USER] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -303,7 +332,11 @@ export const deactivateUser = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[DEACTIVATE_USER] Request from:", req.user?.email);
+    console.log("[DEACTIVATE_USER] User ID:", req.params.id);
+
     if (!req.user) {
+      console.log("[DEACTIVATE_USER] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -371,7 +404,11 @@ export const reactivateUser = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[REACTIVATE_USER] Request from:", req.user?.email);
+    console.log("[REACTIVATE_USER] User ID:", req.params.id);
+
     if (!req.user) {
+      console.log("[REACTIVATE_USER] Unauthorized");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -417,6 +454,8 @@ export const getHandlers = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("[GET_HANDLERS] Request from:", req.user?.email);
+
     const handlerRoles: Role[] = [
       Role.INVIGILATOR,
       Role.LECTURER,
