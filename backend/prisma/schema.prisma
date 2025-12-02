@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users & Roles
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role
+  firstName String
+  lastName  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  handledBatches  BatchTransfer[] @relation("Handler")
+  receivedBatches BatchTransfer[] @relation("Receiver")
+  createdExams    ExamSession[]
+  auditLogs       AuditLog[]
+}
+
+enum Role {
+  ADMIN
+  INVIGILATOR
+  DEPARTMENT_HEAD
+  FACULTY_OFFICER
+  LECTURER
+}
+
+// Students
+model Student {
+  id          String   @id @default(uuid())
+  indexNumber String   @unique
+  firstName   String
+  lastName    String
+  program     String
+  level       Int
+  qrCode      String   @unique
+  createdAt   DateTime @default(now())
+  
+  attendances ExamAttendance[]
+}
+
+// Exam Sessions
+model ExamSession {
+  id           String      @id @default(uuid())
+  batchQrCode  String      @unique
+  courseCode   String
+  courseName   String
+  lecturerId   String
+  lecturerName String
+  department   String
+  faculty      String
+  venue        String
+  examDate     DateTime
+  status       BatchStatus @default(IN_PROGRESS)
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  createdBy   User             @relation(fields: [createdById], references: [id])
+  attendances ExamAttendance[]
+  transfers   BatchTransfer[]
+}
+
+enum BatchStatus {
+  IN_PROGRESS
+  SUBMITTED
+  IN_TRANSIT
+  WITH_LECTURER
+  UNDER_GRADING
+  GRADED
+  RETURNED
+  COMPLETED
+}
+
+// Student Attendance & Submission
+model ExamAttendance {
+  id              String           @id @default(uuid())
+  studentId       String
+  examSessionId   String
+  entryTime       DateTime
+  exitTime        DateTime?
+  submissionTime  DateTime?
+  status          AttendanceStatus @default(PRESENT)
+  discrepancyNote String?
+  
+  student     Student     @relation(fields: [studentId], references: [id])
+  examSession ExamSession @relation(fields: [examSessionId], references: [id])
+  
+  @@unique([studentId, examSessionId])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  SUBMITTED
+  LEFT_WITHOUT_SUBMITTING
+  ABSENT
+}
+
+// Script Transfer Chain
+model BatchTransfer {
+  id              String         @id @default(uuid())
+  examSessionId   String
+  fromHandlerId   String
+  toHandlerId     String
+  requestedAt     DateTime       @default(now())
+  confirmedAt     DateTime?
+  status          TransferStatus @default(PENDING)
+  scriptsExpected Int
+  scriptsReceived Int?
+  discrepancyNote String?
+  location        String?
+  
+  examSession ExamSession @relation(fields: [examSessionId], references: [id])
+  fromHandler User        @relation("Handler", fields: [fromHandlerId], references: [id])
+  toHandler   User        @relation("Receiver", fields: [toHandlerId], references: [id])
+  
+  @@index([examSessionId])
+}
+
+enum TransferStatus {
+  PENDING
+  CONFIRMED
+  DISCREPANCY_REPORTED
+  RESOLVED
+}
+
+// Audit Trail
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  details   Json?
+  ipAddress String?
+  timestamp DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@index([entityId])
+  @@index([timestamp])
+}
