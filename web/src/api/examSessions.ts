@@ -24,6 +24,28 @@ export interface ExamSession {
   _count?: {
     attendances: number;
   };
+  stats?: {
+    expectedStudents: number;
+    totalAttended: number;
+    submitted: number;
+    present: number;
+    attendanceRate: string;
+  };
+  attendances?: Array<{
+    id: string;
+    entryTime: string;
+    exitTime: string | null;
+    submissionTime: string | null;
+    status: string;
+    student: {
+      id: string;
+      indexNumber: string;
+      firstName: string;
+      lastName: string;
+      program: string;
+      level: number;
+    };
+  }>;
 }
 
 export type BatchStatus =
@@ -230,5 +252,107 @@ export const examSessionsApi = {
 
   getFaculties: async (): Promise<{ faculties: string[] }> => {
     return apiClient.get<{ faculties: string[] }>("/exam-sessions/faculties");
+  },
+
+  // Expected Students API
+  getExpectedStudents: async (
+    examSessionId: string
+  ): Promise<{
+    expectedStudents: Array<{
+      id: string;
+      indexNumber: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      program?: string | null;
+      level?: number | null;
+      expectedAt: string;
+      attendance?: {
+        id: string;
+        entryTime: string;
+        exitTime: string | null;
+        submissionTime: string | null;
+        status: string;
+        discrepancyNote: string | null;
+      } | null;
+    }>;
+  }> => {
+    return apiClient.get<{
+      expectedStudents: Array<{
+        id: string;
+        indexNumber: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        program?: string | null;
+        level?: number | null;
+        expectedAt: string;
+        attendance?: {
+          id: string;
+          entryTime: string;
+          exitTime: string | null;
+          submissionTime: string | null;
+          status: string;
+          discrepancyNote: string | null;
+        } | null;
+      }>;
+    }>(`/exam-sessions/${examSessionId}/students`);
+  },
+
+  addExpectedStudentsByIndexes: async (
+    examSessionId: string,
+    indexNumbers: string[]
+  ): Promise<{ message: string; added: number }> => {
+    return apiClient.post<{ message: string; added: number }>(
+      `/exam-sessions/${examSessionId}/students/bulk`,
+      { indexNumbers }
+    );
+  },
+
+  removeExpectedStudent: async (
+    examSessionId: string,
+    studentId: string
+  ): Promise<{ message: string }> => {
+    return apiClient.delete<{ message: string }>(
+      `/exam-sessions/${examSessionId}/students/${studentId}`
+    );
+  },
+
+  getAttendanceSummary: async (
+    examSessionId: string
+  ): Promise<{
+    summary: {
+      expectedStudents: number;
+      totalAttended: number;
+      submitted: number;
+      present: number;
+      leftWithoutSubmitting: number;
+      attendanceRate: string;
+      notYetArrived: Array<{
+        id: string;
+        indexNumber: string;
+        firstName: string;
+        lastName: string;
+        program: string;
+        level: number;
+      }>;
+    };
+  }> => {
+    return apiClient.get<{
+      summary: {
+        expectedStudents: number;
+        totalAttended: number;
+        submitted: number;
+        present: number;
+        leftWithoutSubmitting: number;
+        attendanceRate: string;
+        notYetArrived: Array<{
+          id: string;
+          indexNumber: string;
+          firstName: string;
+          lastName: string;
+          program: string;
+          level: number;
+        }>;
+      };
+    }>(`/exam-sessions/${examSessionId}/attendance-summary`);
   },
 };

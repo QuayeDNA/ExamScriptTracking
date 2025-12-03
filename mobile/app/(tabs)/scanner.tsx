@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,18 +9,35 @@ import {
 } from "react-native";
 import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import BottomSheet from "@gorhom/bottom-sheet";
+import AttendanceDrawer from "@/components/AttendanceDrawer";
+import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 
 export default function ScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
-  const [activeExamSessionId, setActiveExamSessionId] = useState<string | null>(
-    null
-  );
+  const [activeExamSession, setActiveExamSession] =
+    useState<ExamSession | null>(null);
+  const bottomSheetRef = useRef<BottomSheet>(null);
   const router = useRouter();
 
   const requestPermission = async () => {
     const { status } = await Camera.requestCameraPermissionsAsync();
     setHasPermission(status === "granted");
+  };
+
+  const loadExamSession = async (batchId: string) => {
+    try {
+      console.log("Loading exam session:", batchId);
+      const session = await examSessionsApi.getExamSession(batchId);
+      setActiveExamSession(session);
+      bottomSheetRef.current?.snapToIndex(1);
+      console.log("Exam session loaded, drawer opened");
+    } catch (error) {
+      console.error("Failed to load exam session:", error);
+      Alert.alert("Error", "Failed to load exam session details");
+    }
   };
 
   const handleBarCodeScanned = ({ data }: { data: string }) => {
@@ -30,21 +47,15 @@ export default function ScannerScreen() {
 
     try {
       const qrData = JSON.parse(data);
+      console.log("QR Data parsed:", qrData);
 
       if (qrData.type === "EXAM_BATCH") {
-        // Set active exam session and navigate to batch details
-        setActiveExamSessionId(qrData.id);
-
-        // Use router.push with absolute path
-        setTimeout(() => {
-          router.push({
-            pathname: "/batch-details",
-            params: { batchId: qrData.id },
-          });
-        }, 100);
+        // Load exam session and open drawer
+        loadExamSession(qrData.id);
+        setTimeout(() => setScanned(false), 2000);
       } else if (qrData.type === "STUDENT") {
         // Check if we have an active exam session
-        if (!activeExamSessionId) {
+        if (!activeExamSession) {
           Alert.alert(
             "No Active Exam Session",
             "Please scan the Batch QR Code first to select an exam session.",
@@ -55,26 +66,54 @@ export default function ScannerScreen() {
         }
 
         // Navigate to student attendance with active session
-        setTimeout(() => {
-          router.push({
-            pathname: "/student-attendance",
-            params: {
-              studentId: qrData.id,
-              examSessionId: activeExamSessionId,
-            },
-          });
-        }, 100);
+        router.push({
+          pathname: "/student-attendance",
+          params: {
+            studentId: qrData.id,
+            examSessionId: activeExamSession.id,
+          },
+        });
+
+        setTimeout(() => setScanned(false), 2000);
       } else {
         Alert.alert("Invalid QR Code", "This QR code is not recognized.");
         setTimeout(() => setScanned(false), 1000);
       }
-    } catch {
+    } catch (error) {
+      console.error("QR Scan error:", error);
       Alert.alert(
         "Invalid QR Code",
         "Unable to read QR code data. Please try again."
       );
       setTimeout(() => setScanned(false), 1000);
     }
+  };
+
+  const handleViewDetails = () => {
+    if (activeExamSession) {
+      router.push({
+        pathname: "/batch-details",
+        params: { batchId: activeExamSession.id },
+      });
+    }
+  };
+
+  const handleEndSession = () => {
+    Alert.alert(
+      "End Session",
+      "Are you sure you want to end this exam session?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End Session",
+          style: "destructive",
+          onPress: () => {
+            setActiveExamSession(null);
+            bottomSheetRef.current?.close();
+          },
+        },
+      ]
+    );
   };
 
   if (hasPermission === null) {
@@ -113,49 +152,59 @@ export default function ScannerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>QR Scanner</Text>
-        {activeExamSessionId && (
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>Session Active</Text>
-          </View>
-        )}
-      </View>
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
-        }}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.scanArea}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
-
-          <View style={styles.instructionContainer}>
-            <Text style={styles.instructionText}>
-              {activeExamSessionId
-                ? "Scan Student ID Cards"
-                : "Scan Batch QR Code First"}
-            </Text>
-            {activeExamSessionId && (
-              <Text style={styles.activeSessionText}>
-                ✓ Exam Session Active
-              </Text>
-            )}
-            {scanned && (
-              <Text style={styles.successText}>✓ Scanned Successfully</Text>
-            )}
-          </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>QR Scanner</Text>
+          {activeExamSession && (
+            <View style={styles.activeBadge}>
+              <Text style={styles.activeBadgeText}>Session Active</Text>
+            </View>
+          )}
         </View>
-      </CameraView>
-    </SafeAreaView>
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["qr"],
+          }}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.scanArea}>
+              <View style={[styles.corner, styles.topLeft]} />
+              <View style={[styles.corner, styles.topRight]} />
+              <View style={[styles.corner, styles.bottomLeft]} />
+              <View style={[styles.corner, styles.bottomRight]} />
+            </View>
+
+            <View style={styles.instructionContainer}>
+              <Text style={styles.instructionText}>
+                {activeExamSession
+                  ? "Scan Student ID Cards"
+                  : "Scan Batch QR Code First"}
+              </Text>
+              {activeExamSession && (
+                <Text style={styles.activeSessionText}>
+                  ✓ Exam Session Active
+                </Text>
+              )}
+              {scanned && (
+                <Text style={styles.successText}>✓ Scanned Successfully</Text>
+              )}
+            </View>
+          </View>
+        </CameraView>
+
+        {/* Attendance Drawer */}
+        <AttendanceDrawer
+          ref={bottomSheetRef}
+          session={activeExamSession}
+          onViewDetails={handleViewDetails}
+          onEndSession={handleEndSession}
+        />
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 

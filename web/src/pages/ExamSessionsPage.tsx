@@ -24,8 +24,10 @@ import {
   FileDown,
   X,
   Calendar,
+  Eye,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { useNavigate } from "react-router-dom";
 
 const columnHelper = createColumnHelper<ExamSession>();
 
@@ -43,6 +45,7 @@ const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
 export default function ExamSessionsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "ADMIN";
   const isLecturer = user?.role === "LECTURER";
   const canCreate = isAdmin || isLecturer;
@@ -364,6 +367,15 @@ export default function ExamSessionsPage() {
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex gap-2">
+          <button
+            onClick={() =>
+              navigate(`/dashboard/exam-sessions/${row.original.id}`)
+            }
+            className="p-1 hover:bg-gray-100 rounded"
+            title="View Details"
+          >
+            <Eye className="h-4 w-4 text-blue-500" />
+          </button>
           <button
             onClick={() => handleShowQRCode(row.original)}
             className="p-1 hover:bg-gray-100 rounded"

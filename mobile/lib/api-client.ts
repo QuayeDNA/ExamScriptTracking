@@ -26,21 +26,35 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        console.log(
+          `API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`
+        );
         return config;
       },
       (error) => Promise.reject(error)
     );
 
     this.client.interceptors.response.use(
-      (response) => response.data,
+      (response) => {
+        console.log(`API Response: ${response.status} ${response.config.url}`);
+        return response.data;
+      },
       async (error) => {
+        console.error(
+          `API Error: ${error.response?.status} ${error.config?.url}`,
+          error.response?.data
+        );
+
         if (error.response?.status === 401) {
           await clearAuth();
         }
 
         const apiError: ApiError = {
           error:
-            error.response?.data?.error || error.message || "Network error",
+            error.response?.data?.error ||
+            error.response?.data?.message ||
+            error.message ||
+            "Network error",
           details: error.response?.data?.details,
         };
         return Promise.reject(apiError);

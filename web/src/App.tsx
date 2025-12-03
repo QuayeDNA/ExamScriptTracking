@@ -12,6 +12,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import StudentsPage from "@/pages/StudentsPage";
 import ExamSessionsPage from "@/pages/ExamSessionsPage";
+import BatchDetailsPage from "@/pages/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/BatchTrackingPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
@@ -44,6 +45,7 @@ function App() {
               <Route path="sessions" element={<SessionsPage />} />
               <Route path="students" element={<StudentsPage />} />
               <Route path="exam-sessions" element={<ExamSessionsPage />} />
+              <Route path="exam-sessions/:id" element={<BatchDetailsPage />} />
               <Route path="batch-tracking" element={<BatchTrackingPage />} />
             </Route>
           </Route>

@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import type { ExamAttendance } from "@/types";
 
 export interface ExamSession {
   id: string;
@@ -15,6 +16,14 @@ export interface ExamSession {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  attendances?: ExamAttendance[];
+  stats?: {
+    expectedStudents: number;
+    totalAttended: number;
+    submitted: number;
+    present: number;
+    attendanceRate: string;
+  };
 }
 
 export type BatchStatus =

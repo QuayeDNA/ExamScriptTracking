@@ -34,24 +34,44 @@ export default function BatchDetailsScreen() {
   const [updating, setUpdating] = useState(false);
 
   const loadSession = useCallback(async () => {
+    if (!batchId) {
+      console.error("No batchId provided");
+      Alert.alert("Error", "No batch ID provided");
+      router.back();
+      return;
+    }
+
     try {
+      console.log("Loading batch details for ID:", batchId);
       setLoading(true);
       const data = await examSessionsApi.getExamSession(batchId);
+      console.log("Batch details loaded successfully:", data);
       setSession(data);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to load batch details", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Navigate back if there's an error
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace("/(tabs)");
-            }
+      console.error("Failed to load batch details:", error);
+      Alert.alert(
+        "Error Loading Batch",
+        error.error ||
+          error.message ||
+          "Failed to load batch details. Please check your connection and try again.",
+        [
+          {
+            text: "Retry",
+            onPress: () => loadSession(),
           },
-        },
-      ]);
+          {
+            text: "Go Back",
+            style: "cancel",
+            onPress: () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace("/(tabs)");
+              }
+            },
+          },
+        ]
+      );
     } finally {
       setLoading(false);
     }

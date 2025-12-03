@@ -80,7 +80,7 @@ model Student {
   qrCode      String   @unique
   createdAt   DateTime @default(now())
   
-  attendances ExamAttendance[]
+  attendances       ExamAttendance[]
 }
 
 // Exam Sessions
@@ -100,9 +100,10 @@ model ExamSession {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   
-  createdBy   User             @relation(fields: [createdById], references: [id])
-  attendances ExamAttendance[]
-  transfers   BatchTransfer[]
+  createdBy        User                 @relation(fields: [createdById], references: [id])
+  attendances      ExamAttendance[]
+  transfers        BatchTransfer[]
+  expectedStudents ExamSessionStudent[]
 }
 
 enum BatchStatus {
@@ -114,6 +115,24 @@ enum BatchStatus {
   GRADED
   RETURNED
   COMPLETED
+}
+
+// Expected Students for Exam Sessions (Raw Data - No User Account Required)
+model ExamSessionStudent {
+  id            String      @id @default(uuid())
+  examSessionId String
+  indexNumber   String      // Student's index number (raw data)
+  firstName     String?     // Optional: student name from CSV
+  lastName      String?     // Optional: student name from CSV
+  program       String?     // Optional: program from CSV
+  level         Int?        // Optional: level from CSV
+  createdAt     DateTime    @default(now())
+  
+  examSession ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  
+  @@unique([examSessionId, indexNumber])
+  @@index([examSessionId])
+  @@index([indexNumber])
 }
 
 // Student Attendance & Submission

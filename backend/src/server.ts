@@ -15,8 +15,8 @@ import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 dotenv.config();
 
 const app: Express = express();
-const PORT = process.env.PORT || 3000;
-const SOCKET_PORT = process.env.SOCKET_PORT || 3001;
+const PORT = Number(process.env.PORT) || 3000;
+const SOCKET_PORT = Number(process.env.SOCKET_PORT) || 3001;
 
 // Middleware
 // Allow CORS from multiple origins for web and mobile development

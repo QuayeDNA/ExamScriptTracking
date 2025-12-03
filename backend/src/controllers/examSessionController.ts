@@ -252,65 +252,93 @@ export const getExamSession = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const examSession = await prisma.examSession.findUnique({
-      where: { id },
-      include: {
-        createdBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-        attendances: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                indexNumber: true,
-                firstName: true,
-                lastName: true,
-                program: true,
-                level: true,
-              },
+    const [examSession, expectedCount] = await Promise.all([
+      prisma.examSession.findUnique({
+        where: { id },
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
             },
           },
-          orderBy: {
-            entryTime: "asc",
-          },
-        },
-        transfers: {
-          include: {
-            fromHandler: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
+          attendances: {
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  indexNumber: true,
+                  firstName: true,
+                  lastName: true,
+                  program: true,
+                  level: true,
+                },
               },
             },
-            toHandler: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
+            orderBy: {
+              entryTime: "desc",
             },
           },
-          orderBy: {
-            requestedAt: "asc",
+          transfers: {
+            include: {
+              fromHandler: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+              toHandler: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: {
+              requestedAt: "asc",
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.examSessionStudent.count({
+        where: { examSessionId: id },
+      }),
+    ]);
 
     if (!examSession) {
       return res.status(404).json({ message: "Exam session not found" });
     }
 
-    res.json({ examSession });
+    // Calculate attendance statistics
+    const totalAttended = examSession.attendances.length;
+    const submitted = examSession.attendances.filter(
+      (a) => a.status === "SUBMITTED"
+    ).length;
+    const present = examSession.attendances.filter(
+      (a) => a.status === "PRESENT"
+    ).length;
+
+    res.json({
+      examSession: {
+        ...examSession,
+        stats: {
+          expectedStudents: expectedCount,
+          totalAttended,
+          submitted,
+          present,
+          attendanceRate:
+            expectedCount > 0
+              ? ((totalAttended / expectedCount) * 100).toFixed(2)
+              : null,
+        },
+      },
+    });
   } catch (error) {
     console.error("Get exam session error:", error);
     res.status(500).json({ message: "Failed to fetch exam session" });

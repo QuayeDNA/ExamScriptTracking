@@ -25,15 +25,24 @@ function useProtectedRoute() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === "(tabs)";
+    const inAuthFlow =
+      segments[0] === "login" || segments[0] === "change-password";
 
-    if (!isAuthenticated && inAuthGroup) {
+    // Redirect unauthenticated users to login
+    if (!isAuthenticated && !inAuthFlow) {
       router.replace("/login");
-    } else if (isAuthenticated && !inAuthGroup) {
-      if (!user?.passwordChanged) {
-        router.replace("/change-password");
-      } else {
-        router.replace("/(tabs)");
-      }
+    }
+    // Redirect authenticated users with unchanged password to change password
+    else if (
+      isAuthenticated &&
+      !user?.passwordChanged &&
+      segments[0] !== "change-password"
+    ) {
+      router.replace("/change-password");
+    }
+    // Redirect authenticated users from login/change-password to main app
+    else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
+      router.replace("/(tabs)");
     }
   }, [isAuthenticated, isLoading, segments, user]);
 }

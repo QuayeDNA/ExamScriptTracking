@@ -11,6 +11,13 @@ import {
   getDepartments,
   getFaculties,
 } from "../controllers/examSessionController";
+import {
+  addExpectedStudents,
+  addExpectedStudentsByIndex,
+  getExpectedStudents,
+  removeExpectedStudent,
+  getAttendanceSummary,
+} from "../controllers/examSessionStudentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
 import { Role } from "@prisma/client";
@@ -35,6 +42,34 @@ router.get("/:id/qr-code", generateBatchQRCodeEndpoint);
 
 // Get exam session manifest (accessible to all authenticated users)
 router.get("/:id/manifest", getExamSessionManifest);
+
+// Get attendance summary with expected vs actual (accessible to all)
+router.get("/:id/attendance-summary", getAttendanceSummary);
+
+// Expected Students Management
+// Get expected students for an exam session
+router.get("/:id/students", getExpectedStudents);
+
+// Add expected students (by student IDs) - admin and lecturer only
+router.post(
+  "/:id/students",
+  authorize(Role.ADMIN, Role.LECTURER),
+  addExpectedStudents
+);
+
+// Add expected students by index numbers (bulk) - admin and lecturer only
+router.post(
+  "/:id/students/bulk",
+  authorize(Role.ADMIN, Role.LECTURER),
+  addExpectedStudentsByIndex
+);
+
+// Remove student from expected list - admin and lecturer only
+router.delete(
+  "/:id/students/:studentId",
+  authorize(Role.ADMIN, Role.LECTURER),
+  removeExpectedStudent
+);
 
 // Create exam session (admin and lecturer only)
 router.post("/", authorize(Role.ADMIN, Role.LECTURER), createExamSession);
