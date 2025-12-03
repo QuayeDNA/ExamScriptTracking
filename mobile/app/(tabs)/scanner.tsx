@@ -6,6 +6,9 @@ import { useRouter } from "expo-router";
 export default function ScannerScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
+  const [activeExamSessionId, setActiveExamSessionId] = useState<string | null>(
+    null
+  );
   const router = useRouter();
 
   const requestPermission = async () => {
@@ -22,21 +25,36 @@ export default function ScannerScreen() {
       const qrData = JSON.parse(data);
 
       if (qrData.type === "EXAM_BATCH") {
-        // Navigate to batch details
+        // Set active exam session and navigate to batch details
+        setActiveExamSessionId(qrData.id);
         router.push({
           pathname: "/batch-details",
           params: { batchId: qrData.id },
         });
       } else if (qrData.type === "STUDENT") {
-        // Navigate to student attendance
+        // Check if we have an active exam session
+        if (!activeExamSessionId) {
+          Alert.alert(
+            "No Active Exam Session",
+            "Please scan the Batch QR Code first to select an exam session.",
+            [{ text: "OK" }]
+          );
+          setTimeout(() => setScanned(false), 1000);
+          return;
+        }
+
+        // Navigate to student attendance with active session
         router.push({
           pathname: "/student-attendance",
-          params: { studentId: qrData.id },
+          params: {
+            studentId: qrData.id,
+            examSessionId: activeExamSessionId,
+          },
         });
       } else {
         Alert.alert("Invalid QR Code", "This QR code is not recognized.");
       }
-    } catch (error) {
+    } catch {
       Alert.alert(
         "Invalid QR Code",
         "Unable to read QR code data. Please try again."
@@ -89,8 +107,15 @@ export default function ScannerScreen() {
 
           <View style={styles.instructionContainer}>
             <Text style={styles.instructionText}>
-              Scan Batch QR Code or Student ID
+              {activeExamSessionId
+                ? "Scan Student ID Cards"
+                : "Scan Batch QR Code First"}
             </Text>
+            {activeExamSessionId && (
+              <Text style={styles.activeSessionText}>
+                ✓ Exam Session Active
+              </Text>
+            )}
             {scanned && (
               <Text style={styles.successText}>✓ Scanned Successfully</Text>
             )}
@@ -173,6 +198,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginTop: 16,
+  },
+  activeSessionText: {
+    color: "#10b981",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 8,
   },
   text: {
     color: "#fff",
