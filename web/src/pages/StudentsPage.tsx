@@ -125,28 +125,83 @@ export default function StudentsPage() {
     },
   });
 
+  // Helper function to parse CSV properly handling quoted fields
+  const parseCSV = (text: string) => {
+    const lines = text.split("\n").filter((line) => line.trim());
+    if (lines.length < 2) {
+      throw new Error(
+        "CSV file must contain headers and at least one data row"
+      );
+    }
+
+    // Parse CSV line handling quoted fields
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => h.toLowerCase());
+    const students = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseLine(lines[i]);
+
+      // Skip empty rows
+      if (values.every((v) => !v)) continue;
+
+      const indexNumber = values[headers.indexOf("indexnumber")] || "";
+      const firstName = values[headers.indexOf("firstname")] || "";
+      const lastName = values[headers.indexOf("lastname")] || "";
+      const program = values[headers.indexOf("program")] || "";
+      const levelStr = values[headers.indexOf("level")] || "";
+
+      // Validate required fields
+      if (!indexNumber || !firstName || !lastName || !program || !levelStr) {
+        throw new Error(
+          `Row ${i}: Missing required fields. Found: indexNumber="${indexNumber}", firstName="${firstName}", lastName="${lastName}", program="${program}", level="${levelStr}"`
+        );
+      }
+
+      const level = parseInt(levelStr);
+      if (isNaN(level)) {
+        throw new Error(
+          `Row ${i}: Level must be a valid number, got "${levelStr}"`
+        );
+      }
+
+      students.push({
+        indexNumber,
+        firstName,
+        lastName,
+        program,
+        level,
+      });
+    }
+
+    return students;
+  };
+
   // Bulk import mutation
   const bulkImportMutation = useMutation({
     mutationFn: async (file: File) => {
       const text = await file.text();
-      const lines = text.split("\n").filter((line) => line.trim());
-      const headers = lines[0].split(",").map((h) => h.trim());
-
-      const students = lines.slice(1).map((line) => {
-        const values = line.split(",").map((v) => v.trim());
-        const student: Record<string, string> = {};
-        headers.forEach((header, index) => {
-          student[header] = values[index];
-        });
-        return {
-          indexNumber: student.indexNumber,
-          firstName: student.firstName,
-          lastName: student.lastName,
-          program: student.program,
-          level: parseInt(student.level),
-        };
-      });
-
+      const students = parseCSV(text);
       return studentsApi.bulkCreateStudents(students);
     },
     onSuccess: (data) => {
@@ -254,6 +309,33 @@ export default function StudentsPage() {
     if (csvFile) {
       bulkImportMutation.mutate(csvFile);
     }
+  };
+
+  // Download CSV template
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "indexNumber",
+      "firstName",
+      "lastName",
+      "program",
+      "level",
+    ];
+    const exampleRows = [
+      ["2024001", "John", "Doe", "Computer Science", "100"],
+      ["2024002", "Jane", "Smith", "Engineering", "200"],
+      ["2024003", "Mike", "Johnson", "Business", "300"],
+    ];
+
+    const csv = [headers, ...exampleRows]
+      .map((row) => row.join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "student_import_template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Table columns
@@ -652,10 +734,19 @@ export default function StudentsPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Upload a CSV file with columns: indexNumber, firstName, lastName,
-              program, level
-            </p>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Upload a CSV file with columns: indexNumber, firstName,
+                lastName, program, level
+              </p>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="text-sm text-blue-600 hover:text-blue-700 underline mb-2"
+              >
+                Download CSV Template
+              </button>
+            </div>
             <input
               type="file"
               accept=".csv"
@@ -663,11 +754,16 @@ export default function StudentsPage() {
               className="w-full mb-4 text-sm"
             />
             <div className="text-xs text-gray-500 mb-4 p-3 bg-gray-50 rounded">
-              <strong>Example format:</strong>
-              <br />
-              indexNumber,firstName,lastName,program,level
-              <br />
-              10001234,John,Doe,Computer Science,100
+              <strong>CSV Format Requirements:</strong>
+              <ul className="list-disc ml-4 mt-1 space-y-1">
+                <li>First row must contain headers (case-insensitive)</li>
+                <li>
+                  Required columns: indexNumber, firstName, lastName, program,
+                  level
+                </li>
+                <li>Level must be a number (100, 200, 300, or 400)</li>
+                <li>Empty rows will be skipped</li>
+              </ul>
             </div>
             <div className="flex gap-2 justify-end">
               <button

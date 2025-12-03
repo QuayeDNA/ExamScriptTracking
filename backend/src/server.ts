@@ -19,9 +19,30 @@ const PORT = process.env.PORT || 3000;
 const SOCKET_PORT = process.env.SOCKET_PORT || 3001;
 
 // Middleware
+// Allow CORS from multiple origins for web and mobile development
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:8081", // Expo dev server
+  process.env.CORS_ORIGIN,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // Allow any origin in development for Expo Go
+      if (process.env.NODE_ENV === "development") {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
@@ -67,7 +88,21 @@ app.use((req: Request, res: Response) => {
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps)
+      if (!origin) return callback(null, true);
+
+      // Allow any origin in development for Expo Go
+      if (process.env.NODE_ENV === "development") {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   },
 });
@@ -82,8 +117,11 @@ io.on("connection", (socket) => {
 });
 
 // Start Express server
-app.listen(PORT, () => {
-  console.log(`✅ Express server running on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Express server running on:`);
+  console.log(`   - Local: http://localhost:${PORT}`);
+  console.log(`   - Network: http://192.168.43.153:${PORT}`);
+  console.log(`   (Use the Network URL for Expo Go app)`);
 
   // Start blacklisted token cleanup (runs every hour)
   console.log("🧹 Starting token blacklist cleanup service...");
@@ -92,6 +130,8 @@ app.listen(PORT, () => {
 });
 
 // Start Socket.io server
-httpServer.listen(SOCKET_PORT, () => {
-  console.log(`✅ Socket.io server running on http://localhost:${SOCKET_PORT}`);
+httpServer.listen(SOCKET_PORT, "0.0.0.0", () => {
+  console.log(`✅ Socket.io server running on:`);
+  console.log(`   - Local: http://localhost:${SOCKET_PORT}`);
+  console.log(`   - Network: http://192.168.43.153:${SOCKET_PORT}`);
 });

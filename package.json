@@ -11,7 +11,8 @@
     "install:all": "npm install && cd backend && npm install && cd ../web && npm install && cd ../mobile && npm install",
     "backend": "npm run dev:backend",
     "web": "npm run dev:web",
-    "mobile": "npm run dev:mobile"
+    "mobile": "npm run dev:mobile",
+    "update-ip": "node scripts/update-mobile-ip.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
