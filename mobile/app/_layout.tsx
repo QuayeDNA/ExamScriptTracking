@@ -55,6 +55,54 @@ export default function RootLayout() {
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
+          name="batch-details"
+          options={{
+            headerShown: true,
+            title: "Batch Details",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="student-attendance"
+          options={{
+            headerShown: true,
+            title: "Student Attendance",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="initiate-transfer"
+          options={{
+            headerShown: true,
+            title: "Initiate Transfer",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="confirm-transfer"
+          options={{
+            headerShown: true,
+            title: "Confirm Transfer",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="transfer-history"
+          options={{
+            headerShown: true,
+            title: "Transfer History",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
+          name="pending-transfers"
+          options={{
+            headerShown: true,
+            title: "Pending Transfers",
+            presentation: "card",
+          }}
+        />
+        <Stack.Screen
           name="modal"
           options={{ presentation: "modal", headerShown: true, title: "Modal" }}
         />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -33,22 +33,33 @@ export default function BatchDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    loadSession();
-  }, [batchId]);
-
-  const loadSession = async () => {
+  const loadSession = useCallback(async () => {
     try {
       setLoading(true);
       const data = await examSessionsApi.getExamSession(batchId);
       setSession(data);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to load batch details");
-      router.back();
+      Alert.alert("Error", error.error || "Failed to load batch details", [
+        {
+          text: "OK",
+          onPress: () => {
+            // Navigate back if there's an error
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace("/(tabs)");
+            }
+          },
+        },
+      ]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [batchId, router]);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
 
   const handleStatusChange = async (newStatus: BatchStatus) => {
     if (!session) return;

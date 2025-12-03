@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  SafeAreaView,
+} from "react-native";
 import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
 
@@ -27,10 +34,14 @@ export default function ScannerScreen() {
       if (qrData.type === "EXAM_BATCH") {
         // Set active exam session and navigate to batch details
         setActiveExamSessionId(qrData.id);
-        router.push({
-          pathname: "/batch-details",
-          params: { batchId: qrData.id },
-        });
+
+        // Use router.push with absolute path
+        setTimeout(() => {
+          router.push({
+            pathname: "/batch-details",
+            params: { batchId: qrData.id },
+          });
+        }, 100);
       } else if (qrData.type === "STUDENT") {
         // Check if we have an active exam session
         if (!activeExamSessionId) {
@@ -44,51 +55,73 @@ export default function ScannerScreen() {
         }
 
         // Navigate to student attendance with active session
-        router.push({
-          pathname: "/student-attendance",
-          params: {
-            studentId: qrData.id,
-            examSessionId: activeExamSessionId,
-          },
-        });
+        setTimeout(() => {
+          router.push({
+            pathname: "/student-attendance",
+            params: {
+              studentId: qrData.id,
+              examSessionId: activeExamSessionId,
+            },
+          });
+        }, 100);
       } else {
         Alert.alert("Invalid QR Code", "This QR code is not recognized.");
+        setTimeout(() => setScanned(false), 1000);
       }
     } catch {
       Alert.alert(
         "Invalid QR Code",
         "Unable to read QR code data. Please try again."
       );
+      setTimeout(() => setScanned(false), 1000);
     }
-
-    // Reset scanner after 2 seconds
-    setTimeout(() => setScanned(false), 2000);
   };
 
   if (hasPermission === null) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.text}>Requesting camera permission...</Text>
-        <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>QR Scanner</Text>
+        </View>
+        <View style={styles.content}>
+          <Text style={styles.text}>Camera permission required</Text>
+          <TouchableOpacity style={styles.button} onPress={requestPermission}>
+            <Text style={styles.buttonText}>Grant Permission</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (hasPermission === false) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.text}>No access to camera</Text>
-        <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Request Permission</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>QR Scanner</Text>
+        </View>
+        <View style={styles.content}>
+          <Text style={styles.text}>No access to camera</Text>
+          <Text style={styles.subText}>
+            Please enable camera permissions in settings
+          </Text>
+          <TouchableOpacity style={styles.button} onPress={requestPermission}>
+            <Text style={styles.buttonText}>Request Again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>QR Scanner</Text>
+        {activeExamSessionId && (
+          <View style={styles.activeBadge}>
+            <Text style={styles.activeBadgeText}>Session Active</Text>
+          </View>
+        )}
+      </View>
       <CameraView
         style={styles.camera}
         facing="back"
@@ -122,7 +155,7 @@ export default function ScannerScreen() {
           </View>
         </View>
       </CameraView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -130,8 +163,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
+  },
+  header: {
+    backgroundColor: "#1f2937",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  activeBadge: {
+    backgroundColor: "#10b981",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  activeBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  content: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 32,
   },
   camera: {
     flex: 1,
@@ -208,7 +270,15 @@ const styles = StyleSheet.create({
   text: {
     color: "#fff",
     fontSize: 16,
+    marginBottom: 12,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  subText: {
+    color: "#9ca3af",
+    fontSize: 14,
     marginBottom: 20,
+    textAlign: "center",
   },
   button: {
     backgroundColor: "#3b82f6",
