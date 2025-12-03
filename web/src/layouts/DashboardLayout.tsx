@@ -59,6 +59,12 @@ export const DashboardLayout = () => {
             >
               Students
             </button>
+            <button
+              onClick={() => navigate("/dashboard/exam-sessions")}
+              className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+            >
+              Exam Sessions
+            </button>
             {(user?.isSuperAdmin || user?.role === "ADMIN") && (
               <>
                 <button

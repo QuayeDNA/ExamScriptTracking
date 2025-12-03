@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
 import studentRoutes from "./routes/students";
+import examSessionRoutes from "./routes/examSessions";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 
 // Load environment variables
@@ -40,6 +41,7 @@ app.get("/api", (req: Request, res: Response) => {
       auth: "/api/auth",
       users: "/api/users",
       students: "/api/students",
+      examSessions: "/api/exam-sessions",
     },
   });
 });
@@ -48,6 +50,7 @@ app.get("/api", (req: Request, res: Response) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/exam-sessions", examSessionRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -11,6 +11,7 @@ import AuditLogsPage from "@/pages/AuditLogsPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import StudentsPage from "@/pages/StudentsPage";
+import ExamSessionsPage from "@/pages/ExamSessionsPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 
@@ -41,6 +42,7 @@ function App() {
               <Route index element={<DashboardStatsPage />} />
               <Route path="sessions" element={<SessionsPage />} />
               <Route path="students" element={<StudentsPage />} />
+              <Route path="exam-sessions" element={<ExamSessionsPage />} />
             </Route>
           </Route>
 
