@@ -134,6 +134,41 @@ export default function BatchDetailsScreen() {
         <InfoRow label="Faculty" value={session.faculty} />
       </View>
 
+      {/* Transfer Actions */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Transfer Actions</Text>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() =>
+            router.push({
+              pathname: "/initiate-transfer",
+              params: {
+                examSessionId: session.id,
+                batchQrCode: session.batchQrCode,
+                courseCode: session.courseCode,
+                courseName: session.courseName,
+              },
+            })
+          }
+        >
+          <Text style={styles.actionButtonText}>📤 Initiate Transfer</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, styles.actionButtonSecondary]}
+          onPress={() =>
+            router.push({
+              pathname: "/transfer-history",
+              params: { examSessionId: session.id },
+            })
+          }
+        >
+          <Text style={styles.actionButtonTextSecondary}>
+            📋 View Transfer History
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Update Status</Text>
         <Text style={styles.instructionText}>
@@ -254,6 +289,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6b7280",
     marginBottom: 12,
+  },
+  actionButton: {
+    backgroundColor: "#3b82f6",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  actionButtonSecondary: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#3b82f6",
+  },
+  actionButtonTextSecondary: {
+    color: "#3b82f6",
+    fontSize: 15,
+    fontWeight: "600",
   },
   statusGrid: {
     flexDirection: "row",

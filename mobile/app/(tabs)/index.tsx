@@ -34,19 +34,25 @@ export default function HomeScreen() {
         <Text className="text-lg font-semibold text-gray-900 mb-4">
           Quick Actions
         </Text>
-        <TouchableOpacity className="bg-blue-600 py-3 px-4 rounded-md mb-3">
+        <TouchableOpacity
+          className="bg-blue-600 py-3 px-4 rounded-md mb-3"
+          onPress={() => router.push("/scanner")}
+        >
           <Text className="text-white text-center font-semibold">
             Scan QR Code
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity className="bg-green-600 py-3 px-4 rounded-md mb-3">
+        <TouchableOpacity
+          className="bg-orange-600 py-3 px-4 rounded-md mb-3"
+          onPress={() => router.push("/pending-transfers")}
+        >
           <Text className="text-white text-center font-semibold">
-            View Active Sessions
+            Pending Transfers
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity className="bg-orange-600 py-3 px-4 rounded-md">
+        <TouchableOpacity className="bg-green-600 py-3 px-4 rounded-md">
           <Text className="text-white text-center font-semibold">
-            Transfer Scripts
+            View Active Sessions
           </Text>
         </TouchableOpacity>
       </View>
