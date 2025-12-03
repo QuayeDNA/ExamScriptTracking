@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
+import studentRoutes from "./routes/students";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 
 // Load environment variables
@@ -38,6 +39,7 @@ app.get("/api", (req: Request, res: Response) => {
       health: "/health",
       auth: "/api/auth",
       users: "/api/users",
+      students: "/api/students",
     },
   });
 });
@@ -45,6 +47,7 @@ app.get("/api", (req: Request, res: Response) => {
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/students", studentRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

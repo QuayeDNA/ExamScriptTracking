@@ -10,6 +10,7 @@ import SessionsPage from "@/pages/SessionsPage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
+import StudentsPage from "@/pages/StudentsPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 
@@ -39,6 +40,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardStatsPage />} />
               <Route path="sessions" element={<SessionsPage />} />
+              <Route path="students" element={<StudentsPage />} />
             </Route>
           </Route>
 
