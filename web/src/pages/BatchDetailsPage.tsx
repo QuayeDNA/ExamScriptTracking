@@ -47,13 +47,29 @@ export default function BatchDetailsPage() {
 
   // Mutation for adding expected students
   const addExpectedStudentsMutation = useMutation({
-    mutationFn: (indexNumbers: string[]) =>
-      examSessionsApi.addExpectedStudentsByIndexes(id!, indexNumbers),
-    onSuccess: () => {
+    mutationFn: (
+      students: Array<{
+        indexNumber: string;
+        firstName?: string;
+        lastName?: string;
+        program?: string;
+        level?: number;
+      }>
+    ) => examSessionsApi.addExpectedStudents(id!, students),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["expectedStudents", id] });
       queryClient.invalidateQueries({ queryKey: ["attendanceSummary", id] });
       queryClient.invalidateQueries({ queryKey: ["examSession", id] });
       setUploadError(null);
+
+      // Show success message with stats
+      alert(
+        `✅ Upload Complete!\n\n` +
+          `• ${data.added} students added to exam session\n` +
+          `• ${data.newStudentRecordsCreated} new student records created with QR codes\n` +
+          `• ${data.existingStudentRecords} existing student records found\n\n` +
+          `All students can now scan QR codes for attendance.`
+      );
     },
   });
 
@@ -80,21 +96,35 @@ export default function BatchDetailsPage() {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          const indexNumbers = (results.data as Record<string, string>[])
-            .map(
-              (row) => row.indexNumber || row.IndexNumber || row.index_number
-            )
-            .filter((idx) => idx && idx.trim().length > 0);
+          const students = (results.data as Record<string, string>[])
+            .map((row) => {
+              const student = {
+                indexNumber:
+                  row.indexNumber || row.IndexNumber || row.index_number,
+                firstName: row.firstName || row.FirstName || row.first_name,
+                lastName: row.lastName || row.LastName || row.last_name,
+                program: row.program || row.Program,
+                level: row.level
+                  ? parseInt(row.level)
+                  : row.Level
+                  ? parseInt(row.Level)
+                  : undefined,
+              };
+              console.log("Parsed row:", row, "→", student);
+              return student;
+            })
+            .filter((student) => student.indexNumber?.trim().length > 0);
 
-          if (indexNumbers.length === 0) {
+          console.log("All parsed students:", students);
+
+          if (students.length === 0) {
             setUploadError(
-              "No valid index numbers found in CSV file. Expected column: indexNumber"
+              "No valid students found in CSV file. Required column: indexNumber. Optional: firstName, lastName, program, level"
             );
             setUploading(false);
             return;
           }
-
-          addExpectedStudentsMutation.mutate(indexNumbers, {
+          addExpectedStudentsMutation.mutate(students, {
             onSettled: () => setUploading(false),
             onError: (error: Error) => {
               setUploadError(error.message || "Failed to upload students");
@@ -114,7 +144,27 @@ export default function BatchDetailsPage() {
   );
 
   const downloadTemplate = () => {
-    const csv = "indexNumber\n2023001\n2023002\n2023003";
+    const csv = `indexNumber,firstName,lastName,program,level
+20230001,Kwame,Mensah,Computer Science,300
+20230002,Ama,Owusu,Information Technology,300
+20230003,Kofi,Appiah,Software Engineering,200
+20230004,Abena,Asante,Computer Science,300
+20230005,Yaw,Boateng,Cyber Security,400
+20230006,Akosua,Osei,Data Science,300
+20230007,Kwesi,Agyeman,Information Technology,200
+20230008,Adjoa,Mensah,Computer Science,300
+20230009,Kojo,Darko,Software Engineering,300
+20230010,Efua,Frimpong,Computer Science,400
+20230011,Kwabena,Nkrumah,Information Technology,300
+20230012,Adwoa,Gyasi,Data Science,200
+20230013,Yaa,Bonsu,Computer Science,300
+20230014,Kwaku,Amponsah,Software Engineering,400
+20230015,Esi,Ofosu,Cyber Security,300
+20230016,Kofi,Asiedu,Information Technology,300
+20230017,Ama,Sarpong,Computer Science,200
+20230018,Kwame,Boakye,Data Science,300
+20230019,Abena,Ansah,Software Engineering,300
+20230020,Yaw,Amoako,Computer Science,400`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

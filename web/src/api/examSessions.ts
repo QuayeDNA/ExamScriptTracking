@@ -297,14 +297,46 @@ export const examSessionsApi = {
     }>(`/exam-sessions/${examSessionId}/students`);
   },
 
+  addExpectedStudents: async (
+    examSessionId: string,
+    students: Array<{
+      indexNumber: string;
+      firstName?: string;
+      lastName?: string;
+      program?: string;
+      level?: number;
+    }>
+  ): Promise<{
+    message: string;
+    added: number;
+    newStudentRecordsCreated: number;
+    existingStudentRecords: number;
+  }> => {
+    return apiClient.post<{
+      message: string;
+      added: number;
+      newStudentRecordsCreated: number;
+      existingStudentRecords: number;
+    }>(`/exam-sessions/${examSessionId}/students`, { students });
+  },
+
   addExpectedStudentsByIndexes: async (
     examSessionId: string,
     indexNumbers: string[]
-  ): Promise<{ message: string; added: number }> => {
-    return apiClient.post<{ message: string; added: number }>(
-      `/exam-sessions/${examSessionId}/students/bulk`,
-      { indexNumbers }
-    );
+  ): Promise<{
+    message: string;
+    added: number;
+    totalProvided: number;
+    newStudentRecordsCreated: number;
+    existingStudentRecords: number;
+  }> => {
+    return apiClient.post<{
+      message: string;
+      added: number;
+      totalProvided: number;
+      newStudentRecordsCreated: number;
+      existingStudentRecords: number;
+    }>(`/exam-sessions/${examSessionId}/students/bulk`, { indexNumbers });
   },
 
   removeExpectedStudent: async (

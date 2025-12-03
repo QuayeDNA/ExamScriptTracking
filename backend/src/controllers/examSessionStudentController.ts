@@ -27,6 +27,7 @@ const addStudentsBulkSchema = z.object({
 
 /**
  * Add expected students to an exam session (with full student data)
+ * Hybrid Approach: Auto-creates Student records with QR codes if they don't exist
  */
 export const addExpectedStudents = async (req: Request, res: Response) => {
   try {
@@ -42,7 +43,63 @@ export const addExpectedStudents = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Exam session not found" });
     }
 
-    // Add students with raw data (using createMany with skipDuplicates)
+    let studentsCreated = 0;
+    let studentsExisting = 0;
+
+    // Process each student: create Student record if not exists
+    for (const studentData of validatedData.students) {
+      // Check if Student exists by indexNumber
+      let student = await prisma.student.findUnique({
+        where: { indexNumber: studentData.indexNumber },
+      });
+
+      // If student doesn't exist, create with QR code
+      if (!student) {
+        const qrData = JSON.stringify({
+          type: "STUDENT",
+          indexNumber: studentData.indexNumber,
+          firstName: studentData.firstName || "",
+          lastName: studentData.lastName || "",
+          program: studentData.program || "",
+          level: studentData.level || 0,
+          timestamp: new Date().toISOString(),
+        });
+
+        student = await prisma.student.create({
+          data: {
+            indexNumber: studentData.indexNumber,
+            firstName: studentData.firstName || "Unknown",
+            lastName: studentData.lastName || "Unknown",
+            program: studentData.program || "Unknown",
+            level: studentData.level || 100,
+            qrCode: qrData,
+          },
+        });
+
+        // Update QR code with actual student ID
+        const updatedQrData = JSON.stringify({
+          type: "STUDENT",
+          id: student.id,
+          indexNumber: student.indexNumber,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          program: student.program,
+          level: student.level,
+          timestamp: new Date().toISOString(),
+        });
+
+        await prisma.student.update({
+          where: { id: student.id },
+          data: { qrCode: updatedQrData },
+        });
+
+        studentsCreated++;
+      } else {
+        studentsExisting++;
+      }
+    }
+
+    // Add students to expected list with raw data (using createMany with skipDuplicates)
     const result = await prisma.examSessionStudent.createMany({
       data: validatedData.students.map((student) => ({
         examSessionId,
@@ -64,7 +121,9 @@ export const addExpectedStudents = async (req: Request, res: Response) => {
         entityId: examSessionId,
         details: {
           indexNumbers: validatedData.students.map((s) => s.indexNumber),
-          count: result.count,
+          expectedStudentsAdded: result.count,
+          newStudentRecordsCreated: studentsCreated,
+          existingStudentRecords: studentsExisting,
         },
         ipAddress: req.ip || "unknown",
       },
@@ -73,6 +132,8 @@ export const addExpectedStudents = async (req: Request, res: Response) => {
     res.json({
       message: `${result.count} student(s) added to exam session`,
       added: result.count,
+      newStudentRecordsCreated: studentsCreated,
+      existingStudentRecords: studentsExisting,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -88,6 +149,7 @@ export const addExpectedStudents = async (req: Request, res: Response) => {
 
 /**
  * Add expected students by index numbers (bulk import from CSV - index numbers only)
+ * Hybrid Approach: Auto-creates Student records with QR codes if they don't exist
  */
 export const addExpectedStudentsByIndex = async (
   req: Request,
@@ -106,8 +168,7 @@ export const addExpectedStudentsByIndex = async (
       return res.status(404).json({ error: "Exam session not found" });
     }
 
-    // Optional: Try to enrich data from Student model if students exist in system
-    // (useful for future lecturer attendance feature)
+    // Check which students already exist in Student table
     const existingStudents = await prisma.student.findMany({
       where: {
         indexNumber: {
@@ -123,12 +184,80 @@ export const addExpectedStudentsByIndex = async (
       },
     });
 
-    // Create a map for quick lookup
-    const studentDataMap = new Map(
-      existingStudents.map((s) => [s.indexNumber, s])
+    const existingIndexNumbers = new Set(
+      existingStudents.map((s) => s.indexNumber)
     );
 
-    // Add students - enrich with existing data if available, otherwise just index number
+    // Find students that need to be created
+    const studentsToCreate = validatedData.indexNumbers.filter(
+      (indexNumber) => !existingIndexNumbers.has(indexNumber)
+    );
+
+    let studentsCreated = 0;
+
+    // Create Student records for those that don't exist
+    for (const indexNumber of studentsToCreate) {
+      const qrData = JSON.stringify({
+        type: "STUDENT",
+        indexNumber: indexNumber,
+        firstName: "",
+        lastName: "",
+        program: "",
+        level: 0,
+        timestamp: new Date().toISOString(),
+      });
+
+      const student = await prisma.student.create({
+        data: {
+          indexNumber: indexNumber,
+          firstName: "Unknown",
+          lastName: "Unknown",
+          program: "Unknown",
+          level: 100,
+          qrCode: qrData,
+        },
+      });
+
+      // Update QR code with actual student ID
+      const updatedQrData = JSON.stringify({
+        type: "STUDENT",
+        id: student.id,
+        indexNumber: student.indexNumber,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        program: student.program,
+        level: student.level,
+        timestamp: new Date().toISOString(),
+      });
+
+      await prisma.student.update({
+        where: { id: student.id },
+        data: { qrCode: updatedQrData },
+      });
+
+      studentsCreated++;
+    }
+
+    // Now fetch all students again to get enriched data
+    const allStudents = await prisma.student.findMany({
+      where: {
+        indexNumber: {
+          in: validatedData.indexNumbers,
+        },
+      },
+      select: {
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        program: true,
+        level: true,
+      },
+    });
+
+    // Create a map for quick lookup
+    const studentDataMap = new Map(allStudents.map((s) => [s.indexNumber, s]));
+
+    // Add students - enrich with existing data
     const studentsToAdd = validatedData.indexNumbers.map((indexNumber) => {
       const existingData = studentDataMap.get(indexNumber);
       return {
@@ -154,9 +283,10 @@ export const addExpectedStudentsByIndex = async (
         entity: "ExamSessionStudent",
         entityId: examSessionId,
         details: {
-          studentsAdded: result.count,
+          expectedStudentsAdded: result.count,
           totalProvided: validatedData.indexNumbers.length,
-          enrichedFromDatabase: existingStudents.length,
+          newStudentRecordsCreated: studentsCreated,
+          existingStudentRecords: existingStudents.length,
         },
         ipAddress: req.ip || "unknown",
       },
@@ -166,7 +296,8 @@ export const addExpectedStudentsByIndex = async (
       message: `${result.count} student(s) added to exam session`,
       added: result.count,
       totalProvided: validatedData.indexNumbers.length,
-      enrichedWithExistingData: existingStudents.length,
+      newStudentRecordsCreated: studentsCreated,
+      existingStudentRecords: existingStudents.length,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
