@@ -13,14 +13,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
 import * as batchTransfersApi from "@/api/batchTransfers";
 import * as usersApi from "@/api/users";
+import { examSessionsApi } from "@/api/examSessions";
 
 export default function InitiateTransferScreen() {
-  const { examSessionId, batchQrCode, courseCode, courseName } =
+  const { examSessionId, batchQrCode, courseCode, courseName, custodyStatus } =
     useLocalSearchParams<{
       examSessionId: string;
       batchQrCode: string;
       courseCode: string;
       courseName: string;
+      custodyStatus?: string;
     }>();
   const router = useRouter();
   const user = useAuthStore((state: any) => state.user);
@@ -33,24 +35,43 @@ export default function InitiateTransferScreen() {
   const [scriptsCount, setScriptsCount] = useState<number>(0);
 
   useEffect(() => {
+    // Validate custody status - only allow transfer if batch is in current user's custody
+    if (custodyStatus && custodyStatus !== "IN_CUSTODY") {
+      Alert.alert(
+        "Cannot Transfer",
+        "You can only initiate transfers for batches currently in your custody.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.back(),
+          },
+        ]
+      );
+      return;
+    }
+
     loadHandlers();
-  }, []);
+  }, [custodyStatus]);
 
   const loadHandlers = async () => {
     try {
       setLoading(true);
-      const data = await usersApi.getHandlers();
+      const [handlersData, sessionData] = await Promise.all([
+        usersApi.getHandlers(),
+        examSessionsApi.getExamSession(examSessionId),
+      ]);
+
       // Filter out current user
-      const filteredHandlers = data.handlers.filter(
-        (h) => h.id !== user?.userId
+      const filteredHandlers = handlersData.handlers.filter(
+        (h) => h.id !== user?.id
       );
       setHandlers(filteredHandlers);
 
-      // TODO: Fetch actual scripts count from attendance records
-      // For now, use a placeholder
-      setScriptsCount(0);
+      // Get actual attendance count (students who attended the exam)
+      const attendanceCount = sessionData.attendances?.length || 0;
+      setScriptsCount(attendanceCount);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to load handlers");
+      Alert.alert("Error", error.error || "Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -78,7 +99,7 @@ export default function InitiateTransferScreen() {
               await batchTransfersApi.createTransfer({
                 examSessionId,
                 toHandlerId: selectedHandlerId,
-                scriptsExpected: scriptsCount || 1, // Use actual count or default to 1
+                scriptsExpected: scriptsCount, // Actual attendance count
                 location: location || undefined,
               });
 
@@ -130,6 +151,14 @@ export default function InitiateTransferScreen() {
           <View style={styles.infoRow}>
             <Text style={styles.label}>From:</Text>
             <Text style={styles.value}>{user?.name || "Current User"}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Scripts Count:</Text>
+            <Text
+              style={[styles.value, { fontWeight: "bold", color: "#3b82f6" }]}
+            >
+              {scriptsCount} {scriptsCount === 1 ? "script" : "scripts"}
+            </Text>
           </View>
         </View>
 

@@ -151,6 +151,7 @@ export default function BatchDetailsScreen() {
     submitted: expectedStudents.filter((s) => s.attendance?.submissionTime)
       .length,
     notYet: expectedStudents.filter((s) => !s.attendance).length,
+    attended: expectedStudents.filter((s) => s.attendance).length, // Total who attended (present + submitted)
   };
 
   return (
@@ -185,43 +186,52 @@ export default function BatchDetailsScreen() {
         <InfoRow label="Venue" value={session.venue} />
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.transferButton}
-          onPress={() =>
-            router.push({
-              pathname: "/initiate-transfer",
-              params: {
-                examSessionId: session.id,
-                batchQrCode: session.batchQrCode,
-                courseCode: session.courseCode,
-                courseName: session.courseName,
-              },
-            })
-          }
-        >
-          <Text style={styles.transferButtonText}>📦 Initiate Transfer</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Attendance Stats */}
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: "#3b82f6" }]}>
           <Text style={styles.statNumber}>{stats.total}</Text>
           <Text style={styles.statLabel}>Expected</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: "#f59e0b" }]}>
-          <Text style={styles.statNumber}>{stats.present}</Text>
-          <Text style={styles.statLabel}>Present</Text>
-        </View>
         <View style={[styles.statCard, { backgroundColor: "#10b981" }]}>
-          <Text style={styles.statNumber}>{stats.submitted}</Text>
-          <Text style={styles.statLabel}>Submitted</Text>
+          <Text style={styles.statNumber}>{stats.attended}</Text>
+          <Text style={styles.statLabel}>Attended</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: "#6b7280" }]}>
+        <View style={[styles.statCard, { backgroundColor: "#ef4444" }]}>
           <Text style={styles.statNumber}>{stats.notYet}</Text>
-          <Text style={styles.statLabel}>Not Yet</Text>
+          <Text style={styles.statLabel}>Absent</Text>
+        </View>
+      </View>
+
+      {/* Additional Info Card */}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoCardTitle}>📊 Batch Summary</Text>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Scripts to Transfer:</Text>
+          <Text
+            style={[styles.infoValue, { fontWeight: "bold", color: "#3b82f6" }]}
+          >
+            {stats.attended} of {stats.total}
+          </Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Attendance Rate:</Text>
+          <Text style={styles.infoValue}>
+            {stats.total > 0
+              ? ((stats.attended / stats.total) * 100).toFixed(1)
+              : "0"}
+            %
+          </Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Absentees:</Text>
+          <Text
+            style={[
+              styles.infoValue,
+              { color: stats.notYet > 0 ? "#ef4444" : "#10b981" },
+            ]}
+          >
+            {stats.notYet} student{stats.notYet !== 1 ? "s" : ""}
+          </Text>
         </View>
       </View>
 
@@ -380,27 +390,6 @@ export default function BatchDetailsScreen() {
         <InfoRow label="Lecturer Name" value={session.lecturerName} />
         <InfoRow label="Department" value={session.department} />
         <InfoRow label="Faculty" value={session.faculty} />
-      </View>
-
-      {/* Transfer Actions */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Transfer Actions</Text>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() =>
-            router.push({
-              pathname: "/initiate-transfer",
-              params: {
-                examSessionId: session.id,
-                batchQrCode: session.batchQrCode,
-                courseCode: session.courseCode,
-                courseName: session.courseName,
-              },
-            })
-          }
-        >
-          <Text style={styles.actionButtonText}>📤 Initiate Transfer</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.card}>
@@ -624,6 +613,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginTop: 4,
     fontWeight: "600",
+  },
+  infoCard: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 12,
   },
   filterContainer: {
     flexDirection: "row",

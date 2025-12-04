@@ -23,7 +23,11 @@ interface BatchWithCustody {
   venue: string;
   examDate: string;
   status: string;
-  custodyStatus: "IN_CUSTODY" | "PENDING_RECEIPT" | "TRANSFER_INITIATED";
+  custodyStatus:
+    | "IN_CUSTODY"
+    | "PENDING_RECEIPT"
+    | "TRANSFER_INITIATED"
+    | "TRANSFERRED";
   latestTransfer?: BatchTransfer;
   pendingTransferCount?: number;
 }
@@ -77,7 +81,7 @@ export default function CustodyScreen() {
         const latestTransfer = sortedTransfers[0];
 
         // Determine custody status
-        let custodyStatus: BatchWithCustody["custodyStatus"] = "IN_CUSTODY";
+        let custodyStatus: BatchWithCustody["custodyStatus"] | null = null;
 
         if (latestTransfer.toHandlerId === user.id) {
           // I'm the receiver
@@ -91,6 +95,15 @@ export default function CustodyScreen() {
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "TRANSFER_INITIATED";
           }
+          // If status is CONFIRMED, I transferred it away - show as TRANSFERRED
+          else if (latestTransfer.status === "CONFIRMED") {
+            custodyStatus = "TRANSFERRED";
+          }
+        }
+
+        // Skip if custody status couldn't be determined (shouldn't happen, but safety check)
+        if (!custodyStatus) {
+          continue;
         }
 
         // Count pending transfers
@@ -159,6 +172,7 @@ export default function CustodyScreen() {
         batchQrCode: batch.batchQrCode,
         courseCode: batch.courseCode,
         courseName: batch.courseName,
+        custodyStatus: batch.custodyStatus,
       },
     });
   };
@@ -253,7 +267,10 @@ export default function CustodyScreen() {
     if (filter === "IN_CUSTODY") return batch.custodyStatus === "IN_CUSTODY";
     if (filter === "PENDING") return batch.custodyStatus === "PENDING_RECEIPT";
     if (filter === "TRANSFERRED")
-      return batch.custodyStatus === "TRANSFER_INITIATED";
+      return (
+        batch.custodyStatus === "TRANSFER_INITIATED" ||
+        batch.custodyStatus === "TRANSFERRED"
+      );
     return true;
   });
 
@@ -262,8 +279,11 @@ export default function CustodyScreen() {
     inCustody: batches.filter((b) => b.custodyStatus === "IN_CUSTODY").length,
     pending: batches.filter((b) => b.custodyStatus === "PENDING_RECEIPT")
       .length,
-    transferred: batches.filter((b) => b.custodyStatus === "TRANSFER_INITIATED")
-      .length,
+    transferred: batches.filter(
+      (b) =>
+        b.custodyStatus === "TRANSFER_INITIATED" ||
+        b.custodyStatus === "TRANSFERRED"
+    ).length,
   };
 
   if (loading) {
@@ -406,12 +426,12 @@ function getCustodyColor(status: string): string {
   switch (status) {
     case "IN_CUSTODY":
       return "#10b981";
-    case "CREATED":
-      return "#3b82f6";
     case "PENDING_RECEIPT":
       return "#f59e0b";
     case "TRANSFER_INITIATED":
       return "#8b5cf6";
+    case "TRANSFERRED":
+      return "#6b7280"; // Gray - batch has been transferred away
     default:
       return "#6b7280";
   }
@@ -425,6 +445,8 @@ function getCustodyLabel(status: string): string {
       return "PENDING RECEIPT";
     case "TRANSFER_INITIATED":
       return "TRANSFER INITIATED";
+    case "TRANSFERRED":
+      return "TRANSFERRED";
     default:
       return status;
   }
