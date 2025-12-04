@@ -28,10 +28,16 @@ router.get("/:id", getTransferById);
 router.get("/history/:examSessionId", getTransferHistory);
 
 // Create transfer request
-// Auth: ADMIN, INVIGILATOR, LECTURER
+// Auth: ADMIN, INVIGILATOR, LECTURER, FACULTY_OFFICER, DEPARTMENT_HEAD
 router.post(
   "/",
-  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
+  authorize(
+    Role.ADMIN,
+    Role.INVIGILATOR,
+    Role.LECTURER,
+    Role.FACULTY_OFFICER,
+    Role.DEPARTMENT_HEAD
+  ),
   createTransfer
 );
 
@@ -39,7 +45,13 @@ router.post(
 // Auth: Receiver only (checked in controller)
 router.patch(
   "/:id/confirm",
-  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
+  authorize(
+    Role.ADMIN,
+    Role.INVIGILATOR,
+    Role.LECTURER,
+    Role.FACULTY_OFFICER,
+    Role.DEPARTMENT_HEAD
+  ),
   confirmTransfer
 );
 
@@ -47,7 +59,13 @@ router.patch(
 // Auth: Receiver only (checked in controller)
 router.patch(
   "/:id/reject",
-  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
+  authorize(
+    Role.ADMIN,
+    Role.INVIGILATOR,
+    Role.LECTURER,
+    Role.FACULTY_OFFICER,
+    Role.DEPARTMENT_HEAD
+  ),
   rejectTransfer
 );
 

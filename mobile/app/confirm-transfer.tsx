@@ -5,10 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Alert,
-  Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as batchTransfersApi from "@/api/batchTransfers";
@@ -19,9 +17,6 @@ export default function ConfirmTransferScreen() {
   const router = useRouter();
 
   const [transfer, setTransfer] = useState<BatchTransfer | null>(null);
-  const [scriptsReceived, setScriptsReceived] = useState<string>("");
-  const [discrepancyNote, setDiscrepancyNote] = useState<string>("");
-  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,8 +30,6 @@ export default function ConfirmTransferScreen() {
       setLoading(true);
       const data = await batchTransfersApi.getTransferById(transferId);
       setTransfer(data.transfer);
-      // Pre-fill with expected count
-      setScriptsReceived(data.transfer.scriptsExpected.toString());
     } catch (error: any) {
       Alert.alert("Error", error.error || "Failed to load transfer details");
       router.back();
@@ -46,43 +39,23 @@ export default function ConfirmTransferScreen() {
   };
 
   const handleConfirm = async () => {
-    if (!scriptsReceived || parseInt(scriptsReceived) <= 0) {
-      Alert.alert("Error", "Please enter a valid number of scripts received");
-      return;
-    }
-
-    const receivedCount = parseInt(scriptsReceived);
-    const hasDiscrepancy = receivedCount !== transfer!.scriptsExpected;
-
-    // If discrepancy, show modal for note
-    if (hasDiscrepancy && !discrepancyNote) {
-      setShowDiscrepancyModal(true);
-      return;
-    }
-
     Alert.alert(
-      "Confirm Receipt",
-      hasDiscrepancy
-        ? `⚠️ DISCREPANCY DETECTED\n\nExpected: ${transfer!.scriptsExpected} scripts\nReceived: ${receivedCount} scripts\n\nDifference: ${Math.abs(receivedCount - transfer!.scriptsExpected)} scripts\n\nConfirm receipt with discrepancy?`
-        : `Confirm receipt of ${receivedCount} scripts?`,
+      "Confirm Transfer",
+      `Confirm that you have received the exam scripts from ${transfer!.fromHandler.firstName} ${transfer!.fromHandler.lastName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Confirm",
-          style: hasDiscrepancy ? "destructive" : "default",
           onPress: async () => {
             try {
               setSubmitting(true);
               await batchTransfersApi.confirmTransfer(transferId, {
-                scriptsReceived: receivedCount,
-                discrepancyNote: discrepancyNote || undefined,
+                scriptsReceived: transfer!.scriptsExpected,
               });
 
               Alert.alert(
-                "Success",
-                hasDiscrepancy
-                  ? "Transfer confirmed with discrepancy reported"
-                  : "Transfer confirmed successfully",
+                "✓ Transfer Confirmed",
+                "You now have custody of this batch.",
                 [
                   {
                     text: "OK",
@@ -169,9 +142,6 @@ export default function ConfirmTransferScreen() {
     );
   }
 
-  const hasDiscrepancy =
-    scriptsReceived && parseInt(scriptsReceived) !== transfer.scriptsExpected;
-
   return (
     <>
       <ScrollView style={styles.container}>
@@ -229,57 +199,37 @@ export default function ConfirmTransferScreen() {
             )}
           </View>
 
-          {/* Scripts Received Form */}
+          {/* Confirmation Message */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Confirm Receipt</Text>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Scripts Received *</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  hasDiscrepancy && styles.inputDiscrepancy,
-                ]}
-                placeholder="Enter number of scripts received"
-                keyboardType="numeric"
-                value={scriptsReceived}
-                onChangeText={setScriptsReceived}
-              />
-              {hasDiscrepancy && (
-                <View style={styles.discrepancyWarning}>
-                  <Text style={styles.discrepancyWarningText}>
-                    ⚠️ Discrepancy: Expected {transfer.scriptsExpected}, but
-                    received {scriptsReceived}
-                  </Text>
-                </View>
-              )}
+            <Text style={styles.confirmMessage}>
+              Please confirm that you have received the exam scripts from{" "}
+              <Text style={styles.handlerName}>
+                {transfer.fromHandler.firstName} {transfer.fromHandler.lastName}
+              </Text>
+              .
+            </Text>
+            <View style={styles.infoHighlight}>
+              <Text style={styles.infoHighlightLabel}>Scripts Expected:</Text>
+              <Text style={styles.infoHighlightValue}>
+                {transfer.scriptsExpected}
+              </Text>
             </View>
-
-            {hasDiscrepancy && (
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Discrepancy Note *</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Explain the discrepancy (e.g., missing scripts, damaged scripts)"
-                  multiline
-                  numberOfLines={4}
-                  value={discrepancyNote}
-                  onChangeText={setDiscrepancyNote}
-                />
-              </View>
-            )}
+            <Text style={styles.noteText}>
+              ℹ️ By confirming, you acknowledge custody of this batch.
+            </Text>
           </View>
 
           {/* Action Buttons */}
           <TouchableOpacity
             style={[styles.confirmButton, submitting && styles.buttonDisabled]}
             onPress={handleConfirm}
-            disabled={submitting || !scriptsReceived}
+            disabled={submitting}
           >
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.confirmButtonText}>Confirm Receipt</Text>
+              <Text style={styles.confirmButtonText}>✓ Confirm Receipt</Text>
             )}
           </TouchableOpacity>
 
@@ -300,59 +250,6 @@ export default function ConfirmTransferScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* Discrepancy Note Modal */}
-      <Modal
-        visible={showDiscrepancyModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDiscrepancyModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Discrepancy Detected</Text>
-            <Text style={styles.modalText}>
-              Expected: {transfer.scriptsExpected} scripts{"\n"}
-              Received: {scriptsReceived} scripts{"\n\n"}
-              Please provide a note explaining the discrepancy:
-            </Text>
-
-            <TextInput
-              style={[styles.input, styles.textArea, styles.modalInput]}
-              placeholder="Explain the discrepancy..."
-              multiline
-              numberOfLines={4}
-              value={discrepancyNote}
-              onChangeText={setDiscrepancyNote}
-              autoFocus
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButtonCancel}
-                onPress={() => setShowDiscrepancyModal(false)}
-              >
-                <Text style={styles.modalButtonCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalButtonConfirm,
-                  !discrepancyNote && styles.buttonDisabled,
-                ]}
-                onPress={() => {
-                  if (discrepancyNote) {
-                    setShowDiscrepancyModal(false);
-                    handleConfirm();
-                  }
-                }}
-                disabled={!discrepancyNote}
-              >
-                <Text style={styles.modalButtonConfirmText}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
@@ -535,61 +432,38 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
+  confirmMessage: {
+    fontSize: 16,
+    color: "#374151",
+    lineHeight: 24,
+    marginBottom: 16,
   },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    width: "100%",
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+  handlerName: {
+    fontWeight: "700",
     color: "#111827",
-    marginBottom: 12,
   },
-  modalText: {
+  infoHighlight: {
+    backgroundColor: "#eff6ff",
+    padding: 16,
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  infoHighlightLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e40af",
+  },
+  infoHighlightValue: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1e40af",
+  },
+  noteText: {
     fontSize: 14,
     color: "#6b7280",
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  modalInput: {
-    marginBottom: 16,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalButtonCancel: {
-    flex: 1,
-    backgroundColor: "#e5e7eb",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  modalButtonCancelText: {
-    color: "#374151",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  modalButtonConfirm: {
-    flex: 1,
-    backgroundColor: "#ef4444",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  modalButtonConfirmText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+    fontStyle: "italic",
   },
 });

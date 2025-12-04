@@ -36,11 +36,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="transfers"
+        name="custody"
         options={{
-          title: "Transfers",
+          title: "Custody",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="arrow.left.arrow.right" color={color} />
+            <IconSymbol size={28} name="shippingbox.fill" color={color} />
           ),
         }}
       />

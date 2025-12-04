@@ -422,6 +422,40 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
       },
     });
 
+    // If status is being set to SUBMITTED, create initial custody record
+    if (validatedData.status === "SUBMITTED") {
+      // Check if this is the first custody record (no transfers exist yet)
+      const existingTransfers = await prisma.batchTransfer.count({
+        where: { examSessionId: id },
+      });
+
+      if (existingTransfers === 0) {
+        // Get the count of present students (attendances) for scriptsExpected
+        // This represents all students who attended the exam
+        const submittedCount = await prisma.examAttendance.count({
+          where: {
+            examSessionId: id,
+          },
+        });
+
+        // Create initial custody transfer record
+        // This establishes the submitter (invigilator) as the first custodian
+        await prisma.batchTransfer.create({
+          data: {
+            examSessionId: id,
+            fromHandlerId: req.user!.userId,
+            toHandlerId: req.user!.userId, // Self-transfer to establish custody
+            status: "CONFIRMED",
+            scriptsExpected: submittedCount,
+            scriptsReceived: submittedCount,
+            requestedAt: new Date(),
+            confirmedAt: new Date(),
+            discrepancyNote: "Initial custody established upon submission",
+          },
+        });
+      }
+    }
+
     // Log audit trail
     await prisma.auditLog.create({
       data: {

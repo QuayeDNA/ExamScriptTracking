@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
 import * as batchTransfersApi from "@/api/batchTransfers";
+import * as usersApi from "@/api/users";
 
 export default function InitiateTransferScreen() {
   const { examSessionId, batchQrCode, courseCode, courseName } =
@@ -24,14 +25,12 @@ export default function InitiateTransferScreen() {
   const router = useRouter();
   const user = useAuthStore((state: any) => state.user);
 
-  const [handlers, setHandlers] = useState<
-    { id: string; name: string; role: string }[]
-  >([]);
+  const [handlers, setHandlers] = useState<usersApi.Handler[]>([]);
   const [selectedHandlerId, setSelectedHandlerId] = useState<string>("");
-  const [scriptsExpected, setScriptsExpected] = useState<string>("");
   const [location, setLocation] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [scriptsCount, setScriptsCount] = useState<number>(0);
 
   useEffect(() => {
     loadHandlers();
@@ -40,14 +39,16 @@ export default function InitiateTransferScreen() {
   const loadHandlers = async () => {
     try {
       setLoading(true);
-      // In a real app, you'd fetch available handlers from the API
-      // For now, we'll use mock data
-      // TODO: Add endpoint to fetch users with ADMIN, INVIGILATOR, LECTURER roles
-      setHandlers([
-        { id: "handler-1", name: "John Doe", role: "LECTURER" },
-        { id: "handler-2", name: "Jane Smith", role: "INVIGILATOR" },
-        { id: "handler-3", name: "Admin User", role: "ADMIN" },
-      ]);
+      const data = await usersApi.getHandlers();
+      // Filter out current user
+      const filteredHandlers = data.handlers.filter(
+        (h) => h.id !== user?.userId
+      );
+      setHandlers(filteredHandlers);
+
+      // TODO: Fetch actual scripts count from attendance records
+      // For now, use a placeholder
+      setScriptsCount(0);
     } catch (error: any) {
       Alert.alert("Error", error.error || "Failed to load handlers");
     } finally {
@@ -61,16 +62,12 @@ export default function InitiateTransferScreen() {
       return;
     }
 
-    if (!scriptsExpected || parseInt(scriptsExpected) <= 0) {
-      Alert.alert("Error", "Please enter a valid number of scripts");
-      return;
-    }
+    const selectedHandler = handlers.find((h) => h.id === selectedHandlerId);
+    if (!selectedHandler) return;
 
     Alert.alert(
       "Confirm Transfer",
-      `Initiate transfer of ${scriptsExpected} scripts to ${
-        handlers.find((h) => h.id === selectedHandlerId)?.name
-      }?`,
+      `Initiate transfer of exam scripts to ${selectedHandler.firstName} ${selectedHandler.lastName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -81,7 +78,7 @@ export default function InitiateTransferScreen() {
               await batchTransfersApi.createTransfer({
                 examSessionId,
                 toHandlerId: selectedHandlerId,
-                scriptsExpected: parseInt(scriptsExpected),
+                scriptsExpected: scriptsCount || 1, // Use actual count or default to 1
                 location: location || undefined,
               });
 
@@ -162,7 +159,7 @@ export default function InitiateTransferScreen() {
                           styles.handlerNameSelected,
                       ]}
                     >
-                      {handler.name}
+                      {handler.firstName} {handler.lastName}
                     </Text>
                     <Text
                       style={[
@@ -180,18 +177,6 @@ export default function InitiateTransferScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
-
-          {/* Scripts Expected */}
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Number of Scripts *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter number of scripts"
-              keyboardType="numeric"
-              value={scriptsExpected}
-              onChangeText={setScriptsExpected}
-            />
           </View>
 
           {/* Location (Optional) */}

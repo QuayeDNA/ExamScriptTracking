@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -14,6 +15,7 @@ import {
   type ExamSession,
   type BatchStatus,
 } from "@/api/examSessions";
+import type { ExamAttendance } from "@/types";
 
 const STATUS_OPTIONS: { value: BatchStatus; label: string; color: string }[] = [
   { value: "IN_PROGRESS", label: "In Progress", color: "#3b82f6" },
@@ -30,52 +32,48 @@ export default function BatchDetailsScreen() {
   const { batchId } = useLocalSearchParams<{ batchId: string }>();
   const router = useRouter();
   const [session, setSession] = useState<ExamSession | null>(null);
+  const [expectedStudents, setExpectedStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [filter, setFilter] = useState<
+    "ALL" | "PRESENT" | "SUBMITTED" | "NOT_YET"
+  >("ALL");
 
   const loadSession = useCallback(async () => {
     if (!batchId) {
-      console.error("No batchId provided");
       Alert.alert("Error", "No batch ID provided");
       router.back();
       return;
     }
 
     try {
-      console.log("Loading batch details for ID:", batchId);
       setLoading(true);
-      const data = await examSessionsApi.getExamSession(batchId);
-      console.log("Batch details loaded successfully:", data);
-      setSession(data);
+      const [sessionData, studentsData] = await Promise.all([
+        examSessionsApi.getExamSession(batchId),
+        examSessionsApi.getExpectedStudents(batchId),
+      ]);
+      setSession(sessionData);
+      setExpectedStudents(studentsData.expectedStudents);
     } catch (error: any) {
-      console.error("Failed to load batch details:", error);
       Alert.alert(
         "Error Loading Batch",
-        error.error ||
-          error.message ||
-          "Failed to load batch details. Please check your connection and try again.",
+        error.error || "Failed to load batch details",
         [
-          {
-            text: "Retry",
-            onPress: () => loadSession(),
-          },
-          {
-            text: "Go Back",
-            style: "cancel",
-            onPress: () => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace("/(tabs)");
-              }
-            },
-          },
+          { text: "Retry", onPress: () => loadSession() },
+          { text: "Go Back", style: "cancel", onPress: () => router.back() },
         ]
       );
     } finally {
       setLoading(false);
     }
   }, [batchId, router]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadSession();
+    setRefreshing(false);
+  }, [loadSession]);
 
   useEffect(() => {
     loadSession();
@@ -130,8 +128,34 @@ export default function BatchDetailsScreen() {
 
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === session.status);
 
+  // Filter students based on selected filter
+  const filteredStudents = expectedStudents.filter((student) => {
+    if (filter === "ALL") return true;
+    if (filter === "PRESENT")
+      return student.attendance && !student.attendance.submissionTime;
+    if (filter === "SUBMITTED") return student.attendance?.submissionTime;
+    if (filter === "NOT_YET") return !student.attendance;
+    return true;
+  });
+
+  // Calculate stats
+  const stats = {
+    total: expectedStudents.length,
+    present: expectedStudents.filter(
+      (s) => s.attendance && !s.attendance.submissionTime
+    ).length,
+    submitted: expectedStudents.filter((s) => s.attendance?.submissionTime)
+      .length,
+    notYet: expectedStudents.filter((s) => !s.attendance).length,
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.header}>
         <View
           style={[
@@ -157,9 +181,209 @@ export default function BatchDetailsScreen() {
         <InfoRow label="Venue" value={session.venue} />
       </View>
 
+      {/* Quick Actions */}
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity
+          style={styles.transferButton}
+          onPress={() =>
+            router.push({
+              pathname: "/initiate-transfer",
+              params: {
+                examSessionId: session.id,
+                batchQrCode: session.batchQrCode,
+                courseCode: session.courseCode,
+                courseName: session.courseName,
+              },
+            })
+          }
+        >
+          <Text style={styles.transferButtonText}>📦 Initiate Transfer</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.historyButton}
+          onPress={() =>
+            router.push({
+              pathname: "/transfer-history",
+              params: { examSessionId: session.id },
+            })
+          }
+        >
+          <Text style={styles.historyButtonText}>View Transfer History</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Attendance Stats */}
+      <View style={styles.statsContainer}>
+        <View style={[styles.statCard, { backgroundColor: "#3b82f6" }]}>
+          <Text style={styles.statNumber}>{stats.total}</Text>
+          <Text style={styles.statLabel}>Expected</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: "#f59e0b" }]}>
+          <Text style={styles.statNumber}>{stats.present}</Text>
+          <Text style={styles.statLabel}>Present</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: "#10b981" }]}>
+          <Text style={styles.statNumber}>{stats.submitted}</Text>
+          <Text style={styles.statLabel}>Submitted</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: "#6b7280" }]}>
+          <Text style={styles.statNumber}>{stats.notYet}</Text>
+          <Text style={styles.statLabel}>Not Yet</Text>
+        </View>
+      </View>
+
+      {/* Attendance Filter */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            filter === "ALL" && styles.filterButtonActive,
+          ]}
+          onPress={() => setFilter("ALL")}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              filter === "ALL" && styles.filterTextActive,
+            ]}
+          >
+            All ({stats.total})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            filter === "PRESENT" && styles.filterButtonActive,
+          ]}
+          onPress={() => setFilter("PRESENT")}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              filter === "PRESENT" && styles.filterTextActive,
+            ]}
+          >
+            Present ({stats.present})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            filter === "SUBMITTED" && styles.filterButtonActive,
+          ]}
+          onPress={() => setFilter("SUBMITTED")}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              filter === "SUBMITTED" && styles.filterTextActive,
+            ]}
+          >
+            Submitted ({stats.submitted})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            filter === "NOT_YET" && styles.filterButtonActive,
+          ]}
+          onPress={() => setFilter("NOT_YET")}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              filter === "NOT_YET" && styles.filterTextActive,
+            ]}
+          >
+            Not Yet ({stats.notYet})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Attendance List */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          Student Attendance ({filteredStudents.length})
+        </Text>
+        {filteredStudents.length === 0 ? (
+          <Text style={styles.emptyText}>No students match this filter</Text>
+        ) : (
+          filteredStudents.map((student, index) => (
+            <View key={student.id} style={styles.studentItem}>
+              <View style={styles.studentHeader}>
+                <Text style={styles.studentName}>
+                  {student.firstName || "Unknown"} {student.lastName || ""}
+                </Text>
+                {student.attendance?.submissionTime && (
+                  <View
+                    style={[
+                      styles.statusBadgeSmall,
+                      { backgroundColor: "#10b981" },
+                    ]}
+                  >
+                    <Text style={styles.statusBadgeText}>✓ Submitted</Text>
+                  </View>
+                )}
+                {student.attendance && !student.attendance.submissionTime && (
+                  <View
+                    style={[
+                      styles.statusBadgeSmall,
+                      { backgroundColor: "#f59e0b" },
+                    ]}
+                  >
+                    <Text style={styles.statusBadgeText}>Present</Text>
+                  </View>
+                )}
+                {!student.attendance && (
+                  <View
+                    style={[
+                      styles.statusBadgeSmall,
+                      { backgroundColor: "#6b7280" },
+                    ]}
+                  >
+                    <Text style={styles.statusBadgeText}>Not Yet</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.studentIndex}>{student.indexNumber}</Text>
+              {student.program && (
+                <Text style={styles.studentInfo}>
+                  {student.program} • Level {student.level || "N/A"}
+                </Text>
+              )}
+              {student.attendance && (
+                <View style={styles.timeInfo}>
+                  <Text style={styles.timeText}>
+                    ⏰ Entry:{" "}
+                    {new Date(
+                      student.attendance.entryTime
+                    ).toLocaleTimeString()}
+                  </Text>
+                  {student.attendance.exitTime && (
+                    <Text style={styles.timeText}>
+                      🚪 Exit:{" "}
+                      {new Date(
+                        student.attendance.exitTime
+                      ).toLocaleTimeString()}
+                    </Text>
+                  )}
+                  {student.attendance.submissionTime && (
+                    <Text style={styles.timeText}>
+                      ✅ Submitted:{" "}
+                      {new Date(
+                        student.attendance.submissionTime
+                      ).toLocaleTimeString()}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          ))
+        )}
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Lecturer Information</Text>
-        <InfoRow label="Lecturer ID" value={session.lecturerId} />
         <InfoRow label="Lecturer Name" value={session.lecturerName} />
         <InfoRow label="Department" value={session.department} />
         <InfoRow label="Faculty" value={session.faculty} />
@@ -398,5 +622,139 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     marginTop: 16,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#fff",
+    marginTop: 4,
+    fontWeight: "600",
+  },
+  filterContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+  },
+  filterButtonActive: {
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
+  },
+  filterText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  filterTextActive: {
+    color: "#fff",
+  },
+  studentItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  studentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  studentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    flex: 1,
+  },
+  studentIndex: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 4,
+  },
+  studentInfo: {
+    fontSize: 13,
+    color: "#9ca3af",
+    marginBottom: 8,
+  },
+  timeInfo: {
+    gap: 4,
+  },
+  timeText: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  statusBadgeSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#9ca3af",
+    fontSize: 14,
+    paddingVertical: 32,
+  },
+  actionsContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  transferButton: {
+    flex: 1,
+    backgroundColor: "#3b82f6",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  transferButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  historyButton: {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#3b82f6",
+  },
+  historyButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3b82f6",
   },
 });

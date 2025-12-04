@@ -37,11 +37,44 @@ export type BatchStatus =
   | "COMPLETED";
 
 export const examSessionsApi = {
+  getExamSessions: async (): Promise<ExamSession[]> => {
+    const response = await apiClient.get<{
+      examSessions: ExamSession[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        pages: number;
+      };
+    }>("/exam-sessions?limit=1000");
+    return response.examSessions;
+  },
+
   getExamSession: async (id: string): Promise<ExamSession> => {
     const response = await apiClient.get<{ examSession: ExamSession }>(
       `/exam-sessions/${id}`
     );
     return response.examSession;
+  },
+
+  getExpectedStudents: async (examSessionId: string) => {
+    return apiClient.get<{
+      expectedStudents: Array<{
+        id: string;
+        indexNumber: string;
+        firstName?: string | null;
+        lastName?: string | null;
+        program?: string | null;
+        level?: number | null;
+        attendance?: {
+          id: string;
+          entryTime: string;
+          exitTime: string | null;
+          submissionTime: string | null;
+          status: string;
+        } | null;
+      }>;
+    }>(`/exam-sessions/${examSessionId}/students`);
   },
 
   updateStatus: async (

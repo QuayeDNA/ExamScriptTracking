@@ -16,6 +16,7 @@ import {
   ScrollView,
   RefreshControl,
   TouchableWithoutFeedback,
+  PanResponder,
 } from "react-native";
 import type { ExamSession } from "@/api/examSessions";
 import type { ExamAttendance } from "@/types";
@@ -48,6 +49,7 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const panY = useState(new Animated.Value(0))[0];
 
     useImperativeHandle(ref, () => ({
       snapToIndex: (index: number) => {
@@ -98,8 +100,8 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         if (data.stats) {
           setStats(data.stats);
         }
-      } catch (error) {
-        console.error("Failed to load attendance:", error);
+      } catch {
+        // Silently handle error
       } finally {
         setLoading(false);
       }
@@ -154,38 +156,120 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
       });
     };
 
-    const expandDrawer = () => {
-      if (currentIndex < 2) {
-        const newIndex = currentIndex + 1;
-        setCurrentIndex(newIndex);
-        let height = 0;
-        switch (newIndex) {
-          case 0:
-            height = DRAWER_HEIGHTS.SMALL;
-            break;
-          case 1:
-            height = DRAWER_HEIGHTS.MEDIUM;
-            break;
-          case 2:
-            height = DRAWER_HEIGHTS.LARGE;
-            break;
-        }
-        Animated.spring(drawerHeight, {
-          toValue: height,
-          useNativeDriver: false,
-        }).start();
+    const cycleDrawerSize = () => {
+      let newIndex: number;
+      if (currentIndex === 2) {
+        // From large, go to medium
+        newIndex = 1;
+      } else if (currentIndex === 1) {
+        // From medium, go to large
+        newIndex = 2;
+      } else {
+        // From small or closed, go to medium
+        newIndex = 1;
       }
+
+      setCurrentIndex(newIndex);
+      let height = 0;
+      switch (newIndex) {
+        case 0:
+          height = DRAWER_HEIGHTS.SMALL;
+          break;
+        case 1:
+          height = DRAWER_HEIGHTS.MEDIUM;
+          break;
+        case 2:
+          height = DRAWER_HEIGHTS.LARGE;
+          break;
+      }
+      Animated.spring(drawerHeight, {
+        toValue: height,
+        useNativeDriver: false,
+        tension: 50,
+        friction: 8,
+      }).start();
     };
+
+    const panResponder = useState(() =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          return Math.abs(gestureState.dy) > 5;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            // Swiping down
+            panY.setValue(gestureState.dy);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          panY.setValue(0);
+
+          if (gestureState.dy > 50) {
+            // Swipe down detected - collapse drawer
+            if (currentIndex === 2) {
+              // From large to medium
+              setCurrentIndex(1);
+              Animated.spring(drawerHeight, {
+                toValue: DRAWER_HEIGHTS.MEDIUM,
+                useNativeDriver: false,
+                tension: 50,
+                friction: 8,
+              }).start();
+            } else if (currentIndex === 1) {
+              // From medium to small
+              setCurrentIndex(0);
+              Animated.spring(drawerHeight, {
+                toValue: DRAWER_HEIGHTS.SMALL,
+                useNativeDriver: false,
+                tension: 50,
+                friction: 8,
+              }).start();
+            } else if (currentIndex === 0) {
+              // From small to closed
+              setCurrentIndex(-1);
+              Animated.spring(drawerHeight, {
+                toValue: 0,
+                useNativeDriver: false,
+                tension: 50,
+                friction: 8,
+              }).start();
+            }
+          } else if (gestureState.dy < -50) {
+            // Swipe up detected - expand drawer
+            if (currentIndex === 0) {
+              setCurrentIndex(1);
+              Animated.spring(drawerHeight, {
+                toValue: DRAWER_HEIGHTS.MEDIUM,
+                useNativeDriver: false,
+                tension: 50,
+                friction: 8,
+              }).start();
+            } else if (currentIndex === 1) {
+              setCurrentIndex(2);
+              Animated.spring(drawerHeight, {
+                toValue: DRAWER_HEIGHTS.LARGE,
+                useNativeDriver: false,
+                tension: 50,
+                friction: 8,
+              }).start();
+            }
+          }
+        },
+      })
+    )[0];
 
     if (!session) return null;
 
     return (
       <Animated.View style={[styles.drawer, { height: drawerHeight }]}>
-        <TouchableWithoutFeedback onPress={expandDrawer}>
-          <View style={styles.handle}>
-            <View style={styles.handleBar} />
-          </View>
-        </TouchableWithoutFeedback>
+        <View {...panResponder.panHandlers}>
+          <TouchableWithoutFeedback onPress={cycleDrawerSize}>
+            <View style={styles.handle}>
+              <View style={styles.handleBar} />
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
 
         <ScrollView
           style={styles.content}

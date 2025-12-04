@@ -19,7 +19,8 @@ const confirmTransferSchema = z.object({
   scriptsReceived: z
     .number()
     .int()
-    .positive("Scripts received must be a positive number"),
+    .positive("Scripts received must be a positive number")
+    .optional(),
   discrepancyNote: z.string().optional(),
 });
 
@@ -61,9 +62,17 @@ export const createTransfer = async (req: Request, res: Response) => {
       });
     }
 
-    if (!["ADMIN", "INVIGILATOR", "LECTURER"].includes(fromHandler.role)) {
+    if (
+      ![
+        "ADMIN",
+        "INVIGILATOR",
+        "LECTURER",
+        "FACULTY_OFFICER",
+        "DEPARTMENT_HEAD",
+      ].includes(fromHandler.role)
+    ) {
       return res.status(403).json({
-        error: "Only admins, invigilators, or lecturers can initiate transfers",
+        error: "Only authorized handlers can initiate transfers",
       });
     }
 
@@ -222,21 +231,19 @@ export const confirmTransfer = async (req: Request, res: Response) => {
       });
     }
 
-    // Determine status based on script count match
-    const hasDiscrepancy =
-      validatedData.scriptsReceived !== transfer.scriptsExpected;
-    const newStatus: TransferStatus = hasDiscrepancy
-      ? "DISCREPANCY_REPORTED"
-      : "CONFIRMED";
+    // Simple handshake: auto-confirm without discrepancy checking
+    // If scriptsReceived not provided, use scriptsExpected (assumes all received)
+    const scriptsReceived =
+      validatedData.scriptsReceived ?? transfer.scriptsExpected;
 
     // Update transfer
     const updatedTransfer = await prisma.batchTransfer.update({
       where: { id },
       data: {
-        scriptsReceived: validatedData.scriptsReceived,
+        scriptsReceived,
         discrepancyNote: validatedData.discrepancyNote,
         confirmedAt: new Date(),
-        status: newStatus,
+        status: "CONFIRMED",
       },
       include: {
         examSession: {
@@ -271,9 +278,7 @@ export const confirmTransfer = async (req: Request, res: Response) => {
     await prisma.auditLog.create({
       data: {
         userId: receiverHandlerId,
-        action: hasDiscrepancy
-          ? "CONFIRM_TRANSFER_WITH_DISCREPANCY"
-          : "CONFIRM_TRANSFER",
+        action: "CONFIRM_TRANSFER",
         entity: "BatchTransfer",
         entityId: transfer.id,
         details: {
@@ -285,18 +290,14 @@ export const confirmTransfer = async (req: Request, res: Response) => {
           toHandlerId: transfer.toHandlerId,
           toHandlerName: `${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`,
           scriptsExpected: transfer.scriptsExpected,
-          scriptsReceived: validatedData.scriptsReceived,
-          discrepancy: hasDiscrepancy,
-          discrepancyNote: validatedData.discrepancyNote,
+          scriptsReceived,
           confirmedAt: updatedTransfer.confirmedAt,
         },
       },
     });
 
     return res.status(200).json({
-      message: hasDiscrepancy
-        ? "Transfer confirmed with discrepancy reported"
-        : "Transfer confirmed successfully",
+      message: "Transfer confirmed successfully",
       transfer: updatedTransfer,
     });
   } catch (error) {
