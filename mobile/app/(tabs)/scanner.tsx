@@ -9,9 +9,7 @@ import {
 } from "react-native";
 import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import BottomSheet from "@gorhom/bottom-sheet";
-import AttendanceDrawer from "@/components/AttendanceDrawer";
+import CustomDrawer, { type CustomDrawerRef } from "@/components/CustomDrawer";
 import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 
 export default function ScannerScreen() {
@@ -19,7 +17,7 @@ export default function ScannerScreen() {
   const [scanned, setScanned] = useState(false);
   const [activeExamSession, setActiveExamSession] =
     useState<ExamSession | null>(null);
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const drawerRef = useRef<CustomDrawerRef>(null);
   const router = useRouter();
 
   const requestPermission = async () => {
@@ -32,7 +30,7 @@ export default function ScannerScreen() {
       console.log("Loading exam session:", batchId);
       const session = await examSessionsApi.getExamSession(batchId);
       setActiveExamSession(session);
-      bottomSheetRef.current?.snapToIndex(1);
+      drawerRef.current?.snapToIndex(1);
       console.log("Exam session loaded, drawer opened");
     } catch (error) {
       console.error("Failed to load exam session:", error);
@@ -109,7 +107,7 @@ export default function ScannerScreen() {
           style: "destructive",
           onPress: () => {
             setActiveExamSession(null);
-            bottomSheetRef.current?.close();
+            drawerRef.current?.close();
           },
         },
       ]
@@ -152,59 +150,57 @@ export default function ScannerScreen() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>QR Scanner</Text>
-          {activeExamSession && (
-            <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>Session Active</Text>
-            </View>
-          )}
-        </View>
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr"],
-          }}
-        >
-          <View style={styles.overlay}>
-            <View style={styles.scanArea}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-            </View>
-
-            <View style={styles.instructionContainer}>
-              <Text style={styles.instructionText}>
-                {activeExamSession
-                  ? "Scan Student ID Cards"
-                  : "Scan Batch QR Code First"}
-              </Text>
-              {activeExamSession && (
-                <Text style={styles.activeSessionText}>
-                  ✓ Exam Session Active
-                </Text>
-              )}
-              {scanned && (
-                <Text style={styles.successText}>✓ Scanned Successfully</Text>
-              )}
-            </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>QR Scanner</Text>
+        {activeExamSession && (
+          <View style={styles.activeBadge}>
+            <Text style={styles.activeBadgeText}>Session Active</Text>
           </View>
-        </CameraView>
+        )}
+      </View>
+      <CameraView
+        style={styles.camera}
+        facing="back"
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ["qr"],
+        }}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.scanArea}>
+            <View style={[styles.corner, styles.topLeft]} />
+            <View style={[styles.corner, styles.topRight]} />
+            <View style={[styles.corner, styles.bottomLeft]} />
+            <View style={[styles.corner, styles.bottomRight]} />
+          </View>
 
-        {/* Attendance Drawer */}
-        <AttendanceDrawer
-          ref={bottomSheetRef}
-          session={activeExamSession}
-          onViewDetails={handleViewDetails}
-          onEndSession={handleEndSession}
-        />
-      </SafeAreaView>
-    </GestureHandlerRootView>
+          <View style={styles.instructionContainer}>
+            <Text style={styles.instructionText}>
+              {activeExamSession
+                ? "Scan Student ID Cards"
+                : "Scan Batch QR Code First"}
+            </Text>
+            {activeExamSession && (
+              <Text style={styles.activeSessionText}>
+                ✓ Exam Session Active
+              </Text>
+            )}
+            {scanned && (
+              <Text style={styles.successText}>✓ Scanned Successfully</Text>
+            )}
+          </View>
+        </View>
+      </CameraView>
+
+      {/* Attendance Drawer */}
+      <CustomDrawer
+        ref={drawerRef}
+        session={activeExamSession}
+        onViewDetails={handleViewDetails}
+        onEndSession={handleEndSession}
+      />
+    </SafeAreaView>
   );
 }
 
