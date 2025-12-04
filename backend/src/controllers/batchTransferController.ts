@@ -567,6 +567,7 @@ export const getTransfers = async (req: Request, res: Response) => {
       include: {
         examSession: {
           select: {
+            id: true,
             batchQrCode: true,
             courseCode: true,
             courseName: true,

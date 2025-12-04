@@ -40,7 +40,7 @@ export default function CustodyScreen() {
   >("ALL");
 
   const loadBatches = useCallback(async () => {
-    if (!user?.userId) {
+    if (!user?.id) {
       setLoading(false);
       return;
     }
@@ -50,7 +50,7 @@ export default function CustodyScreen() {
 
       // Fetch all transfers involving this user
       const transfersData = await batchTransfersApi.getTransfers({
-        handlerId: user.userId,
+        handlerId: user.id,
       });
 
       // Group transfers by exam session
@@ -79,14 +79,14 @@ export default function CustodyScreen() {
         // Determine custody status
         let custodyStatus: BatchWithCustody["custodyStatus"] = "IN_CUSTODY";
 
-        if (latestTransfer.toHandlerId === user.userId) {
+        if (latestTransfer.toHandlerId === user.id) {
           // I'm the receiver
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "PENDING_RECEIPT";
           } else if (latestTransfer.status === "CONFIRMED") {
             custodyStatus = "IN_CUSTODY";
           }
-        } else if (latestTransfer.fromHandlerId === user.userId) {
+        } else if (latestTransfer.fromHandlerId === user.id) {
           // I'm the sender
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "TRANSFER_INITIATED";
@@ -118,7 +118,7 @@ export default function CustodyScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.userId]);
+  }, [user?.id]);
 
   useEffect(() => {
     loadBatches();
@@ -131,6 +131,11 @@ export default function CustodyScreen() {
   };
 
   const handleBatchPress = (batch: BatchWithCustody) => {
+    console.log("Navigating to batch details:", batch.id);
+    if (!batch.id) {
+      Alert.alert("Error", "Batch ID is missing");
+      return;
+    }
     router.push({
       pathname: "/batch-details",
       params: { batchId: batch.id },
@@ -208,9 +213,10 @@ export default function CustodyScreen() {
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actions}>
+        <View style={styles.actions} key={`actions-${item.id}`}>
           {item.custodyStatus === "PENDING_RECEIPT" && (
             <TouchableOpacity
+              key={`confirm-${item.id}`}
               style={[styles.actionButton, styles.confirmButton]}
               onPress={() => handleConfirmTransfer(item)}
             >
@@ -220,6 +226,7 @@ export default function CustodyScreen() {
 
           {item.custodyStatus === "IN_CUSTODY" && (
             <TouchableOpacity
+              key={`transfer-${item.id}`}
               style={[styles.actionButton, styles.transferButton]}
               onPress={() => handleQuickTransfer(item)}
             >
@@ -228,6 +235,7 @@ export default function CustodyScreen() {
           )}
 
           <TouchableOpacity
+            key={`details-${item.id}`}
             style={[styles.actionButton, styles.detailsButton]}
             onPress={() => handleBatchPress(item)}
           >

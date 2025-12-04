@@ -29,7 +29,10 @@ const STATUS_OPTIONS: { value: BatchStatus; label: string; color: string }[] = [
 ];
 
 export default function BatchDetailsScreen() {
-  const { batchId } = useLocalSearchParams<{ batchId: string }>();
+  const params = useLocalSearchParams<{ batchId: string }>();
+  const batchId = Array.isArray(params.batchId)
+    ? params.batchId[0]
+    : params.batchId;
   const router = useRouter();
   const [session, setSession] = useState<ExamSession | null>(null);
   const [expectedStudents, setExpectedStudents] = useState<any[]>([]);
@@ -41,6 +44,7 @@ export default function BatchDetailsScreen() {
   >("ALL");
 
   const loadSession = useCallback(async () => {
+    console.log("Loading batch with ID:", batchId);
     if (!batchId) {
       Alert.alert("Error", "No batch ID provided");
       router.back();
@@ -198,17 +202,6 @@ export default function BatchDetailsScreen() {
           }
         >
           <Text style={styles.transferButtonText}>📦 Initiate Transfer</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.historyButton}
-          onPress={() =>
-            router.push({
-              pathname: "/transfer-history",
-              params: { examSessionId: session.id },
-            })
-          }
-        >
-          <Text style={styles.historyButtonText}>View Transfer History</Text>
         </TouchableOpacity>
       </View>
 
@@ -407,20 +400,6 @@ export default function BatchDetailsScreen() {
           }
         >
           <Text style={styles.actionButtonText}>📤 Initiate Transfer</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, styles.actionButtonSecondary]}
-          onPress={() =>
-            router.push({
-              pathname: "/transfer-history",
-              params: { examSessionId: session.id },
-            })
-          }
-        >
-          <Text style={styles.actionButtonTextSecondary}>
-            📋 View Transfer History
-          </Text>
         </TouchableOpacity>
       </View>
 

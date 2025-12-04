@@ -95,22 +95,6 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
-          name="transfer-history"
-          options={{
-            headerShown: true,
-            title: "Transfer History",
-            presentation: "card",
-          }}
-        />
-        <Stack.Screen
-          name="pending-transfers"
-          options={{
-            headerShown: true,
-            title: "Pending Transfers",
-            presentation: "card",
-          }}
-        />
-        <Stack.Screen
           name="modal"
           options={{ presentation: "modal", headerShown: true, title: "Modal" }}
         />

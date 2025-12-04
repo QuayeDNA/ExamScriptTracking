@@ -76,17 +76,17 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           className="bg-white rounded-lg p-4 mb-3 flex-row items-center shadow-sm"
-          onPress={() => router.push("/pending-transfers")}
+          onPress={() => router.push("/(tabs)/custody")}
         >
           <View className="w-12 h-12 bg-green-100 rounded-full items-center justify-center mr-4">
             <Text className="text-2xl">📋</Text>
           </View>
           <View className="flex-1">
             <Text className="text-base font-semibold text-gray-900">
-              Pending Actions
+              Batch Custody
             </Text>
             <Text className="text-sm text-gray-500">
-              View items requiring action
+              View batches in your custody
             </Text>
           </View>
           <Text className="text-gray-400">→</Text>
