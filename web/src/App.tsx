@@ -15,6 +15,7 @@ import ExamSessionsPage from "@/pages/ExamSessionsPage";
 import BatchDetailsPage from "@/pages/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/AnalyticsDashboardPage";
+import SettingsPage from "@/pages/SettingsPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
@@ -51,6 +52,7 @@ function App() {
               <Route path="exam-sessions" element={<ExamSessionsPage />} />
               <Route path="exam-sessions/:id" element={<BatchDetailsPage />} />
               <Route path="batch-tracking" element={<BatchTrackingPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
 

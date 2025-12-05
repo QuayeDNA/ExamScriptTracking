@@ -12,6 +12,7 @@ import "../global.css";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/store/auth";
 import { useSocket } from "@/hooks/useSocket";
+import { useNotificationNavigation } from "@/hooks/useNotificationNavigation";
 import {
   configureNotifications,
   registerForPushNotificationsAsync,
@@ -57,6 +58,7 @@ export default function RootLayout() {
   const initialize = useAuthStore((state) => state.initialize);
   const notificationListener = useRef<Notifications.Subscription>();
   const responseListener = useRef<Notifications.Subscription>();
+  const { handleNotificationTap } = useNotificationNavigation();
 
   // Initialize socket connection
   useSocket();
@@ -80,9 +82,8 @@ export default function RootLayout() {
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
         console.log("Notification tapped:", response);
-        // Handle navigation based on notification data
         const data = response.notification.request.content.data;
-        // TODO: Navigate to relevant screen based on data.type
+        handleNotificationTap(data);
       });
 
     return () => {

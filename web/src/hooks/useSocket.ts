@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { socketService } from "@/lib/socket";
 import { useAuthStore } from "@/store/auth";
 import { useNotificationStore } from "@/store/notifications";
+import { loadPreferences } from "@/lib/notificationPreferences";
+import type { NotificationType } from "@/types/notifications";
 import { toast } from "sonner";
 
 interface SocketData {
@@ -30,11 +32,21 @@ export function useSocket() {
       return;
     }
 
+    // Load notification preferences
+    const preferences = loadPreferences();
+
+    // Helper to check if notification should be shown
+    const shouldShowNotification = (type: NotificationType): boolean => {
+      return preferences[type] ?? true;
+    };
+
     // Connect socket
     socketService.connect();
 
     // Transfer requested
     socketService.on("transfer:requested", (data: unknown) => {
+      if (!shouldShowNotification("transfer_requested")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "transfer_requested",
@@ -47,6 +59,8 @@ export function useSocket() {
 
     // Transfer confirmed
     socketService.on("transfer:confirmed", (data: unknown) => {
+      if (!shouldShowNotification("transfer_confirmed")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "transfer_confirmed",
@@ -59,6 +73,8 @@ export function useSocket() {
 
     // Transfer rejected
     socketService.on("transfer:rejected", (data: unknown) => {
+      if (!shouldShowNotification("transfer_rejected")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "transfer_rejected",
@@ -71,6 +87,8 @@ export function useSocket() {
 
     // Transfer updated
     socketService.on("transfer:updated", (data: unknown) => {
+      if (!shouldShowNotification("info")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "info",
@@ -82,6 +100,8 @@ export function useSocket() {
 
     // Batch status updated
     socketService.on("batch:status_updated", (data: unknown) => {
+      if (!shouldShowNotification("batch_status")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "batch_status",
@@ -93,6 +113,8 @@ export function useSocket() {
 
     // Batch created
     socketService.on("batch:created", (data: unknown) => {
+      if (!shouldShowNotification("info")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "info",
@@ -104,6 +126,8 @@ export function useSocket() {
 
     // Attendance recorded
     socketService.on("attendance:recorded", (data: unknown) => {
+      if (!shouldShowNotification("attendance")) return;
+
       const eventData = data as SocketData;
       addNotification({
         type: "attendance",

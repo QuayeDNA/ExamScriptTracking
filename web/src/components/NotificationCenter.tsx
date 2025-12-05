@@ -1,4 +1,5 @@
 import { Bell, Check, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/ui/button";
 import { Badge } from "@/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -7,8 +8,37 @@ import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function NotificationCenter() {
+  const navigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } =
     useNotificationStore();
+
+  const handleNotificationClick = (notification: (typeof notifications)[0]) => {
+    markAsRead(notification.id);
+
+    // Navigate based on notification type
+    const data = notification.data as Record<string, unknown>;
+
+    switch (notification.type) {
+      case "transfer_requested":
+      case "transfer_confirmed":
+      case "transfer_rejected":
+        navigate("/dashboard/batch-tracking");
+        break;
+      case "batch_status":
+      case "info":
+        if (data?.id) {
+          navigate(`/dashboard/exam-sessions/${data.id}`);
+        } else {
+          navigate("/dashboard/exam-sessions");
+        }
+        break;
+      case "attendance":
+        navigate("/dashboard/sessions");
+        break;
+      default:
+        navigate("/dashboard");
+    }
+  };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -92,7 +122,7 @@ export function NotificationCenter() {
                         ? "bg-background border-border"
                         : "bg-primary/5 border-primary/20"
                     }`}
-                    onClick={() => markAsRead(notification.id)}
+                    onClick={() => handleNotificationClick(notification)}
                   >
                     <div className="flex gap-3">
                       <div className="text-2xl shrink-0">
