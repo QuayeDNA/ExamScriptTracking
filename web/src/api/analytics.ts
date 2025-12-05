@@ -2,8 +2,8 @@ import { apiClient } from "@/lib/api-client";
 import type {
   AnalyticsOverview,
   HandlerPerformance,
-  DiscrepancyReport,
-  ExamStatistics,
+  DiscrepanciesResponse,
+  ExamStatisticsResponse,
   DateRangeFilter,
   AnalyticsExportRequest,
 } from "@/types";
@@ -33,7 +33,7 @@ export const analyticsApi = {
    */
   getHandlerPerformance: async (
     filters?: DateRangeFilter
-  ): Promise<{ handlers: HandlerPerformance[] }> => {
+  ): Promise<HandlerPerformance[]> => {
     const params = new URLSearchParams();
     if (filters?.startDate) {
       params.append("startDate", filters.startDate);
@@ -42,7 +42,7 @@ export const analyticsApi = {
       params.append("endDate", filters.endDate);
     }
 
-    return apiClient.get<{ handlers: HandlerPerformance[] }>(
+    return apiClient.get<HandlerPerformance[]>(
       `/analytics/handler-performance${
         params.toString() ? `?${params.toString()}` : ""
       }`
@@ -54,7 +54,7 @@ export const analyticsApi = {
    */
   getDiscrepancies: async (
     filters?: DateRangeFilter
-  ): Promise<{ discrepancies: DiscrepancyReport[] }> => {
+  ): Promise<DiscrepanciesResponse> => {
     const params = new URLSearchParams();
     if (filters?.startDate) {
       params.append("startDate", filters.startDate);
@@ -63,7 +63,7 @@ export const analyticsApi = {
       params.append("endDate", filters.endDate);
     }
 
-    return apiClient.get<{ discrepancies: DiscrepancyReport[] }>(
+    return apiClient.get<DiscrepanciesResponse>(
       `/analytics/discrepancies${
         params.toString() ? `?${params.toString()}` : ""
       }`
@@ -75,7 +75,7 @@ export const analyticsApi = {
    */
   getExamStats: async (
     filters?: DateRangeFilter
-  ): Promise<{ exams: ExamStatistics[] }> => {
+  ): Promise<ExamStatisticsResponse> => {
     const params = new URLSearchParams();
     if (filters?.startDate) {
       params.append("startDate", filters.startDate);
@@ -84,7 +84,7 @@ export const analyticsApi = {
       params.append("endDate", filters.endDate);
     }
 
-    return apiClient.get<{ exams: ExamStatistics[] }>(
+    return apiClient.get<ExamStatisticsResponse>(
       `/analytics/exam-stats${params.toString() ? `?${params.toString()}` : ""}`
     );
   },

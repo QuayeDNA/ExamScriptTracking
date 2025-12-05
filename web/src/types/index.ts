@@ -352,12 +352,21 @@ export interface AnalyticsOverview {
 }
 
 export interface HandlerPerformance {
-  handlerId: string;
-  handlerName: string;
-  sentTransfers: number;
-  receivedTransfers: number;
-  avgResponseTime: number; // in minutes
-  discrepancyRate: number; // percentage
+  handler: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  metrics: {
+    totalTransfers: number;
+    transfersReceived: number;
+    transfersInitiated: number;
+    avgResponseTimeHours: number;
+    discrepancies: number;
+    discrepancyRate: number;
+    currentCustody: number;
+  };
 }
 
 export interface DiscrepancyReport {
@@ -375,6 +384,21 @@ export interface DiscrepancyReport {
   status: TransferStatus;
 }
 
+export interface DiscrepanciesResponse {
+  summary: {
+    total: number;
+    resolved: number;
+    unresolved: number;
+    resolutionRate: number;
+  };
+  breakdown: {
+    byStatus: Record<string, number>;
+    byDepartment: Record<string, number>;
+  };
+  trend: Record<string, number>;
+  recentDiscrepancies: any[]; // BatchTransfer with relations
+}
+
 export interface ExamStatistics {
   examSessionId: string;
   courseCode: string;
@@ -385,6 +409,22 @@ export interface ExamStatistics {
   completionRate: number; // percentage
   examDate: string;
   status: BatchStatus;
+}
+
+export interface ExamStatisticsResponse {
+  summary: {
+    totalExams: number;
+    completedExams: number;
+    completionRate: number;
+    avgProcessingTimeDays: number;
+    avgStudentsPerExam: number;
+  };
+  breakdown: {
+    byStatus: Record<string, number>;
+    byDepartment: Record<string, number>;
+    byFaculty: Record<string, number>;
+    byMonth: Record<string, number>;
+  };
 }
 
 export interface DateRangeFilter {

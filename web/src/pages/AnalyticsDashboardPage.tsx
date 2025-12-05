@@ -2,33 +2,19 @@ import { useState, useEffect, useCallback } from "react";
 import { analyticsApi } from "@/api/analytics";
 import { BarChartCard } from "@/components/BarChartCard";
 import { StatCard } from "@/components/StatCard";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/@/components/ui/card";
-import { Button } from "@/@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/@/components/ui/popover";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card";
+import { Button } from "@/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/@/components/ui/select";
-import { Skeleton } from "@/@/components/ui/skeleton";
-import { Badge } from "@/@/components/ui/badge";
+} from "@/ui/select";
+import { Skeleton } from "@/ui/skeleton";
+import { Badge } from "@/ui/badge";
 import {
   Table,
   TableBody,
@@ -36,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/@/components/ui/table";
+} from "@/ui/table";
 import {
   Activity,
   TrendingUp,
@@ -51,8 +37,8 @@ import { toast } from "sonner";
 import type {
   AnalyticsOverview,
   HandlerPerformance,
-  DiscrepancyReport,
-  ExamStatistics,
+  DiscrepanciesResponse,
+  ExamStatisticsResponse,
   TransferStatus,
 } from "@/types";
 
@@ -75,8 +61,11 @@ export default function AnalyticsDashboardPage() {
   const [handlerPerformance, setHandlerPerformance] = useState<
     HandlerPerformance[]
   >([]);
-  const [discrepancies, setDiscrepancies] = useState<DiscrepancyReport[]>([]);
-  const [examStats, setExamStats] = useState<ExamStatistics[]>([]);
+  const [discrepancies, setDiscrepancies] =
+    useState<DiscrepanciesResponse | null>(null);
+  const [examStats, setExamStats] = useState<ExamStatisticsResponse | null>(
+    null
+  );
 
   const loadAnalytics = useCallback(async () => {
     try {
@@ -95,9 +84,9 @@ export default function AnalyticsDashboardPage() {
         ]);
 
       setOverview(overviewData);
-      setHandlerPerformance(performanceData.handlers);
-      setDiscrepancies(discrepanciesData.discrepancies);
-      setExamStats(statsData.exams);
+      setHandlerPerformance(performanceData);
+      setDiscrepancies(discrepanciesData);
+      setExamStats(statsData);
     } catch (error) {
       console.error("Failed to load analytics:", error);
       toast.error("Failed to load analytics data");
@@ -349,9 +338,9 @@ export default function AnalyticsDashboardPage() {
             title="Handler Performance Comparison"
             description="Transfer volumes and response times by handler"
             data={handlerPerformance.map((h) => ({
-              name: h.handlerName,
-              sent: h.sentTransfers,
-              received: h.receivedTransfers,
+              name: h.handler.name,
+              sent: h.metrics.transfersInitiated,
+              received: h.metrics.transfersReceived,
             }))}
             dataKeys={[
               { key: "sent", color: "hsl(var(--chart-1))", name: "Sent" },
@@ -385,31 +374,31 @@ export default function AnalyticsDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {handlerPerformance.map((handler) => (
-                    <TableRow key={handler.handlerId}>
+                  {handlerPerformance.map((item) => (
+                    <TableRow key={item.handler.id}>
                       <TableCell className="font-medium">
-                        {handler.handlerName}
+                        {item.handler.name}
                       </TableCell>
                       <TableCell className="text-right">
-                        {handler.sentTransfers}
+                        {item.metrics.transfersInitiated}
                       </TableCell>
                       <TableCell className="text-right">
-                        {handler.receivedTransfers}
+                        {item.metrics.transfersReceived}
                       </TableCell>
                       <TableCell className="text-right">
-                        {handler.avgResponseTime.toFixed(1)}
+                        {(item.metrics.avgResponseTimeHours * 60).toFixed(1)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge
                           variant={
-                            handler.discrepancyRate > 10
+                            item.metrics.discrepancyRate > 10
                               ? "destructive"
-                              : handler.discrepancyRate > 5
+                              : item.metrics.discrepancyRate > 5
                               ? "secondary"
                               : "outline"
                           }
                         >
-                          {handler.discrepancyRate.toFixed(1)}%
+                          {item.metrics.discrepancyRate.toFixed(1)}%
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -448,7 +437,8 @@ export default function AnalyticsDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {discrepancies.length === 0 ? (
+                  {!discrepancies ||
+                  discrepancies.recentDiscrepancies.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={7}
@@ -458,31 +448,38 @@ export default function AnalyticsDashboardPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    discrepancies.map((disc) => (
-                      <TableRow key={disc.id}>
+                    discrepancies.recentDiscrepancies.map((transfer) => (
+                      <TableRow key={transfer.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{disc.courseCode}</div>
+                            <div className="font-medium">
+                              {transfer.examSession.courseCode}
+                            </div>
                             <div className="text-sm text-muted-foreground">
-                              {disc.courseName}
+                              {transfer.examSession.courseName}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{disc.fromHandlerName}</TableCell>
-                        <TableCell>{disc.toHandlerName}</TableCell>
+                        <TableCell>{`${transfer.fromHandler.firstName} ${transfer.fromHandler.lastName}`}</TableCell>
+                        <TableCell>{`${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`}</TableCell>
                         <TableCell className="text-right">
-                          {disc.scriptsExpected}
+                          {transfer.totalScripts}
                         </TableCell>
                         <TableCell className="text-right">
-                          {disc.scriptsReceived}
+                          {transfer.totalScripts}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(disc.status)}>
-                            {disc.status.replace("_", " ")}
+                          <Badge
+                            variant={getStatusBadgeVariant(transfer.status)}
+                          >
+                            {transfer.status.replace("_", " ")}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {format(new Date(disc.reportedAt), "MMM d, yyyy")}
+                          {format(
+                            new Date(transfer.requestedAt),
+                            "MMM d, yyyy"
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -495,99 +492,124 @@ export default function AnalyticsDashboardPage() {
 
         {/* Exam Statistics Tab */}
         <TabsContent value="exams" className="space-y-4">
-          {/* Completion Rate Chart */}
-          <BarChartCard
-            title="Exam Completion Rates"
-            description="Script submission rates by exam session"
-            data={examStats.slice(0, 10).map((exam) => ({
-              name: exam.courseCode,
-              completionRate: exam.completionRate,
-            }))}
-            dataKeys={[
-              {
-                key: "completionRate",
-                color: "hsl(var(--chart-3))",
-                name: "Completion %",
-              },
-            ]}
-            height={350}
-          />
+          {/* Summary Stats */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <StatCard
+              title="Total Exams"
+              value={examStats?.summary.totalExams || 0}
+              icon={BookOpen}
+            />
+            <StatCard
+              title="Completed"
+              value={examStats?.summary.completedExams || 0}
+              icon={Activity}
+              trend={{
+                value: examStats?.summary.completionRate || 0,
+                isPositive: true,
+              }}
+            />
+            <StatCard
+              title="Avg Processing Time"
+              value={`${
+                examStats?.summary.avgProcessingTimeDays.toFixed(1) || 0
+              }d`}
+              icon={TrendingUp}
+            />
+            <StatCard
+              title="Avg Students/Exam"
+              value={examStats?.summary.avgStudentsPerExam.toFixed(0) || 0}
+              icon={Activity}
+            />
+          </div>
 
-          {/* Exam Stats Table */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Exam Session Details</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleExport("exams")}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Course</TableHead>
-                    <TableHead className="text-right">Total Students</TableHead>
-                    <TableHead className="text-right">Present</TableHead>
-                    <TableHead className="text-right">Submitted</TableHead>
-                    <TableHead className="text-right">
-                      Completion Rate
-                    </TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {examStats.map((exam) => (
-                    <TableRow key={exam.examSessionId}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{exam.courseCode}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {exam.courseName}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {exam.totalStudents}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {exam.presentStudents}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {exam.submittedScripts}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          variant={
-                            exam.completionRate >= 90
-                              ? "default"
-                              : exam.completionRate >= 75
-                              ? "secondary"
-                              : "destructive"
-                          }
-                        >
-                          {exam.completionRate.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {format(new Date(exam.examDate), "MMM d, yyyy")}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {exam.status.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
+          {/* Breakdowns */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Exams by Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Count</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {examStats &&
+                      Object.entries(examStats.breakdown.byStatus).map(
+                        ([status, count]) => (
+                          <TableRow key={status}>
+                            <TableCell className="font-medium">
+                              {status.replace("_", " ")}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {count}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      )}
+                    {(!examStats ||
+                      Object.keys(examStats.breakdown.byStatus).length ===
+                        0) && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={2}
+                          className="text-center text-muted-foreground"
+                        >
+                          No exam data available
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Exams by Department</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Department</TableHead>
+                      <TableHead className="text-right">Count</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {examStats &&
+                      Object.entries(examStats.breakdown.byDepartment).map(
+                        ([dept, count]) => (
+                          <TableRow key={dept}>
+                            <TableCell className="font-medium">
+                              {dept}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {count}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      )}
+                    {(!examStats ||
+                      Object.keys(examStats.breakdown.byDepartment).length ===
+                        0) && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={2}
+                          className="text-center text-muted-foreground"
+                        >
+                          No exam data available
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
