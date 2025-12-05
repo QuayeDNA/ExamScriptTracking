@@ -5,11 +5,17 @@ import {
 } from "@react-navigation/native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import * as Notifications from "expo-notifications";
 import "../global.css";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/store/auth";
+import { useSocket } from "@/hooks/useSocket";
+import {
+  configureNotifications,
+  registerForPushNotificationsAsync,
+} from "@/utils/notifications";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -49,9 +55,46 @@ function useProtectedRoute() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const initialize = useAuthStore((state) => state.initialize);
+  const notificationListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.Subscription>();
+
+  // Initialize socket connection
+  useSocket();
 
   useEffect(() => {
     initialize();
+
+    // Configure notification behavior
+    configureNotifications();
+
+    // Request notification permissions
+    registerForPushNotificationsAsync();
+
+    // Listen for notifications received while app is foregrounded
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("Notification received:", notification);
+      });
+
+    // Listen for user interactions with notifications
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("Notification tapped:", response);
+        // Handle navigation based on notification data
+        const data = response.notification.request.content.data;
+        // TODO: Navigate to relevant screen based on data.type
+      });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(
+          notificationListener.current
+        );
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
   }, []);
 
   useProtectedRoute();
