@@ -337,3 +337,62 @@ export interface AuthContextType {
   logout: () => void;
   updateUser: (user: User) => void;
 }
+
+// Analytics Types
+export interface AnalyticsOverview {
+  totalSessions: number;
+  activeTransfers: number;
+  completedTransfers: number;
+  discrepancies: number;
+  trends: {
+    sessions: number;
+    transfers: number;
+    discrepancies: number;
+  };
+}
+
+export interface HandlerPerformance {
+  handlerId: string;
+  handlerName: string;
+  sentTransfers: number;
+  receivedTransfers: number;
+  avgResponseTime: number; // in minutes
+  discrepancyRate: number; // percentage
+}
+
+export interface DiscrepancyReport {
+  id: string;
+  examSessionId: string;
+  courseCode: string;
+  courseName: string;
+  fromHandlerName: string;
+  toHandlerName: string;
+  scriptsExpected: number;
+  scriptsReceived: number;
+  note: string;
+  reportedAt: string;
+  resolvedAt?: string;
+  status: TransferStatus;
+}
+
+export interface ExamStatistics {
+  examSessionId: string;
+  courseCode: string;
+  courseName: string;
+  totalStudents: number;
+  presentStudents: number;
+  submittedScripts: number;
+  completionRate: number; // percentage
+  examDate: string;
+  status: BatchStatus;
+}
+
+export interface DateRangeFilter {
+  startDate?: string; // ISO date string
+  endDate?: string; // ISO date string
+}
+
+export interface AnalyticsExportRequest extends DateRangeFilter {
+  format: "pdf" | "excel";
+  reportType: "overview" | "handlers" | "discrepancies" | "exams";
+}

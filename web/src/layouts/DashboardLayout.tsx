@@ -80,6 +80,12 @@ export const DashboardLayout = () => {
                   User Management
                 </button>
                 <button
+                  onClick={() => navigate("/dashboard/analytics")}
+                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                >
+                  Analytics
+                </button>
+                <button
                   onClick={() => navigate("/dashboard/audit-logs")}
                   className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md"
                 >

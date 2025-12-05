@@ -14,6 +14,7 @@ import StudentsPage from "@/pages/StudentsPage";
 import ExamSessionsPage from "@/pages/ExamSessionsPage";
 import BatchDetailsPage from "@/pages/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/BatchTrackingPage";
+import AnalyticsDashboardPage from "@/pages/AnalyticsDashboardPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 
@@ -54,6 +55,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route path="users" element={<UsersPage />} />
               <Route path="audit-logs" element={<AuditLogsPage />} />
+              <Route path="analytics" element={<AnalyticsDashboardPage />} />
             </Route>
           </Route>
 

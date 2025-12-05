@@ -9,6 +9,8 @@ import studentRoutes from "./routes/students";
 import examSessionRoutes from "./routes/examSessions";
 import attendanceRoutes from "./routes/attendance";
 import batchTransferRoutes from "./routes/batchTransfer";
+import analyticsRoutes from "./routes/analytics";
+import exportRoutes from "./routes/export";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 
 // Load environment variables
@@ -67,6 +69,8 @@ app.get("/api", (req: Request, res: Response) => {
       examSessions: "/api/exam-sessions",
       attendance: "/api/attendance",
       batchTransfers: "/api/batch-transfers",
+      analytics: "/api/analytics",
+      reports: "/api/reports/export",
     },
   });
 });
@@ -78,6 +82,8 @@ app.use("/api/students", studentRoutes);
 app.use("/api/exam-sessions", examSessionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/batch-transfers", batchTransferRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/reports/export", exportRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
