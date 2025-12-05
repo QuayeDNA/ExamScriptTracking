@@ -2,6 +2,11 @@ import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import QRCode from "qrcode";
+import { io } from "../server";
+import {
+  emitBatchStatusUpdated,
+  emitBatchCreated,
+} from "../socket/handlers/batchEvents";
 
 const prisma = new PrismaClient();
 
@@ -129,6 +134,17 @@ export const createExamSession = async (req: Request, res: Response) => {
         },
         ipAddress: req.ip || "unknown",
       },
+    });
+
+    // Emit socket event for batch creation
+    emitBatchCreated(io, {
+      id: examSession.id,
+      batchQrCode: examSession.batchQrCode,
+      courseCode: examSession.courseCode,
+      courseName: examSession.courseName,
+      department: examSession.department,
+      faculty: examSession.faculty,
+      examDate: examSession.examDate,
     });
 
     res.status(201).json({
@@ -470,6 +486,17 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
         },
         ipAddress: req.ip || "unknown",
       },
+    });
+
+    // Emit socket event for batch status update
+    emitBatchStatusUpdated(io, {
+      id: examSession.id,
+      batchQrCode: examSession.batchQrCode,
+      courseCode: examSession.courseCode,
+      courseName: examSession.courseName,
+      status: examSession.status,
+      department: examSession.department,
+      faculty: examSession.faculty,
     });
 
     res.json({

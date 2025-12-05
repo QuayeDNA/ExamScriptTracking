@@ -1,6 +1,7 @@
 import { Outlet, useNavigate } from "react-router";
 import { useAuthStore } from "@/store/auth";
 import { useLogout } from "@/hooks/useAuth";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 export const DashboardLayout = () => {
   const { user } = useAuthStore();
@@ -26,6 +27,8 @@ export const DashboardLayout = () => {
                   {user?.role.replace("_", " ")}
                 </span>
               </div>
+
+              <NotificationCenter />
 
               <button
                 onClick={() => logout()}

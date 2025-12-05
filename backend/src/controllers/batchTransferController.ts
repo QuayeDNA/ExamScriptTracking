@@ -427,6 +427,18 @@ export const rejectTransfer = async (req: Request, res: Response) => {
       },
     });
 
+    // Emit socket event for transfer rejection
+    emitTransferRejected(io, {
+      id: transfer.id,
+      fromHandlerId: transfer.fromHandlerId,
+      toHandlerId: transfer.toHandlerId,
+      examSession: {
+        courseCode: transfer.examSession.courseCode,
+        courseName: transfer.examSession.courseName,
+      },
+      rejectionReason: reason,
+    });
+
     return res.status(200).json({
       message: "Transfer rejected successfully",
     });

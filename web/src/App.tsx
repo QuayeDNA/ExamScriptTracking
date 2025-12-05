@@ -17,6 +17,7 @@ import BatchTrackingPage from "@/pages/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/AnalyticsDashboardPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
+import { useSocket } from "@/hooks/useSocket";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,8 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  // Initialize socket connection
+  useSocket();
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

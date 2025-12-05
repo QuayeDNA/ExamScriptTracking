@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { io } from "../server";
+import { emitAttendanceRecorded } from "../socket/handlers/attendanceEvents";
 
 const prisma = new PrismaClient();
 
@@ -120,6 +122,23 @@ export const recordEntry = async (req: Request, res: Response) => {
           entryTime: attendance.entryTime,
         },
         ipAddress: req.ip || "unknown",
+      },
+    });
+
+    // Emit socket event for attendance recorded
+    emitAttendanceRecorded(io, {
+      id: attendance.id,
+      studentId: attendance.studentId,
+      examSessionId: attendance.examSessionId,
+      status: attendance.status,
+      student: {
+        indexNumber: student.indexNumber,
+        firstName: student.firstName,
+        lastName: student.lastName,
+      },
+      examSession: {
+        courseCode: examSession.courseCode,
+        courseName: examSession.courseName,
       },
     });
 
