@@ -2,7 +2,6 @@ import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createServer } from "http";
-import { Server } from "socket.io";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
 import studentRoutes from "./routes/students";
@@ -12,13 +11,17 @@ import batchTransferRoutes from "./routes/batchTransfer";
 import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
+import { initializeSocketServer } from "./socket/socketServer";
 
 // Load environment variables
 dotenv.config();
 
 const app: Express = express();
+const httpServer = createServer(app);
 const PORT = Number(process.env.PORT) || 3000;
-const SOCKET_PORT = Number(process.env.SOCKET_PORT) || 3001;
+
+// Initialize Socket.io with authentication
+export const io = initializeSocketServer(httpServer);
 
 // Middleware
 // Allow CORS from multiple origins for web and mobile development
@@ -90,54 +93,16 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-// Create HTTP server for Socket.io
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps)
-      if (!origin) return callback(null, true);
-
-      // Allow any origin in development for Expo Go
-      if (process.env.NODE_ENV === "development") {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  },
-});
-
-// Socket.io connection handling
-io.on("connection", (socket) => {
-  console.log(`Client connected: ${socket.id}`);
-
-  socket.on("disconnect", () => {
-    console.log(`Client disconnected: ${socket.id}`);
-  });
-});
-
-// Start Express server
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Express server running on:`);
+// Start server (HTTP + Socket.io on same port)
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running on:`);
   console.log(`   - Local: http://localhost:${PORT}`);
   console.log(`   - Network: http://192.168.43.153:${PORT}`);
+  console.log(`   - Socket.io: Enabled with authentication`);
   console.log(`   (Use the Network URL for Expo Go app)`);
 
   // Start blacklisted token cleanup (runs every hour)
   console.log("🧹 Starting token blacklist cleanup service...");
   cleanupBlacklistedTokens(); // Run immediately on startup
   setInterval(cleanupBlacklistedTokens, 60 * 60 * 1000); // Then every hour
-});
-
-// Start Socket.io server
-httpServer.listen(SOCKET_PORT, "0.0.0.0", () => {
-  console.log(`✅ Socket.io server running on:`);
-  console.log(`   - Local: http://localhost:${SOCKET_PORT}`);
-  console.log(`   - Network: http://192.168.43.153:${SOCKET_PORT}`);
 });

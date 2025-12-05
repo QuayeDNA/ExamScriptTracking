@@ -1,6 +1,13 @@
 import { Request, Response } from "express";
 import { PrismaClient, TransferStatus } from "@prisma/client";
 import { z } from "zod";
+import { io } from "../server";
+import {
+  emitTransferRequested,
+  emitTransferConfirmed,
+  emitTransferRejected,
+  emitTransferUpdated,
+} from "../socket/handlers/transferEvents";
 
 const prisma = new PrismaClient();
 
@@ -156,6 +163,18 @@ export const createTransfer = async (req: Request, res: Response) => {
       },
     });
 
+    // Emit real-time notification
+    emitTransferRequested(io, {
+      id: transfer.id,
+      fromHandlerId,
+      toHandlerId: validatedData.toHandlerId,
+      examSession: {
+        courseCode: examSession.courseCode,
+        courseName: examSession.courseName,
+        batchQrCode: examSession.batchQrCode,
+      },
+    });
+
     return res.status(201).json({
       message: "Transfer request created successfully",
       transfer,
@@ -293,6 +312,17 @@ export const confirmTransfer = async (req: Request, res: Response) => {
           scriptsReceived,
           confirmedAt: updatedTransfer.confirmedAt,
         },
+      },
+    });
+
+    // Emit real-time notification
+    emitTransferConfirmed(io, {
+      id: updatedTransfer.id,
+      fromHandlerId: updatedTransfer.fromHandlerId,
+      toHandlerId: updatedTransfer.toHandlerId,
+      examSession: {
+        courseCode: updatedTransfer.examSession.courseCode,
+        courseName: updatedTransfer.examSession.courseName,
       },
     });
 
