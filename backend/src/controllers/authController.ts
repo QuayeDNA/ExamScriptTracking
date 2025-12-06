@@ -470,16 +470,24 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
     console.log("[LOGOUT] Deleted", deletedCount.count, "refresh tokens");
 
-    // Log audit
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user.userId,
-        action: "LOGOUT",
-        entity: "User",
-        entityId: req.user.userId,
-        ipAddress: req.ip,
-      },
-    });
+    // Log audit (only if user still exists in database)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.userId,
+          action: "LOGOUT",
+          entity: "User",
+          entityId: req.user.userId,
+          ipAddress: req.ip,
+        },
+      });
+    } catch (auditError) {
+      // Silently fail if user was deleted (e.g., after database reset)
+      console.log(
+        "[LOGOUT] Could not create audit log:",
+        auditError instanceof Error ? auditError.message : auditError
+      );
+    }
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {
