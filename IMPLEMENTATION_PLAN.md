@@ -1,73 +1,373 @@
 # Exam Script Tracking System - Implementation Plan
 
 **Created:** December 4, 2025  
-**Status:** Active Development  
-**Current Progress:** 80% Complete
+**Updated:** December 6, 2025  
+**Status:** Design System Implementation Phase  
+**Current Progress:** 95% Complete (Core Features)
 
 ---
 
-## 🎯 Next Priorities Overview
+## 🎨 Current Focus: Web Dashboard Redesign
 
-### Priority Rankings (by Impact & Urgency)
+### Phase 1: Foundation ✅ COMPLETED
 
-| Priority | Feature                             | Impact    | Effort    | Completion Boost      |
-| -------- | ----------------------------------- | --------- | --------- | --------------------- |
-| **P1**   | Web Analytics & Reports Dashboard   | 🔴 HIGH   | 2-3 weeks | +15% (80% → 95%)      |
-| **P2**   | Real-time Communication (Socket.io) | 🔴 HIGH   | 2 weeks   | Enables live features |
-| **P3**   | UI/UX Polish & Components           | 🟡 MEDIUM | 1-2 weeks | Better UX             |
-| **P4**   | Offline Support (Mobile)            | 🟢 LOW    | 2-3 weeks | Enhanced reliability  |
+**Objective:** Set up design system infrastructure and theming capabilities
+
+#### Completed Tasks (December 6, 2025)
+
+✅ **Design System Documentation**
+
+- Created `DESIGN_SYSTEM.md` with comprehensive design language
+- Defined color palette (primary, semantic, status, neutral)
+- Established typography system (Inter, JetBrains Mono fonts)
+- Set spacing scale (4px base unit)
+- Documented shadows, motion, and component patterns
+
+✅ **Design Tokens Implementation**
+
+- Created `web/src/styles/design-tokens.css` with all CSS variables
+- Primary colors: Academic blue palette (50-950 scale)
+- Semantic colors: Success, Warning, Error, Info
+- Status colors: Mapped to 9-stage batch workflow
+- Dark mode colors with reduced shadow intensity
+- Spacing system: 0px to 128px with semantic tokens
+- Border radius: 4px to 32px + full circles
+- Shadows & elevation: 5 levels with colored variants
+- Motion tokens: Duration (150ms-700ms) and easing curves
+
+✅ **Tailwind Configuration**
+
+- Updated `web/tailwind.config.js` with design system tokens
+- Font family configuration (Inter, JetBrains Mono, Cal Sans)
+- Font size scale with 1.125 ratio (Major Third)
+- Letter spacing and line heights
+- Extended color palette with RGB/HSL support
+- Border radius using CSS variables
+- Spacing scale mapped to tokens
+- Box shadow extensions
+- Animation duration and timing functions
+- Container widths and breakpoints
+
+✅ **Theme Provider**
+
+- Created `web/src/components/theme-provider.tsx`
+- Supports light, dark, and system themes
+- LocalStorage persistence
+- System theme change detection
+- Context API for theme management
+
+✅ **Theme Toggle Component**
+
+- Created `web/src/components/ThemeToggle.tsx`
+- Dropdown with Sun, Moon, Monitor icons (Lucide)
+- Visual feedback for active theme
+- Integrated into DashboardLayout
+
+✅ **Application Setup**
+
+- Updated `web/src/index.css` to import design tokens
+- Wrapped App in ThemeProvider
+- Updated DashboardLayout with theme-aware colors
+- Applied design system classes (transition-colors-fast)
+
+#### Files Modified
+
+- ✅ `web/src/styles/design-tokens.css` (NEW)
+- ✅ `web/tailwind.config.js` (UPDATED)
+- ✅ `web/src/index.css` (UPDATED)
+- ✅ `web/src/App.tsx` (UPDATED)
+- ✅ `web/src/components/theme-provider.tsx` (NEW)
+- ✅ `web/src/components/ThemeToggle.tsx` (NEW)
+- ✅ `web/src/layouts/DashboardLayout.tsx` (UPDATED)
 
 ---
 
-## 📅 Implementation Roadmap (7 Weeks)
+### Phase 2: Core Components (Week 2 - IN PROGRESS)
 
-### **Phase 1: Analytics & Reports Dashboard (Weeks 1-3)**
+**Objective:** Create reusable, accessible components following design system
 
-#### Goals:
+#### Planned Tasks
 
-- ✅ Provide data insights and visibility
-- ✅ Generate exportable reports (PDF/Excel)
-- ✅ Track handler performance and discrepancies
-- ✅ Enable data-driven decision making
+🔲 **Button Variants**
 
-#### Backend Tasks (Week 1)
+- [ ] Primary button (elevation-2, shadow-primary on hover)
+- [ ] Secondary button (outline, muted background)
+- [ ] Ghost button (transparent, muted hover)
+- [ ] Destructive button (error colors)
+- [ ] Icon button (square, icon-only)
+- [ ] Size variants: sm, md, lg
+- [ ] Loading states with spinner
+- [ ] Disabled states
 
-**Task 1.1: Analytics API Endpoints**
+🔲 **Form Components**
 
-```typescript
-// File: backend/src/controllers/analyticsController.ts
+- [ ] Text input with focus ring
+- [ ] Textarea with auto-resize
+- [ ] Select dropdown with search
+- [ ] Checkbox with indeterminate state
+- [ ] Radio button groups
+- [ ] Switch toggle
+- [ ] Form field wrapper with label/error
+- [ ] Validation error messages
 
-/**
- * Create new controller with endpoints:
- *
- * GET /api/analytics/overview
- * - Total exams (all time, this month)
- * - Active batches count
- * - Total handlers
- * - Total discrepancies
- * - Average transfer time
- *
- * GET /api/analytics/handler-performance
- * - Transfers handled per handler
- * - Average response time
- * - Discrepancy rate
- * - Most active handlers
- *
- * GET /api/analytics/discrepancies
- * - Total discrepancies by type
- * - Trend over time
- * - Most common issues
- * - Resolution rate
- *
- * GET /api/analytics/exam-stats
- * - Exams by status
- * - Exams by department/faculty
- * - Peak exam periods
- * - Completion rates
- *
- * Query params: startDate, endDate, department, faculty
- */
-```
+🔲 **Card Components**
+
+- [ ] Base card (elevation-2)
+- [ ] Interactive card (hover lift animation)
+- [ ] Card with header/footer sections
+- [ ] Stat card with icon and trend
+- [ ] Gradient card for emphasis
+
+🔲 **Badge Components**
+
+- [ ] Status badges with workflow colors
+- [ ] Dot badges for notifications
+- [ ] Pill badges for counts
+- [ ] Size variants: sm, md, lg
+
+🔲 **Modal/Dialog Components**
+
+- [ ] Base dialog with backdrop
+- [ ] Confirmation dialog
+- [ ] Form dialog
+- [ ] Full-screen dialog
+- [ ] Slide-over panel
+
+🔲 **Toast Notifications**
+
+- [ ] Success toast (with auto-dismiss)
+- [ ] Error toast (with retry action)
+- [ ] Warning toast
+- [ ] Info toast
+- [ ] Toast queue management
+- [ ] Custom duration and position
+
+#### Component Guidelines
+
+- Use design tokens from `design-tokens.css`
+- Follow accessibility standards (WCAG 2.1 AA)
+- Include keyboard navigation
+- Add proper ARIA labels
+- Support dark mode
+- Include loading/error states
+- Add comprehensive TypeScript types
+
+---
+
+### Phase 3: Layout System (Week 3)
+
+**Objective:** Build responsive layout structure
+
+#### Planned Tasks
+
+🔲 **Sidebar Navigation**
+
+- [ ] Collapsible sidebar (256px → 64px)
+- [ ] Active route highlighting
+- [ ] Icon + text navigation items
+- [ ] Role-based menu filtering
+- [ ] Nested navigation groups
+- [ ] Mobile drawer version
+
+🔲 **Top Bar**
+
+- [ ] Global search with keyboard shortcut (Cmd/Ctrl+K)
+- [ ] Notification bell with count badge
+- [ ] User profile dropdown
+- [ ] Theme toggle (already created ✅)
+- [ ] Breadcrumb navigation
+
+🔲 **Dashboard Layout Wrapper**
+
+- [ ] Flex layout: sidebar + content
+- [ ] Responsive breakpoints
+- [ ] Sticky header
+- [ ] Footer component
+- [ ] Loading skeleton
+
+🔲 **Container Components**
+
+- [ ] Page container (max-width, padding)
+- [ ] Section container (with spacing)
+- [ ] Grid layout utilities
+- [ ] Flex layout utilities
+
+---
+
+### Phase 4: Authentication Flow Redesign (Week 4)
+
+**Objective:** Redesign auth pages with new design system
+
+#### Planned Tasks
+
+🔲 **Login Page**
+
+- [ ] Centered card layout (max-w-md)
+- [ ] Logo and welcome message
+- [ ] Email/password form with validation
+- [ ] "Remember me" checkbox
+- [ ] "Forgot password" link
+- [ ] Loading state on submit
+- [ ] Error message display
+- [ ] Success transition animation
+- [ ] Background gradient with subtle pattern
+
+🔲 **Forgot Password Page**
+
+- [ ] Email input form
+- [ ] Clear instructions
+- [ ] Back to login link
+- [ ] Success confirmation
+- [ ] Rate limit messaging
+
+🔲 **Password Reset Page**
+
+- [ ] Token validation
+- [ ] New password input (with strength meter)
+- [ ] Confirm password input
+- [ ] Password requirements checklist
+- [ ] Success redirect to login
+
+🔲 **Change Password Page**
+
+- [ ] Current password verification
+- [ ] New password with strength indicator
+- [ ] Password requirements
+- [ ] Success toast notification
+
+🔲 **Common Auth Features**
+
+- [ ] Input focus states (ring effect)
+- [ ] Password visibility toggle
+- [ ] Form validation with inline errors
+- [ ] Loading spinner on submit
+- [ ] Network error handling
+- [ ] Responsive design (mobile-first)
+- [ ] Smooth transitions between states
+
+---
+
+## 📊 Previous Implementation Status
+
+### ✅ Completed Features (95% Overall)
+
+#### Backend API (100% Complete)
+
+- ✅ User authentication (JWT)
+- ✅ Role-based access control (RBAC)
+- ✅ Exam session management
+- ✅ Batch status workflow (NOT_STARTED → COMPLETED)
+- ✅ Student attendance tracking
+- ✅ Batch transfer system (custody chain)
+- ✅ Audit logging
+- ✅ Real-time notifications (Socket.io)
+- ✅ Password reset functionality
+- ✅ Profile picture upload
+- ✅ Token blacklist for logout
+
+#### Web Dashboard (95% Complete)
+
+- ✅ Dashboard with statistics
+- ✅ User management (Admin only)
+- ✅ Exam session creation and listing
+- ✅ Student management with CSV import
+- ✅ Batch details with attendance
+- ✅ Batch tracking with status timeline
+- ✅ Real-time notification center
+- ✅ Batch status flow with End Session
+- ✅ Analytics dashboard with charts
+- ✅ Audit logs viewer
+- ✅ Settings page with profile/password management
+- 🔄 **IN PROGRESS:** Design system implementation
+
+#### Mobile App (95% Complete)
+
+- ✅ Authentication (login, logout, change password)
+- ✅ QR code scanning (batch + student)
+- ✅ Student attendance recording
+- ✅ Batch transfer initiation
+- ✅ Transfer confirmation/rejection
+- ✅ Custody tracking
+- ✅ Transfer history
+- ✅ End exam session functionality
+- ✅ Real-time push notifications (Expo)
+- ✅ Development client via EAS Build
+- ✅ Drawer with batch status display
+
+#### Infrastructure (100% Complete)
+
+- ✅ PostgreSQL database with Prisma ORM
+- ✅ Database migrations (6 total)
+- ✅ Seed data for testing
+- ✅ Socket.io server integration
+- ✅ EAS Build configuration for mobile
+- ✅ Development environment setup
+
+---
+
+## 🎯 Post-Design System Priorities
+
+### After Phase 4 Completion
+
+**P1: Apply Design System to Existing Pages**
+
+- Dashboard stats cards
+- Exam session tables
+- Batch details page
+- User management page
+- Analytics dashboard
+- Settings page
+
+**P2: Advanced Features**
+
+- Global search functionality
+- Keyboard shortcuts
+- Advanced filters
+- Bulk operations
+- Export functionality (PDF/Excel)
+
+**P3: Performance Optimization**
+
+- Code splitting
+- Lazy loading
+- Image optimization
+- Bundle size reduction
+- Caching strategies
+
+**P4: Testing**
+
+- Unit tests (Jest)
+- Component tests (React Testing Library)
+- E2E tests (Playwright)
+- Accessibility testing
+
+---
+
+## 📝 Original Roadmap Reference
+
+### **Phase 1: Analytics & Reports Dashboard (Weeks 1-3)** - COMPLETED ✅
+
+- - Transfers handled per handler
+- - Average response time
+- - Discrepancy rate
+- - Most active handlers
+-
+- GET /api/analytics/discrepancies
+- - Total discrepancies by type
+- - Trend over time
+- - Most common issues
+- - Resolution rate
+-
+- GET /api/analytics/exam-stats
+- - Exams by status
+- - Exams by department/faculty
+- - Peak exam periods
+- - Completion rates
+-
+- Query params: startDate, endDate, department, faculty
+  \*/
+
+````
 
 **Task 1.2: Export Service (PDF/Excel)**
 
@@ -78,7 +378,7 @@ npm install pdfkit exceljs
 
 # Create service
 # File: backend/src/services/exportService.ts
-```
+````
 
 ```typescript
 /**

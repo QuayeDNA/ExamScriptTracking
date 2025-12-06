@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "@/components/theme-provider";
 import { LoginPage } from "@/pages/LoginPage";
 import { ChangePasswordRequiredPage } from "@/pages/ChangePasswordRequiredPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
@@ -33,41 +34,46 @@ function App() {
   // Initialize socket connection
   useSocket();
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route
-            path="/change-password-required"
-            element={<ChangePasswordRequiredPage />}
-          />
-          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+    <ThemeProvider defaultTheme="system" storageKey="exam-script-theme">
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route
+              path="/change-password-required"
+              element={<ChangePasswordRequiredPage />}
+            />
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<DashboardStatsPage />} />
-              <Route path="sessions" element={<SessionsPage />} />
-              <Route path="students" element={<StudentsPage />} />
-              <Route path="exam-sessions" element={<ExamSessionsPage />} />
-              <Route path="exam-sessions/:id" element={<BatchDetailsPage />} />
-              <Route path="batch-tracking" element={<BatchTrackingPage />} />
-              <Route path="settings" element={<SettingsPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<DashboardLayout />}>
+                <Route index element={<DashboardStatsPage />} />
+                <Route path="sessions" element={<SessionsPage />} />
+                <Route path="students" element={<StudentsPage />} />
+                <Route path="exam-sessions" element={<ExamSessionsPage />} />
+                <Route
+                  path="exam-sessions/:id"
+                  element={<BatchDetailsPage />}
+                />
+                <Route path="batch-tracking" element={<BatchTrackingPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
             </Route>
-          </Route>
 
-          <Route element={<ProtectedRoute allowedRoles={[Role.ADMIN]} />}>
-            <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route path="users" element={<UsersPage />} />
-              <Route path="audit-logs" element={<AuditLogsPage />} />
-              <Route path="analytics" element={<AnalyticsDashboardPage />} />
+            <Route element={<ProtectedRoute allowedRoles={[Role.ADMIN]} />}>
+              <Route path="/dashboard" element={<DashboardLayout />}>
+                <Route path="users" element={<UsersPage />} />
+                <Route path="audit-logs" element={<AuditLogsPage />} />
+                <Route path="analytics" element={<AnalyticsDashboardPage />} />
+              </Route>
             </Route>
-          </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
