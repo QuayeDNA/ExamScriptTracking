@@ -18,10 +18,6 @@ import {
   registerForPushNotificationsAsync,
 } from "@/utils/notifications";
 
-export const unstable_settings = {
-  anchor: "(tabs)",
-};
-
 function useProtectedRoute() {
   const segments = useSegments();
   const router = useRouter();

@@ -83,15 +83,23 @@ export default function CustodyScreen() {
         // Determine custody status
         let custodyStatus: BatchWithCustody["custodyStatus"] | null = null;
 
-        if (latestTransfer.toHandlerId === user.id) {
-          // I'm the receiver
+        // For initial custody (self-transfer), check if both from and to are the same user
+        const isSelfTransfer =
+          latestTransfer.fromHandlerId === latestTransfer.toHandlerId &&
+          latestTransfer.fromHandlerId === user.id;
+
+        if (isSelfTransfer && latestTransfer.status === "CONFIRMED") {
+          // Initial custody established - I have the batch
+          custodyStatus = "IN_CUSTODY";
+        } else if (latestTransfer.toHandlerId === user.id) {
+          // I'm the receiver (not initial custody)
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "PENDING_RECEIPT";
           } else if (latestTransfer.status === "CONFIRMED") {
             custodyStatus = "IN_CUSTODY";
           }
         } else if (latestTransfer.fromHandlerId === user.id) {
-          // I'm the sender
+          // I'm the sender (not initial custody)
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "TRANSFER_INITIATED";
           }
