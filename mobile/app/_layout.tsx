@@ -30,27 +30,32 @@ function useProtectedRoute() {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = segments[0] === "(tabs)";
-    const inAuthFlow =
-      segments[0] === "login" || segments[0] === "change-password";
+    // Wait for router to be ready
+    const timeout = setTimeout(() => {
+      const inAuthGroup = segments[0] === "(tabs)";
+      const inAuthFlow =
+        segments[0] === "login" || segments[0] === "change-password";
 
-    // Redirect unauthenticated users to login
-    if (!isAuthenticated && !inAuthFlow) {
-      router.replace("/login");
-    }
-    // Redirect authenticated users with unchanged password to change password
-    else if (
-      isAuthenticated &&
-      !user?.passwordChanged &&
-      segments[0] !== "change-password"
-    ) {
-      router.replace("/change-password");
-    }
-    // Redirect authenticated users from login/change-password to main app
-    else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
-      router.replace("/(tabs)");
-    }
-  }, [isAuthenticated, isLoading, segments, user]);
+      // Redirect unauthenticated users to login
+      if (!isAuthenticated && !inAuthFlow) {
+        router.replace("/login");
+      }
+      // Redirect authenticated users with unchanged password to change password
+      else if (
+        isAuthenticated &&
+        !user?.passwordChanged &&
+        segments[0] !== "change-password"
+      ) {
+        router.replace("/change-password");
+      }
+      // Redirect authenticated users from login/change-password to main app
+      else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
+        router.replace("/(tabs)");
+      }
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [isAuthenticated, isLoading, segments, user, router]);
 }
 
 export default function RootLayout() {
@@ -88,12 +93,10 @@ export default function RootLayout() {
 
     return () => {
       if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(
-          notificationListener.current
-        );
+        notificationListener.current.remove();
       }
       if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
     };
   }, []);

@@ -8,6 +8,11 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "exam-script-tracking-dev"
+      }
+    },
     "ios": {
       "supportsTablet": true
     },

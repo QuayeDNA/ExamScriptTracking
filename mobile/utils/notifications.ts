@@ -49,11 +49,18 @@ export async function registerForPushNotificationsAsync(): Promise<
 
   // Get the push token (for future use with a push notification service)
   // For now, we're using local notifications only
+  // Note: Push tokens don't work in Expo Go (SDK 53+), only in development builds
   try {
     token = (await Notifications.getExpoPushTokenAsync()).data;
     console.log("Push token:", token);
   } catch (error) {
-    console.error("Error getting push token:", error);
+    // Silently ignore push token errors in Expo Go
+    // This is expected behavior and doesn't affect local notifications
+    if (__DEV__) {
+      console.log(
+        "Push tokens not available in Expo Go. Use local notifications only."
+      );
+    }
   }
 
   return token;

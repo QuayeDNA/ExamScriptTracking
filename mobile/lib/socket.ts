@@ -29,6 +29,12 @@ class MobileSocketService {
       return;
     }
 
+    // Validate token format (basic check)
+    if (typeof token !== "string" || token.length < 20) {
+      console.warn("Invalid token format, skipping socket connection");
+      return;
+    }
+
     // Use the actual IP address of your development machine
     // Replace with your backend URL in production
     const SOCKET_URL = "http://192.168.43.153:3000";
@@ -53,6 +59,13 @@ class MobileSocketService {
     });
 
     this.socket.on("connect_error", (error) => {
+      // Don't log authentication errors as errors, they're expected during development
+      if (error.message.includes("Authentication")) {
+        console.log("Socket authentication failed - please log in again");
+        this.disconnect(); // Stop trying to reconnect with invalid token
+        return;
+      }
+
       console.error("Socket connection error:", error.message);
       this.reconnectAttempts++;
 
