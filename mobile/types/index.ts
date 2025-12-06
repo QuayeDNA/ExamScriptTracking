@@ -64,6 +64,7 @@ export interface Student {
 }
 
 export const BatchStatus = {
+  NOT_STARTED: "NOT_STARTED",
   IN_PROGRESS: "IN_PROGRESS",
   SUBMITTED: "SUBMITTED",
   IN_TRANSIT: "IN_TRANSIT",

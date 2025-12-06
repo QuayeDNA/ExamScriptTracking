@@ -40,7 +40,7 @@ export const recordEntry = async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if exam session exists and is in progress
+    // Check if exam session exists and is valid for attendance
     const examSession = await prisma.examSession.findUnique({
       where: { id: validatedData.examSessionId },
     });
@@ -50,9 +50,14 @@ export const recordEntry = async (req: Request, res: Response) => {
       return;
     }
 
-    if (examSession.status !== "IN_PROGRESS") {
+    // Allow attendance recording for NOT_STARTED and IN_PROGRESS sessions
+    if (
+      examSession.status !== "NOT_STARTED" &&
+      examSession.status !== "IN_PROGRESS"
+    ) {
       res.status(400).json({
-        error: "Cannot record attendance. Exam session is not in progress",
+        error:
+          "Cannot record attendance. Exam session has already ended or is not active",
         currentStatus: examSession.status,
       });
       return;
@@ -75,6 +80,13 @@ export const recordEntry = async (req: Request, res: Response) => {
       });
       return;
     }
+
+    // Check if this is the first attendance record for this session
+    const existingAttendanceCount = await prisma.examAttendance.count({
+      where: { examSessionId: validatedData.examSessionId },
+    });
+
+    const isFirstAttendance = existingAttendanceCount === 0;
 
     // Record entry
     const attendance = await prisma.examAttendance.create({
@@ -101,10 +113,37 @@ export const recordEntry = async (req: Request, res: Response) => {
             courseCode: true,
             courseName: true,
             venue: true,
+            status: true,
           },
         },
       },
     });
+
+    // Auto-update exam session status to IN_PROGRESS if this is the first student
+    if (isFirstAttendance && examSession.status === "NOT_STARTED") {
+      await prisma.examSession.update({
+        where: { id: validatedData.examSessionId },
+        data: { status: "IN_PROGRESS" },
+      });
+
+      // Log status change
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user!.userId,
+          action: "AUTO_UPDATE_SESSION_STATUS",
+          entity: "ExamSession",
+          entityId: examSession.id,
+          details: {
+            statusChange: {
+              from: "NOT_STARTED",
+              to: "IN_PROGRESS",
+            },
+            reason: "First student attendance recorded",
+          },
+          ipAddress: req.ip || "unknown",
+        },
+      });
+    }
 
     // Log audit trail
     await prisma.auditLog.create({

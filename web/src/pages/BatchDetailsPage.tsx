@@ -84,6 +84,23 @@ export default function BatchDetailsPage() {
     },
   });
 
+  // Mutation for ending session
+  const endSessionMutation = useMutation({
+    mutationFn: () => examSessionsApi.endExamSession(id!),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["examSession", id] });
+      queryClient.invalidateQueries({ queryKey: ["examSessions"] });
+      alert(
+        `✅ Session Ended!\n\n` +
+          `The exam session has been marked as SUBMITTED.\n` +
+          `All ${data.examSession.scriptsCount} scripts have been recorded.`
+      );
+    },
+    onError: (error: Error) => {
+      alert(`Failed to end session: ${error.message}`);
+    },
+  });
+
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -209,9 +226,26 @@ export default function BatchDetailsPage() {
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {session.courseCode} - {session.courseName}
-                </h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {session.courseCode} - {session.courseName}
+                  </h1>
+                  <span
+                    className={`px-3 py-1 text-xs rounded-full font-semibold ${
+                      session.status === "NOT_STARTED"
+                        ? "bg-gray-100 text-gray-800"
+                        : session.status === "IN_PROGRESS"
+                        ? "bg-blue-100 text-blue-800"
+                        : session.status === "SUBMITTED"
+                        ? "bg-green-100 text-green-800"
+                        : session.status === "IN_TRANSIT"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-purple-100 text-purple-800"
+                    }`}
+                  >
+                    {session.status.replace(/_/g, " ")}
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500 mt-1">
                   Batch: {session.batchQrCode} • {session.venue} •{" "}
                   {new Date(session.examDate).toLocaleDateString()}
@@ -219,6 +253,28 @@ export default function BatchDetailsPage() {
               </div>
             </div>
             <div className="flex gap-2">
+              {session.status === "IN_PROGRESS" && (
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Are you sure you want to end this exam session?\n\n" +
+                          "This will:\n" +
+                          "• Mark all scripts as collected\n" +
+                          "• Update status to SUBMITTED\n" +
+                          "• Close the session for new entries"
+                      )
+                    ) {
+                      endSessionMutation.mutate();
+                    }
+                  }}
+                  disabled={endSessionMutation.isPending}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {endSessionMutation.isPending ? "Ending..." : "End Session"}
+                </button>
+              )}
               <button
                 onClick={() =>
                   queryClient.invalidateQueries({

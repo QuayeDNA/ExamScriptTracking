@@ -49,6 +49,7 @@ export interface ExamSession {
 }
 
 export type BatchStatus =
+  | "NOT_STARTED"
   | "IN_PROGRESS"
   | "SUBMITTED"
   | "IN_TRANSIT"
@@ -230,6 +231,18 @@ export const examSessionsApi = {
       `/exam-sessions/${id}/status`,
       { status }
     );
+  },
+
+  endExamSession: async (
+    id: string
+  ): Promise<{
+    message: string;
+    examSession: { id: string; status: BatchStatus; scriptsCount: number };
+  }> => {
+    return apiClient.post<{
+      message: string;
+      examSession: { id: string; status: BatchStatus; scriptsCount: number };
+    }>(`/exam-sessions/${id}/end`, {});
   },
 
   deleteExamSession: async (id: string): Promise<{ message: string }> => {

@@ -5,6 +5,7 @@ import {
   getExamSession,
   updateExamSession,
   updateExamSessionStatus,
+  endExamSession,
   deleteExamSession,
   generateBatchQRCodeEndpoint,
   getExamSessionManifest,
@@ -82,6 +83,13 @@ router.patch(
   "/:id/status",
   authorize(Role.ADMIN, Role.INVIGILATOR),
   updateExamSessionStatus
+);
+
+// End exam session (invigilator only) - auto-updates status to SUBMITTED
+router.post(
+  "/:id/end",
+  authorize(Role.ADMIN, Role.INVIGILATOR),
+  endExamSession
 );
 
 // Delete exam session (admin only)

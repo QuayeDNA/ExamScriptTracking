@@ -135,6 +135,46 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
       }
     };
 
+    const getBatchStatusColor = (status: string) => {
+      switch (status) {
+        case "NOT_STARTED":
+          return styles.batchStatusNotStarted;
+        case "IN_PROGRESS":
+          return styles.batchStatusInProgress;
+        case "SUBMITTED":
+          return styles.batchStatusSubmitted;
+        case "IN_TRANSIT":
+          return styles.batchStatusInTransit;
+        case "WITH_LECTURER":
+          return styles.batchStatusWithLecturer;
+        default:
+          return styles.batchStatusDefault;
+      }
+    };
+
+    const getBatchStatusText = (status: string) => {
+      switch (status) {
+        case "NOT_STARTED":
+          return "Not Started";
+        case "IN_PROGRESS":
+          return "In Progress";
+        case "SUBMITTED":
+          return "Submitted";
+        case "IN_TRANSIT":
+          return "In Transit";
+        case "WITH_LECTURER":
+          return "With Lecturer";
+        case "UNDER_GRADING":
+          return "Under Grading";
+        case "GRADING_COMPLETED":
+          return "Graded";
+        case "ARCHIVED":
+          return "Archived";
+        default:
+          return status;
+      }
+    };
+
     const getStatusText = (status: string) => {
       switch (status) {
         case "SUBMITTED":
@@ -280,7 +320,19 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         >
           {/* Batch Header */}
           <View style={styles.header}>
-            <Text style={styles.courseCode}>📚 {session.courseCode}</Text>
+            <View style={styles.headerTop}>
+              <Text style={styles.courseCode}>📚 {session.courseCode}</Text>
+              <View
+                style={[
+                  styles.batchStatusBadge,
+                  getBatchStatusColor(session.status),
+                ]}
+              >
+                <Text style={styles.batchStatusText}>
+                  {getBatchStatusText(session.status)}
+                </Text>
+              </View>
+            </View>
             <Text style={styles.courseName}>{session.courseName}</Text>
             <Text style={styles.venue}>📍 {session.venue}</Text>
             <Text style={styles.batchCode}>Batch: {session.batchQrCode}</Text>
@@ -391,12 +443,14 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
             >
               <Text style={styles.primaryButtonText}>View Full Details →</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={onEndSession}
-            >
-              <Text style={styles.secondaryButtonText}>End Session</Text>
-            </TouchableOpacity>
+            {session.status === "IN_PROGRESS" && (
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={onEndSession}
+              >
+                <Text style={styles.secondaryButtonText}>End Session</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </Animated.View>
@@ -443,11 +497,44 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   courseCode: {
     fontSize: 20,
     fontWeight: "700",
     color: "#111827",
-    marginBottom: 4,
+  },
+  batchStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  batchStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  batchStatusNotStarted: {
+    backgroundColor: "#9ca3af",
+  },
+  batchStatusInProgress: {
+    backgroundColor: "#3b82f6",
+  },
+  batchStatusSubmitted: {
+    backgroundColor: "#10b981",
+  },
+  batchStatusInTransit: {
+    backgroundColor: "#f59e0b",
+  },
+  batchStatusWithLecturer: {
+    backgroundColor: "#8b5cf6",
+  },
+  batchStatusDefault: {
+    backgroundColor: "#6b7280",
   },
   courseName: {
     fontSize: 16,

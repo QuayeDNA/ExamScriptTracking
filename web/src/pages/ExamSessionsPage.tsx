@@ -32,6 +32,7 @@ import { useNavigate } from "react-router-dom";
 const columnHelper = createColumnHelper<ExamSession>();
 
 const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
+  { value: "NOT_STARTED", label: "Not Started" },
   { value: "IN_PROGRESS", label: "In Progress" },
   { value: "SUBMITTED", label: "Submitted" },
   { value: "IN_TRANSIT", label: "In Transit" },
@@ -342,6 +343,7 @@ export default function ExamSessionsPage() {
       cell: (info) => {
         const status = info.getValue();
         const colors: Record<BatchStatus, string> = {
+          NOT_STARTED: "bg-gray-100 text-gray-800",
           IN_PROGRESS: "bg-blue-100 text-blue-800",
           SUBMITTED: "bg-green-100 text-green-800",
           IN_TRANSIT: "bg-yellow-100 text-yellow-800",

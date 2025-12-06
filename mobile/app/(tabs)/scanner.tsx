@@ -181,18 +181,38 @@ export default function ScannerScreen() {
     }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
+    if (!activeExamSession) return;
+
+    // Only allow ending if session is IN_PROGRESS
+    if (activeExamSession.status !== "IN_PROGRESS") {
+      Alert.alert(
+        "Cannot End Session",
+        "Only sessions that are IN PROGRESS can be ended."
+      );
+      return;
+    }
+
     Alert.alert(
       "End Session",
-      "Are you sure you want to end this exam session?",
+      `Are you sure you want to end this exam session?\n\nThis will:\n• Mark all scripts as collected\n• Update status to SUBMITTED\n• Close the session for new entries`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "End Session",
           style: "destructive",
-          onPress: () => {
-            setActiveExamSession(null);
-            drawerRef.current?.close();
+          onPress: async () => {
+            try {
+              await examSessionsApi.endExamSession(activeExamSession.id);
+              Alert.alert(
+                "Session Ended",
+                "Exam session has been successfully ended and marked as SUBMITTED."
+              );
+              setActiveExamSession(null);
+              drawerRef.current?.close();
+            } catch (error: any) {
+              Alert.alert("Error", error.error || "Failed to end exam session");
+            }
           },
         },
       ]

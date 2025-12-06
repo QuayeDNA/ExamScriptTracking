@@ -33,6 +33,7 @@ const updateExamSessionSchema = z.object({
   examDate: z.string().datetime().optional(),
   status: z
     .enum([
+      "NOT_STARTED",
       "IN_PROGRESS",
       "SUBMITTED",
       "IN_TRANSIT",
@@ -47,6 +48,7 @@ const updateExamSessionSchema = z.object({
 
 const updateStatusSchema = z.object({
   status: z.enum([
+    "NOT_STARTED",
     "IN_PROGRESS",
     "SUBMITTED",
     "IN_TRANSIT",
@@ -57,6 +59,49 @@ const updateStatusSchema = z.object({
     "COMPLETED",
   ]),
 });
+
+// Status transition validation logic
+type BatchStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "IN_TRANSIT"
+  | "WITH_LECTURER"
+  | "UNDER_GRADING"
+  | "GRADED"
+  | "RETURNED"
+  | "COMPLETED";
+
+function validateStatusTransition(
+  currentStatus: BatchStatus,
+  newStatus: BatchStatus
+): { valid: boolean; error?: string } {
+  // Define allowed transitions
+  const allowedTransitions: Record<BatchStatus, BatchStatus[]> = {
+    NOT_STARTED: ["IN_PROGRESS"], // Auto-triggered only
+    IN_PROGRESS: ["SUBMITTED"], // Auto-triggered only on session end
+    SUBMITTED: ["IN_TRANSIT"], // When transfer starts
+    IN_TRANSIT: ["WITH_LECTURER", "SUBMITTED"], // Normal flow or return
+    WITH_LECTURER: ["IN_TRANSIT", "UNDER_GRADING"], // Rollback or progress
+    UNDER_GRADING: ["GRADED"],
+    GRADED: ["RETURNED"],
+    RETURNED: ["COMPLETED"],
+    COMPLETED: [], // Terminal state
+  };
+
+  // Check if transition is allowed
+  const allowed = allowedTransitions[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    return {
+      valid: false,
+      error: `Cannot transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${
+        allowed.join(", ") || "none"
+      }`,
+    };
+  }
+
+  return { valid: true };
+}
 
 // Helper function to generate batch QR code
 async function generateBatchQRCode(examSession: {
@@ -431,6 +476,27 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const validatedData = updateStatusSchema.parse(req.body);
 
+    // Get current exam session
+    const currentSession = await prisma.examSession.findUnique({
+      where: { id },
+    });
+
+    if (!currentSession) {
+      res.status(404).json({ message: "Exam session not found" });
+      return;
+    }
+
+    // Validate status transition
+    const validation = validateStatusTransition(
+      currentSession.status as BatchStatus,
+      validatedData.status as BatchStatus
+    );
+
+    if (!validation.valid) {
+      res.status(400).json({ message: validation.error });
+      return;
+    }
+
     const examSession = await prisma.examSession.update({
       where: { id },
       data: {
@@ -715,5 +781,106 @@ export const getFaculties = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Get faculties error:", error);
     res.status(500).json({ message: "Failed to fetch faculties" });
+  }
+};
+
+// End exam session (auto-update status to SUBMITTED)
+export const endExamSession = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get current exam session
+    const currentSession = await prisma.examSession.findUnique({
+      where: { id },
+      include: {
+        attendances: true,
+      },
+    });
+
+    if (!currentSession) {
+      res.status(404).json({ message: "Exam session not found" });
+      return;
+    }
+
+    // Only allow ending sessions that are IN_PROGRESS
+    if (currentSession.status !== "IN_PROGRESS") {
+      res.status(400).json({
+        message: `Cannot end session. Current status is ${currentSession.status}. Only IN_PROGRESS sessions can be ended.`,
+      });
+      return;
+    }
+
+    // Update status to SUBMITTED
+    const examSession = await prisma.examSession.update({
+      where: { id },
+      data: {
+        status: "SUBMITTED",
+      },
+    });
+
+    // Count submitted scripts
+    const submittedCount = currentSession.attendances.length;
+
+    // Create initial custody record
+    const existingTransfers = await prisma.batchTransfer.count({
+      where: { examSessionId: id },
+    });
+
+    if (existingTransfers === 0 && submittedCount > 0) {
+      await prisma.batchTransfer.create({
+        data: {
+          examSessionId: id,
+          fromHandlerId: req.user!.userId,
+          toHandlerId: req.user!.userId, // Self-transfer to establish custody
+          status: "CONFIRMED",
+          scriptsExpected: submittedCount,
+          scriptsReceived: submittedCount,
+          requestedAt: new Date(),
+          confirmedAt: new Date(),
+          discrepancyNote: "Initial custody established upon session end",
+        },
+      });
+    }
+
+    // Log audit trail
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: "END_EXAM_SESSION",
+        entity: "ExamSession",
+        entityId: examSession.id,
+        details: {
+          statusChange: {
+            from: "IN_PROGRESS",
+            to: "SUBMITTED",
+          },
+          scriptsCount: submittedCount,
+        },
+        ipAddress: req.ip || "unknown",
+      },
+    });
+
+    // Emit socket event for batch status update
+    emitBatchStatusUpdated(io, {
+      id: examSession.id,
+      batchQrCode: examSession.batchQrCode,
+      courseCode: examSession.courseCode,
+      courseName: examSession.courseName,
+      status: examSession.status,
+      department: examSession.department,
+      faculty: examSession.faculty,
+    });
+
+    res.json({
+      message: "Exam session ended successfully",
+      examSession: {
+        id: examSession.id,
+        status: examSession.status,
+        scriptsCount: submittedCount,
+      },
+    });
+  } catch (error) {
+    console.error("End exam session error:", error);
+    res.status(500).json({ message: "Failed to end exam session" });
   }
 };

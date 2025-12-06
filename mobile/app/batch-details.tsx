@@ -18,6 +18,7 @@ import {
 import type { ExamAttendance } from "@/types";
 
 const STATUS_OPTIONS: { value: BatchStatus; label: string; color: string }[] = [
+  { value: "NOT_STARTED", label: "Not Started", color: "#9ca3af" },
   { value: "IN_PROGRESS", label: "In Progress", color: "#3b82f6" },
   { value: "SUBMITTED", label: "Submitted", color: "#10b981" },
   { value: "IN_TRANSIT", label: "In Transit", color: "#f59e0b" },
