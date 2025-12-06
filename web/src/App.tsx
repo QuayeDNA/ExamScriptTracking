@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { LoginPage } from "@/pages/LoginPage";
 import { ChangePasswordRequiredPage } from "@/pages/ChangePasswordRequiredPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
@@ -72,6 +73,7 @@ function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
+        <Toaster position="top-right" />
       </QueryClientProvider>
     </ThemeProvider>
   );
