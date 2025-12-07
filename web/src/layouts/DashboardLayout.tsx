@@ -1,189 +1,117 @@
-import { useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { useAuthStore } from "@/store/auth";
 import { useLogout } from "@/hooks/useAuth";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import {
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarNavGroup,
-  SidebarNavItem,
-} from "@/components/Sidebar";
-import { TopBar } from "@/components/TopBar";
-import { Button } from "@/components/ui/button";
-import {
-  GraduationCap,
-  LayoutDashboard,
-  Calendar,
-  Users,
-  BookOpen,
-  PackageSearch,
-  Settings,
-  Shield,
-  BarChart3,
-  FileText,
-  LogOut,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export const DashboardLayout = () => {
   const { user } = useAuthStore();
   const { mutate: logout } = useLogout();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const isAdmin = user?.isSuperAdmin || user?.role === "ADMIN";
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
-      {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen}>
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-primary-600 dark:bg-primary-500">
-              <GraduationCap className="h-6 w-6 text-white" />
+    <div className="min-h-screen bg-background">
+      <nav className="bg-card shadow-sm border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-bold text-foreground">
+                Exam Script Tracking
+              </h1>
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                Exam Script
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                Tracking System
-              </span>
+
+            <div className="flex items-center space-x-4">
+              <div className="text-sm">
+                <span className="text-muted-foreground">Logged in as: </span>
+                <span className="font-medium text-foreground">
+                  {user?.name}
+                </span>
+                <span className="ml-2 text-xs text-muted-foreground uppercase">
+                  {user?.role.replace("_", " ")}
+                </span>
+              </div>
+
+              <ThemeToggle />
+
+              <NotificationCenter />
+
+              <button
+                onClick={() => logout()}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+              >
+                Logout
+              </button>
             </div>
           </div>
-        </SidebarHeader>
+        </div>
+      </nav>
 
-        <SidebarContent>
-          <SidebarNavGroup title="Main">
-            <SidebarNavItem
-              to="/dashboard"
-              icon={LayoutDashboard}
-              label="Dashboard"
-            />
-            <SidebarNavItem
-              to="/dashboard/sessions"
-              icon={Calendar}
-              label="My Sessions"
-            />
-            <SidebarNavItem
-              to="/dashboard/students"
-              icon={Users}
-              label="Students"
-            />
-            <SidebarNavItem
-              to="/dashboard/exam-sessions"
-              icon={BookOpen}
-              label="Exam Sessions"
-            />
-            <SidebarNavItem
-              to="/dashboard/batch-tracking"
-              icon={PackageSearch}
-              label="Batch Tracking"
-            />
-          </SidebarNavGroup>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <nav className="flex space-x-4">
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => navigate("/dashboard/sessions")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              My Sessions
+            </button>
+            <button
+              onClick={() => navigate("/dashboard/students")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              Students
+            </button>
+            <button
+              onClick={() => navigate("/dashboard/exam-sessions")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              Exam Sessions
+            </button>
+            <button
+              onClick={() => navigate("/dashboard/batch-tracking")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              Batch Tracking
+            </button>
+            <button
+              onClick={() => navigate("/dashboard/settings")}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+            >
+              Settings
+            </button>
+            {(user?.isSuperAdmin || user?.role === "ADMIN") && (
+              <>
+                <button
+                  onClick={() => navigate("/dashboard/users")}
+                  className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+                >
+                  User Management
+                </button>
+                <button
+                  onClick={() => navigate("/dashboard/analytics")}
+                  className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+                >
+                  Analytics
+                </button>
+                <button
+                  onClick={() => navigate("/dashboard/audit-logs")}
+                  className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors-fast"
+                >
+                  Audit Logs
+                </button>
+              </>
+            )}
+          </nav>
+        </div>
 
-          {isAdmin && (
-            <SidebarNavGroup title="Administration">
-              <SidebarNavItem
-                to="/dashboard/users"
-                icon={Shield}
-                label="User Management"
-              />
-              <SidebarNavItem
-                to="/dashboard/analytics"
-                icon={BarChart3}
-                label="Analytics"
-              />
-              <SidebarNavItem
-                to="/dashboard/audit-logs"
-                icon={FileText}
-                label="Audit Logs"
-              />
-            </SidebarNavGroup>
-          )}
-
-          <SidebarNavGroup title="Preferences">
-            <SidebarNavItem
-              to="/dashboard/settings"
-              icon={Settings}
-              label="Settings"
-            />
-          </SidebarNavGroup>
-        </SidebarContent>
-
-        <SidebarFooter>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="w-full justify-start gap-3 h-auto py-2"
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 text-xs font-semibold">
-                    {user?.name ? getInitials(user.name) : "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col items-start">
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {user?.name}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                    {user?.role.replace("_", " ").toLowerCase()}
-                  </span>
-                </div>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => logout()}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarFooter>
-      </Sidebar>
-
-      {/* Main content */}
-      <div className="h-screen flex flex-col lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(!sidebarOpen)}>
-          <ThemeToggle />
-          <NotificationCenter />
-        </TopBar>
-
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <Outlet />
-        </main>
+        <Outlet />
       </div>
-
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
     </div>
   );
 };
