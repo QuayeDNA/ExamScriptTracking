@@ -341,14 +341,17 @@ export interface AuthContextType {
 
 // Analytics Types
 export interface AnalyticsOverview {
-  totalSessions: number;
-  activeTransfers: number;
-  completedTransfers: number;
-  discrepancies: number;
+  overview: {
+    totalExams: number;
+    examsThisMonth: number;
+    activeBatches: number;
+    totalHandlers: number;
+    totalDiscrepancies: number;
+    discrepancyRate: number;
+    avgTransferTimeHours: number;
+  };
   trends: {
-    sessions: number;
-    transfers: number;
-    discrepancies: number;
+    examsByDay: Record<string, number>;
   };
 }
 
