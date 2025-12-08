@@ -35,7 +35,7 @@
         "./src/*"
       ],
       "@/ui/*": [
-        "./@/components/ui/*"
+        "./src/components/ui/*"
       ],
       "@/api/*": [
         "./src/api/*"
