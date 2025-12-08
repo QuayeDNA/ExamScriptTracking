@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -8,37 +8,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ShieldAlert, Home, ArrowLeft } from "lucide-react";
+import { FileQuestion, Home, ArrowLeft } from "lucide-react";
 
-export const UnauthorizedPage = () => {
-  const navigate = useNavigate();
-
+export const NotFoundPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md">
         <Card className="shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 rounded-full bg-error/10 flex items-center justify-center">
-                <ShieldAlert className="h-8 w-8 text-error" />
+              <div className="h-16 w-16 rounded-full bg-warning/10 flex items-center justify-center">
+                <FileQuestion className="h-8 w-8 text-warning" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold">Access Denied</CardTitle>
+            <CardTitle className="text-3xl font-bold">404</CardTitle>
             <CardDescription className="text-base">
-              You don't have permission to access this page
+              Page Not Found
             </CardDescription>
           </CardHeader>
 
           <CardContent>
             <p className="text-sm text-muted-foreground text-center">
-              If you believe this is an error, please contact your administrator
-              or try logging in again.
+              The page you're looking for doesn't exist or has been moved.
             </p>
           </CardContent>
 
           <CardFooter className="flex flex-col gap-2">
             <Button
-              onClick={() => navigate(-1)}
+              onClick={() => window.history.back()}
               variant="outline"
               className="w-full"
             >

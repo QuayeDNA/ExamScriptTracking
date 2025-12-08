@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import * as examSessionsApi from "../api/examSessions";
-import * as batchTransfersApi from "../api/batchTransfers";
-import type { ExamSession } from "../api/examSessions";
-import type { BatchTransfer } from "../api/batchTransfers";
+import * as examSessionsApi from "@/api/examSessions";
+import * as batchTransfersApi from "@/api/batchTransfers";
+import type { ExamSession } from "@/api/examSessions";
+import type { BatchTransfer } from "@/api/batchTransfers";
 
 export default function BatchTrackingPage() {
   const [searchTerm, setSearchTerm] = useState("");
