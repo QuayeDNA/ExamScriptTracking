@@ -21,6 +21,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
+import DesignSystemDemo from "@/pages/DesignSystemDemo";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/design-system-demo" element={<DesignSystemDemo />} />
             <Route
               path="/change-password-required"
               element={<ChangePasswordRequiredPage />}

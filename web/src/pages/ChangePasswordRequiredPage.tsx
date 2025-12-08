@@ -1,11 +1,5 @@
 import { useState } from "react";
 import { useFirstTimePasswordChange } from "@/hooks/useAuth";
-import { AuthLayout } from "@/layouts/AuthLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, ShieldCheck } from "lucide-react";
 
 export const ChangePasswordRequiredPage = () => {
   const [newPassword, setNewPassword] = useState("");
@@ -31,64 +25,75 @@ export const ChangePasswordRequiredPage = () => {
   };
 
   return (
-    <AuthLayout
-      title="Change Your Password"
-      description="You must change your temporary password before continuing"
-    >
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <Alert>
-          <ShieldCheck className="h-4 w-4" />
-          <AlertDescription>
-            For your security, please create a new strong password.
-          </AlertDescription>
-        </Alert>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="space-y-2">
-          <Label htmlFor="newPassword">New Password</Label>
-          <Input
-            id="newPassword"
-            type="password"
-            placeholder="Enter new password"
-            required
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            disabled={isPending}
-            minLength={8}
-          />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Must be at least 8 characters long
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
+        <div>
+          <h2 className="text-3xl font-bold text-center text-gray-900">
+            Change Your Password
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            You must change your temporary password before continuing
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            placeholder="Confirm new password"
-            required
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            disabled={isPending}
-          />
-        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
 
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={isPending}
-          loading={isPending}
-        >
-          Change Password
-        </Button>
-      </form>
-    </AuthLayout>
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="newPassword"
+                className="block text-sm font-medium text-gray-700"
+              >
+                New Password
+              </label>
+              <input
+                id="newPassword"
+                type="password"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isPending}
+                minLength={8}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Must be at least 8 characters long
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isPending}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isPending}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPending ? "Changing Password..." : "Change Password"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 };
