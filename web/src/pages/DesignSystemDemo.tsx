@@ -41,6 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -56,6 +57,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function DesignSystemDemo() {
   const [loading, setLoading] = useState(false);
@@ -74,14 +76,17 @@ export default function DesignSystemDemo() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-12">
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+          <div className="flex justify-center mb-4">
+            <ThemeToggle />
+          </div>
+          <h1 className="text-4xl font-bold text-foreground">
             Design System Demo
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
+          <p className="text-lg text-muted-foreground">
             Comprehensive showcase of all UI components with light/dark theme
             support
           </p>
@@ -102,76 +107,40 @@ export default function DesignSystemDemo() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-              <a
-                href="#theme-system"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#theme-system" className="text-primary hover:underline">
                 → Theme System
               </a>
-              <a
-                href="#buttons"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#buttons" className="text-primary hover:underline">
                 → Buttons
               </a>
-              <a
-                href="#forms"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#forms" className="text-primary hover:underline">
                 → Form Components
               </a>
-              <a
-                href="#select"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#select" className="text-primary hover:underline">
                 → Select Dropdown
               </a>
-              <a
-                href="#badges"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#badges" className="text-primary hover:underline">
                 → Badges
               </a>
-              <a
-                href="#cards"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#cards" className="text-primary hover:underline">
                 → Cards
               </a>
-              <a
-                href="#alerts"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#alerts" className="text-primary hover:underline">
                 → Alerts
               </a>
-              <a
-                href="#dialog"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#dialog" className="text-primary hover:underline">
                 → Dialog/Modal
               </a>
-              <a
-                href="#separator"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#separator" className="text-primary hover:underline">
                 → Separator
               </a>
-              <a
-                href="#dropdown"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#dropdown" className="text-primary hover:underline">
                 → Dropdown Menu
               </a>
-              <a
-                href="#toasts"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#toasts" className="text-primary hover:underline">
                 → Toast Notifications
               </a>
-              <a
-                href="#typography"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <a href="#typography" className="text-primary hover:underline">
                 → Typography
               </a>
             </div>
@@ -181,47 +150,41 @@ export default function DesignSystemDemo() {
         {/* Theme Demonstration */}
         <section
           id="theme-system"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-4">
               Theme System
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Toggle the theme using the button in the top navigation. All
               components automatically adapt to the selected theme.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-              <h3 className="font-medium text-primary-900 dark:text-primary-100">
-                Primary Colors
-              </h3>
+            <div className="p-4 bg-primary/10 rounded-lg">
+              <h3 className="font-medium text-primary">Primary Colors</h3>
               <div className="mt-2 space-y-2">
-                <div className="h-8 bg-primary-500 rounded"></div>
+                <div className="h-8 bg-primary rounded"></div>
                 <div className="h-8 bg-primary-600 rounded"></div>
                 <div className="h-8 bg-primary-700 rounded"></div>
               </div>
             </div>
 
-            <div className="p-4 bg-success-50 dark:bg-success-900/20 rounded-lg">
-              <h3 className="font-medium text-success-900 dark:text-success-100">
-                Success Colors
-              </h3>
+            <div className="p-4 bg-success/10 rounded-lg">
+              <h3 className="font-medium text-success">Success Colors</h3>
               <div className="mt-2 space-y-2">
-                <div className="h-8 bg-success-500 rounded"></div>
+                <div className="h-8 bg-success rounded"></div>
                 <div className="h-8 bg-success-600 rounded"></div>
                 <div className="h-8 bg-success-700 rounded"></div>
               </div>
             </div>
 
-            <div className="p-4 bg-error-50 dark:bg-error-900/20 rounded-lg">
-              <h3 className="font-medium text-error-900 dark:text-error-100">
-                Error Colors
-              </h3>
+            <div className="p-4 bg-error/10 rounded-lg">
+              <h3 className="font-medium text-error">Error Colors</h3>
               <div className="mt-2 space-y-2">
-                <div className="h-8 bg-error-500 rounded"></div>
+                <div className="h-8 bg-error rounded"></div>
                 <div className="h-8 bg-error-600 rounded"></div>
                 <div className="h-8 bg-error-700 rounded"></div>
               </div>
@@ -232,13 +195,13 @@ export default function DesignSystemDemo() {
         {/* Buttons */}
         <section
           id="buttons"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Buttons
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Multiple variants and states for different use cases
             </p>
           </div>
@@ -246,7 +209,7 @@ export default function DesignSystemDemo() {
           {/* Button Variants */}
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 Variants
               </h3>
               <div className="flex flex-wrap gap-4">
@@ -261,7 +224,7 @@ export default function DesignSystemDemo() {
 
             {/* Button Sizes */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 Sizes
               </h3>
               <div className="flex flex-wrap items-center gap-4">
@@ -276,7 +239,7 @@ export default function DesignSystemDemo() {
 
             {/* Button States */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 States
               </h3>
               <div className="flex flex-wrap gap-4">
@@ -296,7 +259,7 @@ export default function DesignSystemDemo() {
 
             {/* Button with Icons */}
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 With Icons
               </h3>
               <div className="flex flex-wrap gap-4">
@@ -320,13 +283,13 @@ export default function DesignSystemDemo() {
         {/* Form Components */}
         <section
           id="forms"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Form Components
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Accessible form inputs with proper focus and validation states
             </p>
           </div>
@@ -381,7 +344,7 @@ export default function DesignSystemDemo() {
 
           {/* Checkbox */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <h3 className="text-sm font-medium text-muted-foreground">
               Checkboxes
             </h3>
             <div className="space-y-3">
@@ -423,7 +386,7 @@ export default function DesignSystemDemo() {
 
           {/* Radio Group */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <h3 className="text-sm font-medium text-muted-foreground">
               Radio Group
             </h3>
             <RadioGroup value={radioValue} onValueChange={setRadioValue}>
@@ -450,7 +413,7 @@ export default function DesignSystemDemo() {
 
           {/* Switch */}
           <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <h3 className="text-sm font-medium text-muted-foreground">
               Switch Toggle
             </h3>
             <div className="space-y-3">
@@ -494,13 +457,13 @@ export default function DesignSystemDemo() {
         {/* Select Dropdown */}
         <section
           id="select"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Select Dropdown
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Accessible select menus with keyboard navigation
             </p>
           </div>
@@ -539,20 +502,20 @@ export default function DesignSystemDemo() {
         {/* Badges */}
         <section
           id="badges"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Badges
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Status indicators and labels with various styles
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 Variants
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -566,22 +529,18 @@ export default function DesignSystemDemo() {
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
                 Use Cases
               </h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Status:
-                  </span>
+                  <span className="text-sm text-muted-foreground">Status:</span>
                   <Badge variant="success">Active</Badge>
                   <Badge variant="warning">Pending</Badge>
                   <Badge variant="destructive">Inactive</Badge>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Role:
-                  </span>
+                  <span className="text-sm text-muted-foreground">Role:</span>
                   <Badge variant="default">Admin</Badge>
                   <Badge variant="secondary">User</Badge>
                   <Badge variant="outline">Guest</Badge>
@@ -594,13 +553,13 @@ export default function DesignSystemDemo() {
         {/* Cards */}
         <section
           id="cards"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Cards
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Container components for grouping related content
             </p>
           </div>
@@ -614,7 +573,7 @@ export default function DesignSystemDemo() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   This is the card content area. You can place any content here.
                 </p>
               </CardContent>
@@ -626,7 +585,7 @@ export default function DesignSystemDemo() {
                 <CardDescription>Includes action buttons</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   Card content goes here with additional information.
                 </p>
               </CardContent>
@@ -646,10 +605,10 @@ export default function DesignSystemDemo() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-3xl font-bold text-card-foreground">
                   1,234
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Total users this month
                 </p>
               </CardContent>
@@ -660,13 +619,13 @@ export default function DesignSystemDemo() {
         {/* Alerts */}
         <section
           id="alerts"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Alerts
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Contextual feedback messages for user actions
             </p>
           </div>
@@ -717,13 +676,13 @@ export default function DesignSystemDemo() {
         {/* Dialog/Modal */}
         <section
           id="dialog"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Dialog / Modal
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Overlay windows for focused user interactions
             </p>
           </div>
@@ -797,38 +756,109 @@ export default function DesignSystemDemo() {
         {/* Separator */}
         <section
           id="separator"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Separator
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Visual dividers for content sections
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-muted-foreground">
                 Content above separator
               </p>
               <Separator className="my-4" />
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-muted-foreground">
                 Content below separator
               </p>
             </div>
 
             <div className="flex h-20 items-center gap-4">
               <div className="flex-1">
-                <p className="text-sm text-gray-700 dark:text-gray-300">Left</p>
+                <p className="text-sm text-muted-foreground">Left</p>
               </div>
               <Separator orientation="vertical" />
               <div className="flex-1">
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  Right
-                </p>
+                <p className="text-sm text-muted-foreground">Right</p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Scroll Area */}
+        <section
+          id="scroll-area"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
+        >
+          <div>
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
+              Scroll Area
+            </h2>
+            <p className="text-muted-foreground">
+              Customizable scrollable areas with scrollbars
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Basic Scroll Area
+              </Label>
+              <ScrollArea className="h-32 w-full rounded-md border border-border p-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-card-foreground">
+                    This is a scrollable area. You can scroll through the
+                    content when it exceeds the container height.
+                  </p>
+                  <p className="text-sm text-card-foreground">
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
+                    do eiusmod tempor incididunt ut labore et dolore magna
+                    aliqua.
+                  </p>
+                  <p className="text-sm text-card-foreground">
+                    Ut enim ad minim veniam, quis nostrud exercitation ullamco
+                    laboris nisi ut aliquip ex ea commodo consequat.
+                  </p>
+                  <p className="text-sm text-card-foreground">
+                    Duis aute irure dolor in reprehenderit in voluptate velit
+                    esse cillum dolore eu fugiat nulla pariatur.
+                  </p>
+                  <p className="text-sm text-card-foreground">
+                    Excepteur sint occaecat cupidatat non proident, sunt in
+                    culpa qui officia deserunt mollit anim id est laborum.
+                  </p>
+                </div>
+              </ScrollArea>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Horizontal Scroll
+              </Label>
+              <ScrollArea className="h-32 w-full rounded-md border border-border">
+                <div className="flex space-x-4 p-4" style={{ width: "600px" }}>
+                  <div className="shrink-0 w-32 h-20 bg-primary-500 rounded flex items-center justify-center text-primary-foreground text-sm font-medium">
+                    Item 1
+                  </div>
+                  <div className="shrink-0 w-32 h-20 bg-secondary rounded flex items-center justify-center text-secondary-foreground text-sm font-medium">
+                    Item 2
+                  </div>
+                  <div className="shrink-0 w-32 h-20 bg-accent rounded flex items-center justify-center text-accent-foreground text-sm font-medium">
+                    Item 3
+                  </div>
+                  <div className="shrink-0 w-32 h-20 bg-muted rounded flex items-center justify-center text-muted-foreground text-sm font-medium">
+                    Item 4
+                  </div>
+                  <div className="shrink-0 w-32 h-20 bg-primary-600 rounded flex items-center justify-center text-primary-foreground text-sm font-medium">
+                    Item 5
+                  </div>
+                </div>
+              </ScrollArea>
             </div>
           </div>
         </section>
@@ -836,13 +866,13 @@ export default function DesignSystemDemo() {
         {/* Dropdown Menu */}
         <section
           id="dropdown"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Dropdown Menu
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Accessible dropdown menus with keyboard navigation
             </p>
           </div>
@@ -879,13 +909,13 @@ export default function DesignSystemDemo() {
         {/* Toast Notifications */}
         <section
           id="toasts"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Toast Notifications
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Non-intrusive notifications with automatic dismissal
             </p>
           </div>
@@ -951,73 +981,67 @@ export default function DesignSystemDemo() {
         {/* Typography */}
         <section
           id="typography"
-          className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 space-y-6"
+          className="bg-card rounded-lg shadow-lg p-8 space-y-6"
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-2xl font-semibold text-card-foreground mb-2">
               Typography
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-muted-foreground">
               Consistent text styles across the application
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">
+              <h1 className="text-4xl font-bold text-card-foreground">
                 Heading 1
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 text-4xl font-bold
               </p>
             </div>
 
             <div>
-              <h2 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">
+              <h2 className="text-3xl font-semibold text-card-foreground">
                 Heading 2
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 text-3xl font-semibold
               </p>
             </div>
 
             <div>
-              <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              <h3 className="text-2xl font-semibold text-card-foreground">
                 Heading 3
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 text-2xl font-semibold
               </p>
             </div>
 
             <div>
-              <p className="text-base text-gray-900 dark:text-gray-100">
+              <p className="text-base text-card-foreground">
                 Body text - Lorem ipsum dolor sit amet, consectetur adipiscing
                 elit. Sed do eiusmod tempor incididunt ut labore et dolore magna
                 aliqua.
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                text-base
-              </p>
+              <p className="text-sm text-muted-foreground">text-base</p>
             </div>
 
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 Small text - Lorem ipsum dolor sit amet, consectetur adipiscing
                 elit.
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                text-sm
-              </p>
+              <p className="text-sm text-muted-foreground">text-sm</p>
             </div>
 
             <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 Extra small text - Metadata and captions
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                text-xs
-              </p>
+              <p className="text-sm text-muted-foreground">text-xs</p>
             </div>
           </div>
         </section>

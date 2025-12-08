@@ -9,17 +9,17 @@
   /* ============================================
      COLOR PALETTE
      ============================================ */
-  
+
   /* Primary Colors */
   --color-primary-50: oklch(0.98 0.01 240);
   --color-primary-100: oklch(0.95 0.02 240);
-  --color-primary-200: oklch(0.90 0.04 240);
+  --color-primary-200: oklch(0.9 0.04 240);
   --color-primary-300: oklch(0.82 0.08 240);
   --color-primary-400: oklch(0.72 0.15 240);
   --color-primary-500: oklch(0.62 0.25 255);
   --color-primary-600: oklch(0.55 0.27 260);
   --color-primary-700: oklch(0.48 0.26 265);
-  --color-primary-800: oklch(0.40 0.22 265);
+  --color-primary-800: oklch(0.4 0.22 265);
   --color-primary-900: oklch(0.33 0.18 265);
   --color-primary-950: oklch(0.21 0.12 265);
 
@@ -28,7 +28,7 @@
   --color-success-100: oklch(0.95 0.04 150);
   --color-success-500: oklch(0.65 0.22 145);
   --color-success-600: oklch(0.55 0.22 145);
-  --color-success-700: oklch(0.48 0.20 145);
+  --color-success-700: oklch(0.48 0.2 145);
   --color-success-900: oklch(0.35 0.15 145);
 
   /* Warning Colors */
@@ -53,20 +53,20 @@
   --color-info-500: oklch(0.65 0.15 195);
   --color-info-600: oklch(0.55 0.15 195);
   --color-info-700: oklch(0.48 0.13 195);
-  --color-info-900: oklch(0.35 0.10 195);
+  --color-info-900: oklch(0.35 0.1 195);
 
   /* Gray Neutral Palette */
-  --color-gray-50: oklch(0.99 0.00 240);
-  --color-gray-100: oklch(0.97 0.00 240);
-  --color-gray-200: oklch(0.93 0.00 240);
-  --color-gray-300: oklch(0.87 0.00 240);
-  --color-gray-400: oklch(0.68 0.00 240);
-  --color-gray-500: oklch(0.52 0.00 240);
+  --color-gray-50: oklch(0.99 0 240);
+  --color-gray-100: oklch(0.97 0 240);
+  --color-gray-200: oklch(0.93 0 240);
+  --color-gray-300: oklch(0.87 0 240);
+  --color-gray-400: oklch(0.68 0 240);
+  --color-gray-500: oklch(0.52 0 240);
   --color-gray-600: oklch(0.42 0.01 240);
   --color-gray-700: oklch(0.35 0.01 240);
   --color-gray-800: oklch(0.26 0.01 240);
   --color-gray-900: oklch(0.18 0.01 240);
-  --color-gray-950: oklch(0.10 0.01 240);
+  --color-gray-950: oklch(0.1 0.01 240);
 
   /* Status Colors */
   --color-status-not-started: var(--color-gray-500);
@@ -76,7 +76,7 @@
   --color-status-with-lecturer: oklch(0.65 0.25 295);
   --color-status-under-grading: oklch(0.65 0.25 270);
   --color-status-graded: oklch(0.55 0.18 180);
-  --color-status-returned: oklch(0.65 0.20 40);
+  --color-status-returned: oklch(0.65 0.2 40);
   --color-status-completed: oklch(0.55 0.22 160);
   --color-status-archived: oklch(0.55 0.02 240);
 
@@ -141,37 +141,39 @@
      ============================================ */
   .dark {
     --background: oklch(0.15 0.01 240);
-    --foreground: oklch(0.98 0.00 240);
+    --foreground: oklch(0.98 0 240);
 
-    --card: oklch(0.20 0.01 240);
-    --card-foreground: oklch(0.98 0.00 240);
+    --card: oklch(0.2 0.01 240);
+    --card-foreground: oklch(0.98 0 240);
 
     --popover: oklch(0.22 0.01 240);
-    --popover-foreground: oklch(0.98 0.00 240);
+    --popover-foreground: oklch(0.98 0 240);
 
     --primary: var(--color-primary-600);
-    --primary-foreground: oklch(0.98 0.00 240);
+    --primary-foreground: oklch(0.98 0 240);
 
     --secondary: oklch(0.22 0.01 240);
-    --secondary-foreground: oklch(0.98 0.00 240);
+    --secondary-foreground: oklch(0.98 0 240);
 
     --muted: oklch(0.22 0.01 240);
     --muted-foreground: var(--color-gray-400);
 
     --accent: oklch(0.22 0.01 240);
-    --accent-foreground: oklch(0.98 0.00 240);
+    --accent-foreground: oklch(0.98 0 240);
 
     --destructive: var(--color-error-600);
-    --destructive-foreground: oklch(0.98 0.00 240);
+    --destructive-foreground: oklch(0.98 0 240);
 
-    --border: oklch(0.30 0.01 240);
-    --input: oklch(0.30 0.01 240);
+    --border: oklch(0.3 0.01 240);
+    --input: oklch(0.3 0.01 240);
     --ring: var(--color-primary-700);
   }
 
   /* Base Styles */
   * {
     border-color: var(--border);
+    transition: background-color 0.2s ease, color 0.2s ease,
+      border-color 0.2s ease;
   }
 
   body {
