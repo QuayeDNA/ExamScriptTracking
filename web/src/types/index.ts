@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // User & Auth Types
 export const Role = {
   ADMIN: "ADMIN",
@@ -179,7 +180,7 @@ export interface PasswordResetWithTokenResponse {
 // User Statistics Types
 export interface UsersByRole {
   role: Role;
-  _count: number;
+  count: number;
 }
 
 export interface UserStatistics {
@@ -341,14 +342,17 @@ export interface AuthContextType {
 
 // Analytics Types
 export interface AnalyticsOverview {
-  totalSessions: number;
-  activeTransfers: number;
-  completedTransfers: number;
-  discrepancies: number;
+  overview: {
+    totalExams: number;
+    examsThisMonth: number;
+    activeBatches: number;
+    totalHandlers: number;
+    totalDiscrepancies: number;
+    discrepancyRate: number;
+    avgTransferTimeHours: number;
+  };
   trends: {
-    sessions: number;
-    transfers: number;
-    discrepancies: number;
+    examsByDay: Record<string, number>;
   };
 }
 

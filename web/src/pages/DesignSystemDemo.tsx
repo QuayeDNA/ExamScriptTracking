@@ -42,6 +42,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -56,6 +68,12 @@ import {
   Terminal,
   AlertTriangle,
   CheckCircle2,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  FileText,
+  TrendingUp,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -143,6 +161,18 @@ export default function DesignSystemDemo() {
               <a href="#typography" className="text-primary hover:underline">
                 → Typography
               </a>
+              <a href="#avatar" className="text-primary hover:underline">
+                → Avatar
+              </a>
+              <a href="#table" className="text-primary hover:underline">
+                → Table
+              </a>
+              <a href="#skeleton" className="text-primary hover:underline">
+                → Skeleton
+              </a>
+              <a href="#tabs" className="text-primary hover:underline">
+                → Tabs
+              </a>
             </div>
           </CardContent>
         </Card>
@@ -175,7 +205,7 @@ export default function DesignSystemDemo() {
             <div className="p-4 bg-success/10 rounded-lg">
               <h3 className="font-medium text-success">Success Colors</h3>
               <div className="mt-2 space-y-2">
-                <div className="h-8 bg-success rounded"></div>
+                <div className="h-8 bg-success-500 rounded"></div>
                 <div className="h-8 bg-success-600 rounded"></div>
                 <div className="h-8 bg-success-700 rounded"></div>
               </div>
@@ -184,7 +214,7 @@ export default function DesignSystemDemo() {
             <div className="p-4 bg-error/10 rounded-lg">
               <h3 className="font-medium text-error">Error Colors</h3>
               <div className="mt-2 space-y-2">
-                <div className="h-8 bg-error rounded"></div>
+                <div className="h-8 bg-error-500 rounded"></div>
                 <div className="h-8 bg-error-600 rounded"></div>
                 <div className="h-8 bg-error-700 rounded"></div>
               </div>
@@ -1044,6 +1074,633 @@ export default function DesignSystemDemo() {
               <p className="text-sm text-muted-foreground">text-xs</p>
             </div>
           </div>
+        </section>
+
+        {/* Avatar Component */}
+        <section id="avatar" className="scroll-mt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Avatar Component</CardTitle>
+              <CardDescription>
+                User profile images with fallbacks and status indicators
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Basic Avatars */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Basic Avatars
+                </h3>
+                <div className="flex items-center gap-4">
+                  <Avatar>
+                    <AvatarImage
+                      src="https://github.com/shadcn.png"
+                      alt="@shadcn"
+                    />
+                    <AvatarFallback>CN</AvatarFallback>
+                  </Avatar>
+                  <Avatar>
+                    <AvatarFallback>JD</AvatarFallback>
+                  </Avatar>
+                  <Avatar>
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+              </div>
+
+              {/* Avatar Sizes */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Avatar Sizes
+                </h3>
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">SM</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback>MD</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback>LG</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="h-16 w-16">
+                    <AvatarFallback className="text-lg">XL</AvatarFallback>
+                  </Avatar>
+                </div>
+              </div>
+
+              {/* Avatar with Badge */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Avatar with Status Badge
+                </h3>
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <Avatar>
+                      <AvatarFallback>JD</AvatarFallback>
+                    </Avatar>
+                    <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-success ring-2 ring-background" />
+                  </div>
+                  <div className="relative">
+                    <Avatar>
+                      <AvatarFallback>AB</AvatarFallback>
+                    </Avatar>
+                    <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-warning ring-2 ring-background" />
+                  </div>
+                  <div className="relative">
+                    <Avatar>
+                      <AvatarFallback>XY</AvatarFallback>
+                    </Avatar>
+                    <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-error ring-2 ring-background" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Avatar Group */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Avatar Group
+                </h3>
+                <div className="flex -space-x-4">
+                  <Avatar className="border-2 border-background">
+                    <AvatarFallback>JD</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="border-2 border-background">
+                    <AvatarFallback>AB</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="border-2 border-background">
+                    <AvatarFallback>XY</AvatarFallback>
+                  </Avatar>
+                  <Avatar className="border-2 border-background">
+                    <AvatarFallback className="text-xs">+3</AvatarFallback>
+                  </Avatar>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Table Component */}
+        <section id="table" className="scroll-mt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Table Component</CardTitle>
+              <CardDescription>
+                Structured data display with sorting and styling
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Basic Table */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Basic Table
+                </h3>
+                <Table>
+                  <TableCaption>A list of recent transactions</TableCaption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="font-medium">INV001</TableCell>
+                      <TableCell>
+                        <Badge variant="success">Paid</Badge>
+                      </TableCell>
+                      <TableCell>Credit Card</TableCell>
+                      <TableCell className="text-right">$250.00</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">INV002</TableCell>
+                      <TableCell>
+                        <Badge variant="warning">Pending</Badge>
+                      </TableCell>
+                      <TableCell>PayPal</TableCell>
+                      <TableCell className="text-right">$150.00</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell className="font-medium">INV003</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">Unpaid</Badge>
+                      </TableCell>
+                      <TableCell>Bank Transfer</TableCell>
+                      <TableCell className="text-right">$350.00</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Users Table */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Users Table with Avatars
+                </h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>JD</AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">John Doe</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>john@example.com</TableCell>
+                      <TableCell>
+                        <Badge variant="default">Admin</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-success" />
+                          <span className="text-sm">Active</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>AB</AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">Alice Brown</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>alice@example.com</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">Lecturer</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-success" />
+                          <span className="text-sm">Active</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>RM</AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">Robert Miller</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>robert@example.com</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">Invigilator</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                          <span className="text-sm">Inactive</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Skeleton Component */}
+        <section id="skeleton" className="scroll-mt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Skeleton Component</CardTitle>
+              <CardDescription>
+                Loading placeholders that match your content structure
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Text Skeletons */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Text Skeletons
+                </h3>
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-64" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              </div>
+
+              {/* Card Skeleton */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Card Skeleton
+                </h3>
+                <Card>
+                  <CardHeader className="space-y-2">
+                    <Skeleton className="h-6 w-48" />
+                    <Skeleton className="h-4 w-full" />
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                    <div className="flex gap-2">
+                      <Skeleton className="h-10 w-24" />
+                      <Skeleton className="h-10 w-24" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* User Card Skeleton */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  User Card Skeleton
+                </h3>
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Row Skeleton */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Table Row Skeleton
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-6 w-20" />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Tabs Component */}
+        <section id="tabs" className="scroll-mt-20">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tabs Component</CardTitle>
+              <CardDescription>
+                Organize content into switchable panels
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Basic Tabs */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Basic Tabs
+                </h3>
+                <Tabs defaultValue="account" className="w-full">
+                  <TabsList>
+                    <TabsTrigger value="account">Account</TabsTrigger>
+                    <TabsTrigger value="password">Password</TabsTrigger>
+                    <TabsTrigger value="notifications">
+                      Notifications
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="account" className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Name</Label>
+                      <Input id="name" placeholder="John Doe" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                    <Button>Save Changes</Button>
+                  </TabsContent>
+                  <TabsContent value="password" className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="current">Current Password</Label>
+                      <Input id="current" type="password" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new">New Password</Label>
+                      <Input id="new" type="password" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm">Confirm Password</Label>
+                      <Input id="confirm" type="password" />
+                    </div>
+                    <Button>Update Password</Button>
+                  </TabsContent>
+                  <TabsContent value="notifications" className="space-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Email Notifications</p>
+                          <p className="text-sm text-muted-foreground">
+                            Receive notifications via email
+                          </p>
+                        </div>
+                        <Switch />
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Push Notifications</p>
+                          <p className="text-sm text-muted-foreground">
+                            Receive push notifications
+                          </p>
+                        </div>
+                        <Switch />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* Icon Tabs */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Tabs with Icons
+                </h3>
+                <Tabs defaultValue="overview" className="w-full">
+                  <TabsList>
+                    <TabsTrigger value="overview" className="gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      Overview
+                    </TabsTrigger>
+                    <TabsTrigger value="analytics" className="gap-2">
+                      <FileText className="h-4 w-4" />
+                      Analytics
+                    </TabsTrigger>
+                    <TabsTrigger value="reports" className="gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Reports
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="overview" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Overview</CardTitle>
+                        <CardDescription>
+                          Summary of key metrics and data
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">
+                          This tab shows an overview of your dashboard with key
+                          performance indicators and recent activity.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                  <TabsContent value="analytics" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Analytics</CardTitle>
+                        <CardDescription>
+                          Detailed analytics and insights
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">
+                          View detailed analytics, charts, and graphs of your
+                          data trends over time.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                  <TabsContent value="reports" className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Reports</CardTitle>
+                        <CardDescription>
+                          Generate and download reports
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-sm text-muted-foreground">
+                          Access historical reports and generate custom reports
+                          based on your selected criteria.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              </div>
+
+              {/* Nested Content */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-card-foreground">
+                  Tabs with Rich Content
+                </h3>
+                <Tabs defaultValue="info" className="w-full">
+                  <TabsList>
+                    <TabsTrigger value="info">Info</TabsTrigger>
+                    <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                    <TabsTrigger value="activity">Activity</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="info" className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Card>
+                        <CardHeader className="flex flex-row items-center gap-4">
+                          <Avatar>
+                            <AvatarFallback>
+                              <User className="h-4 w-4" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <CardTitle className="text-base">
+                              John Doe
+                            </CardTitle>
+                            <CardDescription>Software Engineer</CardDescription>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <span>john.doe@example.com</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <span>+1 (555) 123-4567</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span>San Francisco, CA</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Bio</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground">
+                            Passionate developer with 5+ years of experience in
+                            building web applications. Specializes in React,
+                            TypeScript, and modern web technologies.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="contacts">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Role</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="font-medium">
+                            Alice Johnson
+                          </TableCell>
+                          <TableCell>alice@example.com</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">Manager</Badge>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">
+                            Bob Smith
+                          </TableCell>
+                          <TableCell>bob@example.com</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">Developer</Badge>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
+                  <TabsContent value="activity" className="space-y-4">
+                    <div className="space-y-4">
+                      <div className="flex gap-4">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            JD
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium">
+                            Created a new task
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            2 hours ago
+                          </p>
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="flex gap-4">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            JD
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium">
+                            Updated project status
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            5 hours ago
+                          </p>
+                        </div>
+                      </div>
+                      <Separator />
+                      <div className="flex gap-4">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            JD
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium">
+                            Commented on a document
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Yesterday
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            </CardContent>
+          </Card>
         </section>
       </div>
     </div>

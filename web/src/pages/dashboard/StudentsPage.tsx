@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import {
   studentsApi,
   type Student,
   type CreateStudentData,
@@ -21,11 +15,43 @@ import {
   Pencil,
   Trash2,
   FileDown,
-  X,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-
-const columnHelper = createColumnHelper<Student>();
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 export default function StudentsPage() {
   const { user } = useAuthStore();
@@ -87,12 +113,12 @@ export default function StudentsPage() {
     mutationFn: (data: CreateStudentData) => studentsApi.createStudent(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
-      alert("Student created successfully");
+      toast.success("Student created successfully");
       setIsCreateModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to create student");
+      toast.error(error.message || "Failed to create student");
     },
   });
 
@@ -102,12 +128,12 @@ export default function StudentsPage() {
       studentsApi.updateStudent(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
-      alert("Student updated successfully");
+      toast.success("Student updated successfully");
       setIsEditModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to update student");
+      toast.error(error.message || "Failed to update student");
     },
   });
 
@@ -116,12 +142,12 @@ export default function StudentsPage() {
     mutationFn: (id: string) => studentsApi.deleteStudent(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
-      alert("Student deleted successfully");
+      toast.success("Student deleted successfully");
       setIsDeleteModalOpen(false);
       setSelectedStudent(null);
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to delete student");
+      toast.error(error.message || "Failed to delete student");
     },
   });
 
@@ -206,14 +232,14 @@ export default function StudentsPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
-      alert(
+      toast.success(
         `Successfully imported ${data.success.length} students. ${data.failed.length} failed.`
       );
       setIsBulkImportModalOpen(false);
       setCsvFile(null);
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to import students");
+      toast.error(error.message || "Failed to import students");
     },
   });
 
@@ -225,7 +251,7 @@ export default function StudentsPage() {
       setSelectedStudent(student);
       setIsQRModalOpen(true);
     } catch (error) {
-      alert((error as Error).message || "Failed to fetch QR code");
+      toast.error((error as Error).message || "Failed to fetch QR code");
     }
   };
 
@@ -338,423 +364,425 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Table columns
-  const columns = [
-    columnHelper.accessor("indexNumber", {
-      header: "Index Number",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("firstName", {
-      header: "First Name",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("lastName", {
-      header: "Last Name",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("program", {
-      header: "Program",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("level", {
-      header: "Level",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.display({
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleShowQRCode(row.original)}
-            className="p-1 hover:bg-gray-100 rounded"
-            title="View QR Code"
-          >
-            <QrCode className="h-4 w-4" />
-          </button>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => openEditModal(row.original)}
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Edit"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => openDeleteModal(row.original)}
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </button>
-            </>
-          )}
-        </div>
-      ),
-    }),
-  ];
-
-  const table = useReactTable({
-    data: studentsData?.students || [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Students</h1>
-          <p className="text-gray-500 mt-1">
-            Manage student records and QR codes
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-2"
-          >
-            <FileDown className="h-4 w-4" />
-            Export CSV
-          </button>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => setIsBulkImportModalOpen(true)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Bulk Import
-              </button>
-              <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Add Student
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by index number or name..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Students</CardTitle>
+              <CardDescription>
+                Manage student records and QR codes
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleExportCSV} variant="outline">
+                <FileDown className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              {isAdmin && (
+                <>
+                  <Button
+                    onClick={() => setIsBulkImportModalOpen(true)}
+                    variant="outline"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Bulk Import
+                  </Button>
+                  <Button onClick={() => setIsCreateModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Student
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-          <select
-            value={programFilter}
-            onChange={(e) => {
-              setProgramFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Programs</option>
-            {programsData?.programs.map((program) => (
-              <option key={program} value={program}>
-                {program}
-              </option>
-            ))}
-          </select>
-          <select
-            value={levelFilter}
-            onChange={(e) => {
-              setLevelFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Levels</option>
-            {levelsData?.levels.map((level) => (
-              <option key={level} value={level.toString()}>
-                Level {level}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+        </CardHeader>
+
+        {/* Filters */}
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by index number or name..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10"
+              />
+            </div>
+            <div className="space-y-1">
+              <Select
+                value={programFilter || undefined}
+                onValueChange={(value) => {
+                  setProgramFilter(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All Programs" />
+                </SelectTrigger>
+                <SelectContent>
+                  {programsData?.programs.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {programFilter && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setProgramFilter("");
+                    setPage(1);
+                  }}
+                  className="h-auto p-0 text-xs"
+                >
+                  Clear filter
+                </Button>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Select
+                value={levelFilter || undefined}
+                onValueChange={(value) => {
+                  setLevelFilter(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="All Levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  {levelsData?.levels.map((level) => (
+                    <SelectItem key={level} value={level.toString()}>
+                      Level {level}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {levelFilter && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setLevelFilter("");
+                    setPage(1);
+                  }}
+                  className="h-auto p-0 text-xs"
+                >
+                  Clear filter
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center">Loading students...</div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th
-                          key={header.id}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50">
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          className="px-6 py-4 whitespace-nowrap"
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">
+              Loading students...
             </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Index Number</TableHead>
+                    <TableHead>First Name</TableHead>
+                    <TableHead>Last Name</TableHead>
+                    <TableHead>Program</TableHead>
+                    <TableHead>Level</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {studentsData?.students.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">
+                        {student.indexNumber}
+                      </TableCell>
+                      <TableCell>{student.firstName}</TableCell>
+                      <TableCell>{student.lastName}</TableCell>
+                      <TableCell>{student.program}</TableCell>
+                      <TableCell>{student.level}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            onClick={() => handleShowQRCode(student)}
+                            variant="ghost"
+                            size="icon"
+                            title="View QR Code"
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
+                          {isAdmin && (
+                            <>
+                              <Button
+                                onClick={() => openEditModal(student)}
+                                variant="ghost"
+                                size="icon"
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                onClick={() => openDeleteModal(student)}
+                                variant="ghost"
+                                size="icon"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-            {/* Pagination */}
-            {studentsData && studentsData.pagination.pages > 1 && (
-              <div className="px-6 py-4 border-t flex items-center justify-between">
-                <div className="text-sm text-gray-500">
-                  Showing {(page - 1) * limit + 1} to{" "}
-                  {Math.min(page * limit, studentsData.pagination.total)} of{" "}
-                  {studentsData.pagination.total} students
+              {/* Pagination */}
+              {studentsData && studentsData.pagination.pages > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * limit + 1} to{" "}
+                    {Math.min(page * limit, studentsData.pagination.total)} of{" "}
+                    {studentsData.pagination.total} students
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Previous
+                    </Button>
+                    <span className="px-4 py-2 text-sm">
+                      Page {page} of {studentsData.pagination.pages}
+                    </span>
+                    <Button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === studentsData.pagination.pages}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-4 py-1 text-sm">
-                    Page {page} of {studentsData.pagination.pages}
-                  </span>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === studentsData.pagination.pages}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Create/Edit Student Modal */}
-      {(isCreateModalOpen || isEditModalOpen) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">
-                {isEditModalOpen ? "Edit Student" : "Add New Student"}
-              </h2>
-              <button
-                onClick={() => {
-                  setIsCreateModalOpen(false);
-                  setIsEditModalOpen(false);
-                  resetForm();
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
+      <Dialog
+        open={isCreateModalOpen || isEditModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreateModalOpen(false);
+            setIsEditModalOpen(false);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isEditModalOpen ? "Edit Student" : "Add New Student"}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditModalOpen
+                ? "Update student information below."
+                : "Fill in the details to create a new student record."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="indexNumber">Index Number</Label>
+              <Input
+                id="indexNumber"
+                type="text"
+                value={formData.indexNumber}
+                onChange={(e) =>
+                  setFormData({ ...formData, indexNumber: e.target.value })
+                }
+                required
+              />
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Index Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.indexNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, indexNumber: e.target.value })
-                  }
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  First Name
-                </label>
-                <input
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
                   type="text"
                   value={formData.firstName}
                   onChange={(e) =>
                     setFormData({ ...formData, firstName: e.target.value })
                   }
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Last Name
-                </label>
-                <input
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
                   type="text"
                   value={formData.lastName}
                   onChange={(e) =>
                     setFormData({ ...formData, lastName: e.target.value })
                   }
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Program
-                </label>
-                <input
-                  type="text"
-                  value={formData.program}
-                  onChange={(e) =>
-                    setFormData({ ...formData, program: e.target.value })
-                  }
-                  required
-                  placeholder="e.g., Computer Science"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Level</label>
-                <select
-                  value={formData.level.toString()}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      level: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="100">Level 100</option>
-                  <option value="200">Level 200</option>
-                  <option value="300">Level 300</option>
-                  <option value="400">Level 400</option>
-                </select>
-              </div>
-              <div className="flex gap-2 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setIsEditModalOpen(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    createMutation.isPending || updateMutation.isPending
-                  }
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isEditModalOpen ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Delete Student</h2>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete {selectedStudent?.firstName}{" "}
-              {selectedStudent?.lastName}? This action cannot be undone.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="program">Program</Label>
+              <Input
+                id="program"
+                type="text"
+                value={formData.program}
+                onChange={(e) =>
+                  setFormData({ ...formData, program: e.target.value })
+                }
+                required
+                placeholder="e.g., Computer Science"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="level">Level</Label>
+              <Select
+                value={formData.level.toString()}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    level: parseInt(value),
+                  })
+                }
+              >
+                <SelectTrigger id="level">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="100">Level 100</SelectItem>
+                  <SelectItem value="200">Level 200</SelectItem>
+                  <SelectItem value="300">Level 300</SelectItem>
+                  <SelectItem value="400">Level 400</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setIsEditModalOpen(false);
+                  resetForm();
+                }}
               >
                 Cancel
-              </button>
-              <button
-                onClick={() =>
-                  selectedStudent && deleteMutation.mutate(selectedStudent.id)
-                }
-                disabled={deleteMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
               >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                {isEditModalOpen ? "Update" : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Student
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedStudent?.firstName}{" "}
+              {selectedStudent?.lastName}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                selectedStudent && deleteMutation.mutate(selectedStudent.id)
+              }
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bulk Import Modal */}
-      {isBulkImportModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Bulk Import Students</h2>
-              <button
-                onClick={() => {
-                  setIsBulkImportModalOpen(false);
-                  setCsvFile(null);
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                Upload a CSV file with columns: indexNumber, firstName,
-                lastName, program, level
-              </p>
-              <button
+      <Dialog
+        open={isBulkImportModalOpen}
+        onOpenChange={(open) => {
+          setIsBulkImportModalOpen(open);
+          if (!open) setCsvFile(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Students</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file with columns: indexNumber, firstName, lastName,
+              program, level
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Button
                 type="button"
+                variant="link"
                 onClick={handleDownloadTemplate}
-                className="text-sm text-blue-600 hover:text-blue-700 underline mb-2"
+                className="h-auto p-0 text-sm"
               >
+                <FileDown className="h-3 w-3 mr-1" />
                 Download CSV Template
-              </button>
+              </Button>
             </div>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-              className="w-full mb-4 text-sm"
-            />
-            <div className="text-xs text-gray-500 mb-4 p-3 bg-gray-50 rounded">
-              <strong>CSV Format Requirements:</strong>
+            <div>
+              <Label htmlFor="csvFile">CSV File</Label>
+              <Input
+                id="csvFile"
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                className="cursor-pointer"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
+              <strong className="text-foreground">
+                CSV Format Requirements:
+              </strong>
               <ul className="list-disc ml-4 mt-1 space-y-1">
                 <li>First row must contain headers (case-insensitive)</li>
                 <li>
@@ -765,72 +793,57 @@ export default function StudentsPage() {
                 <li>Empty rows will be skipped</li>
               </ul>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setIsBulkImportModalOpen(false);
-                  setCsvFile(null);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkImport}
-                disabled={!csvFile || bulkImportMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                Import
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsBulkImportModalOpen(false);
+                setCsvFile(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkImport}
+              disabled={!csvFile || bulkImportMutation.isPending}
+            >
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Modal */}
-      {isQRModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Student QR Code</h2>
-              <button
-                onClick={() => setIsQRModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
+      <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Student QR Code</DialogTitle>
+            <DialogDescription>
               {selectedStudent?.indexNumber} - {selectedStudent?.firstName}{" "}
               {selectedStudent?.lastName}
-            </p>
-            <div className="flex flex-col items-center mb-4">
-              {qrCodeData && (
-                <img
-                  src={qrCodeData}
-                  alt="Student QR Code"
-                  className="w-64 h-64"
-                />
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsQRModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleDownloadQRCode}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Download QR Code
-              </button>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-4">
+            {qrCodeData && (
+              <img
+                src={qrCodeData}
+                alt="Student QR Code"
+                className="w-64 h-64 border rounded-lg"
+              />
+            )}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsQRModalOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handleDownloadQRCode}>
+              <Download className="h-4 w-4 mr-2" />
+              Download QR Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

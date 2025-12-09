@@ -98,7 +98,7 @@ export default function ProfilePictureUpload({
               className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
             />
           ) : (
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-gray-300">
+            <div className="w-24 h-24 rounded-full bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold border-2 border-gray-300">
               {getInitials("User")}
             </div>
           )}
@@ -162,8 +162,8 @@ export default function ProfilePictureUpload({
             strokeLinejoin="round"
           />
         </svg>
-        <p className="mt-2 text-sm text-gray-600">
-          <span className="font-medium text-blue-600">Click to upload</span> or
+        <p className="mt-2 text-sm text-muted-foreground">
+          <span className="font-medium text-primary">Click to upload</span> or
           drag and drop
         </p>
       </div>

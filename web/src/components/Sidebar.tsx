@@ -32,11 +32,6 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
-    title: "My Sessions",
-    href: "/dashboard/sessions",
-    icon: FileText,
-  },
-  {
     title: "Students",
     href: "/dashboard/students",
     icon: GraduationCap,
@@ -93,7 +88,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex h-full w-64 flex-col bg-card border-r border-border">
+    <aside className="hidden md:flex h-full w-64 flex-col bg-card border-r border-border">
       {/* Logo Section */}
       <div className="flex h-16 items-center px-6 border-b border-border">
         <Link to="/dashboard" className="flex items-center gap-2">
@@ -124,7 +119,7 @@ export function Sidebar() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <Icon className="h-4 w-4 flex-shrink-0" />
+                <Icon className="h-4 w-4 shrink-0" />
                 <span className="flex-1">{item.title}</span>
                 {item.badge && (
                   <Badge variant="secondary" className="ml-auto">
@@ -159,7 +154,7 @@ export function Sidebar() {
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{item.title}</span>
                   </Link>
                 );
@@ -185,6 +180,6 @@ export function Sidebar() {
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

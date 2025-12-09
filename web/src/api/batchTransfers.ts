@@ -35,6 +35,7 @@ export interface BatchTransfer {
     role: string;
     email: string;
   };
+  resolutionNote : string;
 }
 
 export type TransferStatus =

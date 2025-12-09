@@ -13,7 +13,6 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import DashboardStatsPage from "@/pages/dashboard/DashboardStatsPage";
 import { UsersPage } from "@/pages/dashboard/UsersPage";
-import SessionsPage from "@/pages/dashboard/SessionsPage";
 import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
 import StudentsPage from "@/pages/dashboard/StudentsPage";
 import ExamSessionsPage from "@/pages/dashboard/ExamSessionsPage";
@@ -72,7 +71,6 @@ function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<DashboardLayout />}>
                   <Route index element={<DashboardStatsPage />} />
-                  <Route path="sessions" element={<SessionsPage />} />
                   <Route path="students" element={<StudentsPage />} />
                   <Route path="exam-sessions" element={<ExamSessionsPage />} />
                   <Route

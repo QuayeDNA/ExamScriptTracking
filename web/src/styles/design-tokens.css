@@ -99,41 +99,41 @@
 @layer base {
   :root {
     /* Background & Foreground */
-    --background: var(--color-gray-50);
-    --foreground: var(--color-gray-900);
+    --background: oklch(0.99 0 240);
+    --foreground: oklch(0.18 0.01 240);
 
     /* Card */
     --card: oklch(1 0 0);
-    --card-foreground: var(--color-gray-900);
+    --card-foreground: oklch(0.18 0.01 240);
 
     /* Popover */
     --popover: oklch(1 0 0);
-    --popover-foreground: var(--color-gray-900);
+    --popover-foreground: oklch(0.18 0.01 240);
 
     /* Primary (mapped to theme for utilities) */
-    --primary: var(--color-primary-500);
+    --primary: oklch(0.62 0.25 255);
     --primary-foreground: oklch(1 0 0);
 
     /* Secondary */
-    --secondary: var(--color-gray-100);
-    --secondary-foreground: var(--color-gray-900);
+    --secondary: oklch(0.97 0 240);
+    --secondary-foreground: oklch(0.18 0.01 240);
 
     /* Muted */
-    --muted: var(--color-gray-100);
-    --muted-foreground: var(--color-gray-500);
+    --muted: oklch(0.97 0 240);
+    --muted-foreground: oklch(0.52 0 240);
 
     /* Accent */
-    --accent: var(--color-gray-100);
-    --accent-foreground: var(--color-gray-900);
+    --accent: oklch(0.97 0 240);
+    --accent-foreground: oklch(0.18 0.01 240);
 
     /* Destructive */
-    --destructive: var(--color-error-500);
+    --destructive: oklch(0.62 0.25 25);
     --destructive-foreground: oklch(1 0 0);
 
     /* Border, Input, Ring */
-    --border: var(--color-gray-200);
-    --input: var(--color-gray-200);
-    --ring: var(--color-primary-500);
+    --border: oklch(0.93 0 240);
+    --input: oklch(0.93 0 240);
+    --ring: oklch(0.62 0.25 255);
   }
 
   /* ============================================
@@ -149,24 +149,24 @@
     --popover: oklch(0.22 0.01 240);
     --popover-foreground: oklch(0.98 0 240);
 
-    --primary: var(--color-primary-600);
+    --primary: oklch(0.55 0.27 260);
     --primary-foreground: oklch(0.98 0 240);
 
     --secondary: oklch(0.22 0.01 240);
     --secondary-foreground: oklch(0.98 0 240);
 
     --muted: oklch(0.22 0.01 240);
-    --muted-foreground: var(--color-gray-400);
+    --muted-foreground: oklch(0.68 0 240);
 
     --accent: oklch(0.22 0.01 240);
     --accent-foreground: oklch(0.98 0 240);
 
-    --destructive: var(--color-error-600);
+    --destructive: oklch(0.55 0.25 25);
     --destructive-foreground: oklch(0.98 0 240);
 
     --border: oklch(0.3 0.01 240);
     --input: oklch(0.3 0.01 240);
-    --ring: var(--color-primary-700);
+    --ring: oklch(0.48 0.26 265);
   }
 
   /* Base Styles */
@@ -217,6 +217,21 @@
   .bg-background {
     background-color: var(--background);
   }
+  .bg-input {
+    background-color: var(--input);
+  }
+  .bg-success {
+    background-color: var(--color-success-500);
+  }
+  .bg-warning {
+    background-color: var(--color-warning-500);
+  }
+  .bg-error {
+    background-color: var(--color-error-500);
+  }
+  .bg-info {
+    background-color: var(--color-info-500);
+  }
 
   /* Text utilities */
   .text-primary {
@@ -246,6 +261,18 @@
   .text-foreground {
     color: var(--foreground);
   }
+  .text-success {
+    color: var(--color-success-500);
+  }
+  .text-warning {
+    color: var(--color-warning-500);
+  }
+  .text-error {
+    color: var(--color-error-500);
+  }
+  .text-info {
+    color: var(--color-info-500);
+  }
 
   /* Border utilities */
   .border-input {
@@ -255,9 +282,19 @@
     border-color: var(--border);
   }
 
+  .bg-border {
+    background-color: var(--border);
+  }
+
   /* Ring utilities */
   .ring-ring {
     --tw-ring-color: var(--ring);
+  }
+  .ring-offset-background {
+    --tw-ring-offset-color: var(--background);
+  }
+  .ring-background {
+    --tw-ring-color: var(--background);
   }
 
   /* Hover state utilities */

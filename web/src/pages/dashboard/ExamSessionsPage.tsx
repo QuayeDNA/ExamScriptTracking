@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
+import { useNavigate } from "react-router-dom";
 import {
   examSessionsApi,
   type ExamSession,
@@ -22,14 +17,46 @@ import {
   Pencil,
   Trash2,
   FileDown,
-  X,
   Calendar,
   Eye,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { useNavigate } from "react-router-dom";
-
-const columnHelper = createColumnHelper<ExamSession>();
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
   { value: "NOT_STARTED", label: "Not Started" },
@@ -42,6 +69,26 @@ const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
   { value: "RETURNED", label: "Returned" },
   { value: "COMPLETED", label: "Completed" },
 ];
+
+const getStatusBadgeVariant = (
+  status: BatchStatus
+): "default" | "secondary" | "destructive" | "outline" => {
+  const variants: Record<
+    BatchStatus,
+    "default" | "secondary" | "destructive" | "outline"
+  > = {
+    NOT_STARTED: "secondary",
+    IN_PROGRESS: "default",
+    SUBMITTED: "outline",
+    IN_TRANSIT: "outline",
+    WITH_LECTURER: "outline",
+    UNDER_GRADING: "outline",
+    GRADED: "outline",
+    RETURNED: "outline",
+    COMPLETED: "secondary",
+  };
+  return variants[status] || "default";
+};
 
 export default function ExamSessionsPage() {
   const { user } = useAuthStore();
@@ -134,12 +181,12 @@ export default function ExamSessionsPage() {
       examSessionsApi.createExamSession(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["examSessions"] });
-      alert("Exam session created successfully");
+      toast.success("Exam session created successfully");
       setIsCreateModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to create exam session");
+      toast.error(error.message || "Failed to create exam session");
     },
   });
 
@@ -149,12 +196,12 @@ export default function ExamSessionsPage() {
       examSessionsApi.updateExamSession(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["examSessions"] });
-      alert("Exam session updated successfully");
+      toast.success("Exam session updated successfully");
       setIsEditModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to update exam session");
+      toast.error(error.message || "Failed to update exam session");
     },
   });
 
@@ -164,11 +211,11 @@ export default function ExamSessionsPage() {
       examSessionsApi.updateExamSessionStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["examSessions"] });
-      alert("Status updated successfully");
+      toast.success("Status updated successfully");
       setIsStatusModalOpen(false);
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to update status");
+      toast.error(error.message || "Failed to update status");
     },
   });
 
@@ -177,12 +224,12 @@ export default function ExamSessionsPage() {
     mutationFn: (id: string) => examSessionsApi.deleteExamSession(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["examSessions"] });
-      alert("Exam session deleted successfully");
+      toast.success("Exam session deleted successfully");
       setIsDeleteModalOpen(false);
       setSelectedSession(null);
     },
     onError: (error: Error) => {
-      alert(error.message || "Failed to delete exam session");
+      toast.error(error.message || "Failed to delete exam session");
     },
   });
 
@@ -194,7 +241,7 @@ export default function ExamSessionsPage() {
       setSelectedSession(session);
       setIsQRModalOpen(true);
     } catch (error) {
-      alert((error as Error).message || "Failed to fetch QR code");
+      toast.error((error as Error).message || "Failed to fetch QR code");
     }
   };
 
@@ -314,631 +361,553 @@ export default function ExamSessionsPage() {
     }
   };
 
-  // Table columns
-  const columns = [
-    columnHelper.accessor("batchQrCode", {
-      header: "Batch QR Code",
-      cell: (info) => (
-        <span className="font-mono text-xs">{info.getValue()}</span>
-      ),
-    }),
-    columnHelper.accessor("courseCode", {
-      header: "Course Code",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("courseName", {
-      header: "Course Name",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("venue", {
-      header: "Venue",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("examDate", {
-      header: "Exam Date",
-      cell: (info) => new Date(info.getValue()).toLocaleDateString(),
-    }),
-    columnHelper.accessor("status", {
-      header: "Status",
-      cell: (info) => {
-        const status = info.getValue();
-        const colors: Record<BatchStatus, string> = {
-          NOT_STARTED: "bg-gray-100 text-gray-800",
-          IN_PROGRESS: "bg-blue-100 text-blue-800",
-          SUBMITTED: "bg-green-100 text-green-800",
-          IN_TRANSIT: "bg-yellow-100 text-yellow-800",
-          WITH_LECTURER: "bg-purple-100 text-purple-800",
-          UNDER_GRADING: "bg-indigo-100 text-indigo-800",
-          GRADED: "bg-teal-100 text-teal-800",
-          RETURNED: "bg-orange-100 text-orange-800",
-          COMPLETED: "bg-gray-100 text-gray-800",
-        };
-        return (
-          <span className={`px-2 py-1 text-xs rounded-full ${colors[status]}`}>
-            {status.replace(/_/g, " ")}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor("_count.attendances", {
-      header: "Students",
-      cell: (info) => info.getValue() || 0,
-    }),
-    columnHelper.display({
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => (
-        <div className="flex gap-2">
-          <button
-            onClick={() =>
-              navigate(`/dashboard/exam-sessions/${row.original.id}`)
-            }
-            className="p-1 hover:bg-gray-100 rounded"
-            title="View Details"
-          >
-            <Eye className="h-4 w-4 text-blue-500" />
-          </button>
-          <button
-            onClick={() => handleShowQRCode(row.original)}
-            className="p-1 hover:bg-gray-100 rounded"
-            title="View QR Code"
-          >
-            <QrCode className="h-4 w-4" />
-          </button>
-          {(isAdmin || user?.id === row.original.createdById) && (
-            <>
-              <button
-                onClick={() => openStatusModal(row.original)}
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Update Status"
-              >
-                <Calendar className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => openEditModal(row.original)}
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Edit"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => openDeleteModal(row.original)}
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </button>
-            </>
-          )}
-        </div>
-      ),
-    }),
-  ];
-
-  const table = useReactTable({
-    data: sessionsData?.examSessions || [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Exam Sessions</h1>
-          <p className="text-gray-500 mt-1">
-            Manage exam sessions and batch QR codes
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-2"
-          >
-            <FileDown className="h-4 w-4" />
-            Export CSV
-          </button>
-          {canCreate && (
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Create Session
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Exam Sessions</CardTitle>
+              <CardDescription>
+                Manage exam sessions and batch QR codes
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleExportCSV} variant="outline">
+                <FileDown className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              {canCreate && (
+                <Button onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Session
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search course or lecturer..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+        {/* Filters */}
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="relative lg:col-span-3">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search course or lecturer..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10"
+              />
+            </div>
+            <Select
+              value={statusFilter || undefined}
+              onValueChange={(value) => {
+                setStatusFilter(value);
                 setPage(1);
               }}
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                {BATCH_STATUSES.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={departmentFilter || undefined}
+              onValueChange={(value) => {
+                setDepartmentFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                {departmentsData?.departments.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={facultyFilter || undefined}
+              onValueChange={(value) => {
+                setFacultyFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Faculties" />
+              </SelectTrigger>
+              <SelectContent>
+                {facultiesData?.faculties.map((faculty) => (
+                  <SelectItem key={faculty} value={faculty}>
+                    {faculty}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={dateFromFilter}
+              onChange={(e) => {
+                setDateFromFilter(e.target.value);
+                setPage(1);
+              }}
+              placeholder="From Date"
+            />
+            <Input
+              type="date"
+              value={dateToFilter}
+              onChange={(e) => {
+                setDateToFilter(e.target.value);
+                setPage(1);
+              }}
+              placeholder="To Date"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Statuses</option>
-            {BATCH_STATUSES.map((status) => (
-              <option key={status.value} value={status.value}>
-                {status.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={departmentFilter}
-            onChange={(e) => {
-              setDepartmentFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Departments</option>
-            {departmentsData?.departments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
-          <select
-            value={facultyFilter}
-            onChange={(e) => {
-              setFacultyFilter(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Faculties</option>
-            {facultiesData?.faculties.map((faculty) => (
-              <option key={faculty} value={faculty}>
-                {faculty}
-              </option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={dateFromFilter}
-            onChange={(e) => {
-              setDateFromFilter(e.target.value);
-              setPage(1);
-            }}
-            placeholder="From Date"
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="date"
-            value={dateToFilter}
-            onChange={(e) => {
-              setDateToFilter(e.target.value);
-              setPage(1);
-            }}
-            placeholder="To Date"
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center">Loading exam sessions...</div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th
-                          key={header.id}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50">
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          className="px-6 py-4 whitespace-nowrap"
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">
+              Loading exam sessions...
             </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Batch QR Code</TableHead>
+                    <TableHead>Course Code</TableHead>
+                    <TableHead>Course Name</TableHead>
+                    <TableHead>Venue</TableHead>
+                    <TableHead>Exam Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Students</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessionsData?.examSessions.map((session) => (
+                    <TableRow key={session.id}>
+                      <TableCell className="font-mono text-xs">
+                        {session.batchQrCode}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {session.courseCode}
+                      </TableCell>
+                      <TableCell>{session.courseName}</TableCell>
+                      <TableCell>{session.venue}</TableCell>
+                      <TableCell>
+                        {new Date(session.examDate).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(session.status)}>
+                          {session.status.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{session._count?.attendances || 0}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            onClick={() =>
+                              navigate(`/dashboard/exam-sessions/${session.id}`)
+                            }
+                            variant="ghost"
+                            size="icon"
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4 text-primary" />
+                          </Button>
+                          <Button
+                            onClick={() => handleShowQRCode(session)}
+                            variant="ghost"
+                            size="icon"
+                            title="View QR Code"
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
+                          {(isAdmin || user?.id === session.createdById) && (
+                            <>
+                              <Button
+                                onClick={() => openStatusModal(session)}
+                                variant="ghost"
+                                size="icon"
+                                title="Update Status"
+                              >
+                                <Calendar className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                onClick={() => openEditModal(session)}
+                                variant="ghost"
+                                size="icon"
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                onClick={() => openDeleteModal(session)}
+                                variant="ghost"
+                                size="icon"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-            {/* Pagination */}
-            {sessionsData && sessionsData.pagination.pages > 1 && (
-              <div className="px-6 py-4 border-t flex items-center justify-between">
-                <div className="text-sm text-gray-500">
-                  Showing {(page - 1) * limit + 1} to{" "}
-                  {Math.min(page * limit, sessionsData.pagination.total)} of{" "}
-                  {sessionsData.pagination.total} sessions
+              {/* Pagination */}
+              {sessionsData && sessionsData.pagination.pages > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(page - 1) * limit + 1} to{" "}
+                    {Math.min(page * limit, sessionsData.pagination.total)} of{" "}
+                    {sessionsData.pagination.total} sessions
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Previous
+                    </Button>
+                    <span className="px-4 py-2 text-sm">
+                      Page {page} of {sessionsData.pagination.pages}
+                    </span>
+                    <Button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === sessionsData.pagination.pages}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-4 py-1 text-sm">
-                    Page {page} of {sessionsData.pagination.pages}
-                  </span>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === sessionsData.pagination.pages}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Create/Edit Modal */}
-      {(isCreateModalOpen || isEditModalOpen) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">
-                {isEditModalOpen ? "Edit Exam Session" : "Create Exam Session"}
-              </h2>
-              <button
+      <Dialog
+        open={isCreateModalOpen || isEditModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreateModalOpen(false);
+            setIsEditModalOpen(false);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {isEditModalOpen ? "Edit Exam Session" : "Create Exam Session"}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditModalOpen
+                ? "Update exam session information below."
+                : "Fill in the details to create a new exam session."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="courseCode">Course Code</Label>
+                <Input
+                  id="courseCode"
+                  value={formData.courseCode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, courseCode: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="courseName">Course Name</Label>
+                <Input
+                  id="courseName"
+                  value={formData.courseName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, courseName: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="lecturer">
+                  Select Registered Lecturer (Optional)
+                </Label>
+                <Select
+                  value={formData.lecturerId || undefined}
+                  onValueChange={(value) => {
+                    const selectedLecturer = lecturersData?.users.find(
+                      (l) => l.id === value
+                    );
+                    if (selectedLecturer) {
+                      setFormData({
+                        ...formData,
+                        lecturerId: selectedLecturer.id,
+                        lecturerName: selectedLecturer.name || "",
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger id="lecturer">
+                    <SelectValue placeholder="-- Or enter manually below --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lecturersData?.users.map((lecturer) => (
+                      <SelectItem key={lecturer.id} value={lecturer.id}>
+                        {lecturer.name} ({lecturer.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="text-center text-xs text-muted-foreground font-medium">
+                OR
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lecturerName">Lecturer Name</Label>
+                  <Input
+                    id="lecturerName"
+                    value={formData.lecturerName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lecturerName: e.target.value })
+                    }
+                    placeholder="Manual entry"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lecturerId">Lecturer ID</Label>
+                  <Input
+                    id="lecturerId"
+                    value={formData.lecturerId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lecturerId: e.target.value })
+                    }
+                    placeholder="Manual entry"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                <Input
+                  id="department"
+                  value={formData.department}
+                  onChange={(e) =>
+                    setFormData({ ...formData, department: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="faculty">Faculty</Label>
+                <Input
+                  id="faculty"
+                  value={formData.faculty}
+                  onChange={(e) =>
+                    setFormData({ ...formData, faculty: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="venue">Venue</Label>
+                <Input
+                  id="venue"
+                  value={formData.venue}
+                  onChange={(e) =>
+                    setFormData({ ...formData, venue: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="examDate">Exam Date & Time</Label>
+                <Input
+                  id="examDate"
+                  type="datetime-local"
+                  value={formData.examDate}
+                  onChange={(e) =>
+                    setFormData({ ...formData, examDate: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => {
                   setIsCreateModalOpen(false);
                   setIsEditModalOpen(false);
                   resetForm();
                 }}
-                className="text-gray-500 hover:text-gray-700"
               >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Course Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.courseCode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, courseCode: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Course Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.courseName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, courseName: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Select Registered Lecturer (Optional)
-                  </label>
-                  <select
-                    value={formData.lecturerId}
-                    onChange={(e) => {
-                      const selectedLecturer = lecturersData?.users.find(
-                        (l) => l.id === e.target.value
-                      );
-                      if (selectedLecturer) {
-                        setFormData({
-                          ...formData,
-                          lecturerId: selectedLecturer.id,
-                          lecturerName: selectedLecturer.name || "",
-                        });
-                      } else {
-                        // Clear selection
-                        setFormData({
-                          ...formData,
-                          lecturerId: "",
-                          lecturerName: "",
-                        });
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Or enter manually below --</option>
-                    {lecturersData?.users.map((lecturer) => (
-                      <option key={lecturer.id} value={lecturer.id}>
-                        {lecturer.name} ({lecturer.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="text-center text-xs text-gray-500 font-medium">
-                  OR
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Lecturer ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.lecturerId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, lecturerId: e.target.value })
-                      }
-                      required
-                      placeholder="e.g., LEC001 or UUID"
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Lecturer Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.lecturerName}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          lecturerName: e.target.value,
-                        })
-                      }
-                      required
-                      placeholder="e.g., Dr. John Smith"
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.department}
-                    onChange={(e) =>
-                      setFormData({ ...formData, department: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Faculty
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.faculty}
-                    onChange={(e) =>
-                      setFormData({ ...formData, faculty: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Venue
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.venue}
-                    onChange={(e) =>
-                      setFormData({ ...formData, venue: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Exam Date
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.examDate}
-                    onChange={(e) =>
-                      setFormData({ ...formData, examDate: e.target.value })
-                    }
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCreateModalOpen(false);
-                    setIsEditModalOpen(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    createMutation.isPending || updateMutation.isPending
-                  }
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isEditModalOpen ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
+              >
+                {isEditModalOpen ? "Update" : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Status Update Modal */}
-      {isStatusModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Update Status</h2>
-            <p className="text-sm text-gray-600 mb-4">
+      <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Status</DialogTitle>
+            <DialogDescription>
               {selectedSession?.courseCode} - {selectedSession?.courseName}
-            </p>
-            <select
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value as BatchStatus)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-            >
-              {BATCH_STATUSES.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsStatusModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={newStatus}
+                onValueChange={(value) => setNewStatus(value as BatchStatus)}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleStatusUpdate}
-                disabled={updateStatusMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                Update Status
-              </button>
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BATCH_STATUSES.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsStatusModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleStatusUpdate}
+              disabled={updateStatusMutation.isPending}
+            >
+              Update Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Modal */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Delete Exam Session</h2>
-            <p className="text-gray-600 mb-6">
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Exam Session
+            </DialogTitle>
+            <DialogDescription>
               Are you sure you want to delete {selectedSession?.courseCode} -{" "}
               {selectedSession?.courseName}? This action cannot be undone.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() =>
-                  selectedSession && deleteMutation.mutate(selectedSession.id)
-                }
-                disabled={deleteMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                selectedSession && deleteMutation.mutate(selectedSession.id)
+              }
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Modal */}
-      {isQRModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Batch QR Code</h2>
-              <button
-                onClick={() => setIsQRModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 mb-4">
+      <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Batch QR Code</DialogTitle>
+            <DialogDescription>
               {selectedSession?.batchQrCode}
               <br />
               {selectedSession?.courseCode} - {selectedSession?.courseName}
-            </p>
-            <div className="flex flex-col items-center mb-4">
-              {qrCodeData && (
-                <img
-                  src={qrCodeData}
-                  alt="Batch QR Code"
-                  className="w-64 h-64"
-                />
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setIsQRModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleDownloadQRCode}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Download QR Code
-              </button>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-4">
+            {qrCodeData && (
+              <img
+                src={qrCodeData}
+                alt="Batch QR Code"
+                className="w-64 h-64 border rounded-lg"
+              />
+            )}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsQRModalOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handleDownloadQRCode}>
+              <Download className="h-4 w-4 mr-2" />
+              Download QR Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

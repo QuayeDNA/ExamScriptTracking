@@ -1,427 +1,620 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import * as examSessionsApi from "@/api/examSessions";
-import * as batchTransfersApi from "@/api/batchTransfers";
-import type { ExamSession } from "@/api/examSessions";
-import type { BatchTransfer } from "@/api/batchTransfers";
+import {
+  examSessionsApi,
+  type ExamSession,
+  type BatchStatus,
+} from "@/api/examSessions";
+import {
+  getTransferHistory,
+  type BatchTransfer,
+  type TransferStatus,
+} from "@/api/batchTransfers";
+import {
+  Search,
+  Clock,
+  MapPin,
+  Package,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
+  { value: "NOT_STARTED", label: "Not Started" },
+  { value: "IN_PROGRESS", label: "In Progress" },
+  { value: "SUBMITTED", label: "Submitted" },
+  { value: "IN_TRANSIT", label: "In Transit" },
+  { value: "WITH_LECTURER", label: "With Lecturer" },
+  { value: "UNDER_GRADING", label: "Under Grading" },
+  { value: "GRADED", label: "Graded" },
+  { value: "RETURNED", label: "Returned" },
+  { value: "COMPLETED", label: "Completed" },
+];
+
+const getStatusBadgeVariant = (
+  status: BatchStatus
+): "default" | "secondary" | "destructive" | "outline" => {
+  const variants: Record<
+    BatchStatus,
+    "default" | "secondary" | "destructive" | "outline"
+  > = {
+    NOT_STARTED: "secondary",
+    IN_PROGRESS: "default",
+    SUBMITTED: "outline",
+    IN_TRANSIT: "outline",
+    WITH_LECTURER: "outline",
+    UNDER_GRADING: "outline",
+    GRADED: "outline",
+    RETURNED: "outline",
+    COMPLETED: "secondary",
+  };
+  return variants[status] || "default";
+};
+
+const getTransferBadgeVariant = (
+  status: TransferStatus
+): "default" | "secondary" | "destructive" | "outline" => {
+  const variants: Record<
+    TransferStatus,
+    "default" | "secondary" | "destructive" | "outline"
+  > = {
+    PENDING: "outline",
+    CONFIRMED: "default",
+    DISCREPANCY_REPORTED: "destructive",
+    RESOLVED: "secondary",
+  };
+  return variants[status] || "default";
+};
+
+const getTransferColorClass = (status: TransferStatus): string => {
+  const colors: Record<TransferStatus, string> = {
+    PENDING: "bg-yellow-500",
+    CONFIRMED: "bg-green-500",
+    DISCREPANCY_REPORTED: "bg-red-500",
+    RESOLVED: "bg-blue-500",
+  };
+  return colors[status] || "bg-gray-400";
+};
 
 export default function BatchTrackingPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [selectedBatch, setSelectedBatch] = useState<ExamSession | null>(null);
 
-  // Fetch all exam sessions
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
-    queryKey: ["examSessions"],
-    queryFn: () => examSessionsApi.examSessionsApi.getExamSessions({}),
+  // Fetch exam sessions with filters
+  const { data: sessionsData, isLoading } = useQuery({
+    queryKey: ["examSessions", search, statusFilter, departmentFilter],
+    queryFn: () =>
+      examSessionsApi.getExamSessions({
+        search: search || undefined,
+        status: statusFilter || undefined,
+        department: departmentFilter || undefined,
+      }),
+  });
+
+  // Fetch filter options
+  const { data: departmentsData } = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => examSessionsApi.getDepartments(),
   });
 
   // Fetch transfer history for selected batch
-  const { data: transferData, isLoading: transfersLoading } = useQuery({
+  const { data: transferData } = useQuery({
     queryKey: ["transferHistory", selectedBatch?.id],
-    queryFn: () =>
-      selectedBatch
-        ? batchTransfersApi.getTransferHistory(selectedBatch.id)
-        : Promise.resolve(null),
+    queryFn: () => getTransferHistory(selectedBatch!.id),
     enabled: !!selectedBatch,
   });
 
-  // Filter sessions based on search and status
-  const filteredSessions = sessionsData?.examSessions.filter(
-    (session: ExamSession) => {
-      const matchesSearch =
-        session.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        session.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        session.batchQrCode.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesStatus =
-        statusFilter === "all" || session.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    }
-  );
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      IN_PROGRESS: "bg-blue-100 text-blue-800",
-      SUBMITTED: "bg-green-100 text-green-800",
-      IN_TRANSIT: "bg-yellow-100 text-yellow-800",
-      WITH_LECTURER: "bg-purple-100 text-purple-800",
-      UNDER_GRADING: "bg-indigo-100 text-indigo-800",
-      GRADED: "bg-teal-100 text-teal-800",
-      RETURNED: "bg-orange-100 text-orange-800",
-      COMPLETED: "bg-gray-100 text-gray-800",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
-  };
-
-  const getTransferStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      PENDING: "bg-yellow-100 text-yellow-800",
-      CONFIRMED: "bg-green-100 text-green-800",
-      DISCREPANCY_REPORTED: "bg-red-100 text-red-800",
-      RESOLVED: "bg-indigo-100 text-indigo-800",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
-  };
-
-  const getCurrentHandler = (transfers: BatchTransfer[] | undefined) => {
+  const getCurrentHandler = (
+    transfers: BatchTransfer[] | undefined
+  ): BatchTransfer | null => {
     if (!transfers || transfers.length === 0) return null;
-
-    // Get the most recent confirmed transfer
     const confirmedTransfers = transfers.filter(
-      (t) => t.status === "CONFIRMED" || t.status === "RESOLVED"
+      (t) => t.status === "CONFIRMED"
     );
-
     if (confirmedTransfers.length === 0) return null;
-
-    const latest = confirmedTransfers[confirmedTransfers.length - 1];
-    return latest.toHandler;
+    return confirmedTransfers.sort(
+      (a, b) =>
+        new Date(b.confirmedAt || b.requestedAt).getTime() -
+        new Date(a.confirmedAt || a.requestedAt).getTime()
+    )[0];
   };
+
+  const currentHandler = getCurrentHandler(transferData?.transfers);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Batch Tracking Dashboard
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Real-time tracking of exam script batches and chain of custody
-          </p>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <input
+    <div className="space-y-6">
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Batch Tracking</CardTitle>
+          <CardDescription>
+            Track exam script batches and their chain of custody in real-time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="relative md:col-span-3">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
                 type="text"
-                placeholder="Search by course code, name, or batch QR..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Search batch, course, or lecturer..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
               />
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <Select
+              value={statusFilter || undefined}
+              onValueChange={setStatusFilter}
             >
-              <option value="all">All Statuses</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="SUBMITTED">Submitted</option>
-              <option value="IN_TRANSIT">In Transit</option>
-              <option value="WITH_LECTURER">With Lecturer</option>
-              <option value="UNDER_GRADING">Under Grading</option>
-              <option value="GRADED">Graded</option>
-              <option value="RETURNED">Returned</option>
-              <option value="COMPLETED">Completed</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Batches List */}
-          <div className="bg-white rounded-lg shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Active Batches ({filteredSessions?.length || 0})
-              </h2>
+              <SelectTrigger>
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                {BATCH_STATUSES.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={departmentFilter || undefined}
+              onValueChange={setDepartmentFilter}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                {departmentsData?.departments.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setStatusFilter("");
+                  setDepartmentFilter("");
+                  setSearch("");
+                }}
+              >
+                Clear Filters
+              </Button>
             </div>
-            <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
-              {sessionsLoading ? (
-                <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="text-gray-600 mt-2">Loading batches...</p>
-                </div>
-              ) : filteredSessions && filteredSessions.length > 0 ? (
-                <div className="divide-y divide-gray-200">
-                  {filteredSessions.map((session: ExamSession) => (
-                    <button
-                      key={session.id}
-                      onClick={() => setSelectedBatch(session)}
-                      className={`w-full text-left p-4 hover:bg-gray-50 transition-colors ${
-                        selectedBatch?.id === session.id ? "bg-blue-50" : ""
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {session.courseCode}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {session.courseName}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(
-                            session.status
-                          )}`}
-                        >
-                          {session.status.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <p>Batch: {session.batchQrCode}</p>
-                        <p>Venue: {session.venue}</p>
-                        <p>
-                          Date:{" "}
-                          {new Date(session.examDate).toLocaleDateString()}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Batch List (Left Column) */}
+        <Card className="lg:col-span-1 lg:sticky lg:top-6 lg:self-start max-h-[calc(100vh-8rem)] overflow-y-auto">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Batches ({sessionsData?.examSessions.length || 0})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading batches...
+              </div>
+            ) : sessionsData?.examSessions.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No batches found
+              </div>
+            ) : (
+              sessionsData?.examSessions.map((session) => (
+                <Card
+                  key={session.id}
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    selectedBatch?.id === session.id
+                      ? "ring-2 ring-primary"
+                      : ""
+                  }`}
+                  onClick={() => setSelectedBatch(session)}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1 flex-1">
+                        <p className="font-mono text-xs text-muted-foreground">
+                          {session.batchQrCode}
+                        </p>
+                        <p className="font-semibold text-sm">
+                          {session.courseCode}
+                        </p>
+                        <p className="text-sm text-muted-foreground line-clamp-1">
+                          {session.courseName}
                         </p>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 text-center text-gray-500">
-                  <p>No batches found</p>
-                  <p className="text-sm mt-2">
-                    Try adjusting your search or filters
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+                      <Badge variant={getStatusBadgeVariant(session.status)}>
+                        {session.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Package className="h-3 w-3" />
+                      <span>{session._count?.attendances || 0} scripts</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Batch Details & Transfer History */}
-          <div className="bg-white rounded-lg shadow-sm">
-            {selectedBatch ? (
-              <>
-                <div className="p-4 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Batch Details
-                  </h2>
-                </div>
-                <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-300px)]">
-                  {/* Batch Info */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">
-                      Batch Information
-                    </h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Batch QR:</span>
-                        <span className="font-medium text-gray-900">
-                          {selectedBatch.batchQrCode}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Course:</span>
-                        <span className="font-medium text-gray-900">
+        {/* Batch Details & Timeline (Right Column) */}
+        <div className="lg:col-span-2 space-y-6">
+          {!selectedBatch ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Select a batch from the list to view its tracking details</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Batch Info and Current Location - Side by Side */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Batch Info */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl">
                           {selectedBatch.courseCode} -{" "}
                           {selectedBatch.courseName}
-                        </span>
+                        </CardTitle>
+                        <CardDescription className="mt-2">
+                          Batch QR: {selectedBatch.batchQrCode}
+                        </CardDescription>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Lecturer:</span>
-                        <span className="font-medium text-gray-900">
+                      <Badge
+                        variant={getStatusBadgeVariant(selectedBatch.status)}
+                        className="text-sm"
+                      >
+                        {selectedBatch.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Lecturer</p>
+                        <p className="font-medium">
                           {selectedBatch.lecturerName}
-                        </span>
+                        </p>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Department:</span>
-                        <span className="font-medium text-gray-900">
+                      <div>
+                        <p className="text-muted-foreground">Department</p>
+                        <p className="font-medium">
                           {selectedBatch.department}
-                        </span>
+                        </p>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Status:</span>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(
-                            selectedBatch.status
-                          )}`}
-                        >
-                          {selectedBatch.status.replace(/_/g, " ")}
-                        </span>
+                      <div>
+                        <p className="text-muted-foreground">Venue</p>
+                        <p className="font-medium">{selectedBatch.venue}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Exam Date</p>
+                        <p className="font-medium">
+                          {new Date(selectedBatch.examDate).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Scripts Count</p>
+                        <p className="font-medium flex items-center gap-2">
+                          <Package className="h-4 w-4" />
+                          {selectedBatch._count?.attendances || 0}
+                        </p>
                       </div>
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  {/* Current Handler */}
-                  {transferData?.transfers && (
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                      <h3 className="font-semibold text-gray-900 mb-2">
-                        📍 Current Location
-                      </h3>
-                      {(() => {
-                        const handler = getCurrentHandler(
-                          transferData.transfers
-                        );
-                        return handler ? (
-                          <div className="text-sm">
-                            <p className="font-medium text-gray-900">
-                              {handler.firstName} {handler.lastName}
-                            </p>
-                            <p className="text-gray-600">{handler.role}</p>
-                            <p className="text-gray-600">{handler.email}</p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-600">
-                            No transfers recorded yet
+                {/* Current Location */}
+                {currentHandler && (
+                  <Card className="border-primary/50 bg-primary/5">
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <MapPin className="h-5 w-5 text-primary" />
+                        Current Location
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-start gap-4">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src="" />
+                          <AvatarFallback>
+                            {currentHandler.toHandler?.firstName?.[0] || ""}
+                            {currentHandler.toHandler?.lastName?.[0] || ""}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <p className="font-semibold">
+                            {currentHandler.toHandler?.firstName}{" "}
+                            {currentHandler.toHandler?.lastName}
                           </p>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Transfer History */}
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">
-                      Chain of Custody
-                    </h3>
-                    {transfersLoading ? (
-                      <div className="p-4 text-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                          <p className="text-sm text-muted-foreground">
+                            {currentHandler.toHandler?.role.replace(/_/g, " ")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {currentHandler.toHandler?.email}
+                          </p>
+                          <div className="flex items-center gap-4 mt-3 text-sm">
+                            <div className="flex items-center gap-1">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <span>
+                                {currentHandler.scriptsReceived || 0} scripts
+                                received
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-4 w-4 text-muted-foreground" />
+                              <span>{currentHandler.location}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    ) : transferData?.transfers &&
-                      transferData.transfers.length > 0 ? (
-                      <div className="space-y-4">
-                        {transferData.transfers.map((transfer, index) => {
-                          const hasDiscrepancy =
-                            transfer.scriptsExpected !==
-                            transfer.scriptsReceived;
-                          return (
-                            <div
-                              key={transfer.id}
-                              className="relative pl-8 pb-4"
-                            >
-                              {/* Timeline connector */}
-                              {index < transferData.transfers.length - 1 && (
-                                <div className="absolute left-3 top-6 bottom-0 w-0.5 bg-gray-300"></div>
-                              )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
 
+              {/* Chain of Custody Timeline */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Chain of Custody
+                  </CardTitle>
+                  <CardDescription>
+                    Complete transfer history and custody chain
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!transferData || transferData.transfers.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <AlertTriangle className="h-8 w-8 mx-auto mb-3 opacity-50" />
+                      <p>No transfer history available for this batch</p>
+                    </div>
+                  ) : (
+                    <div className="relative space-y-6">
+                      {/* Timeline connector line */}
+                      <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" />
+
+                      {transferData.transfers
+                        .sort(
+                          (a: BatchTransfer, b: BatchTransfer) =>
+                            new Date(b.requestedAt).getTime() -
+                            new Date(a.requestedAt).getTime()
+                        )
+                        .map((transfer: BatchTransfer) => {
+                          const hasDiscrepancy =
+                            transfer.status === "DISCREPANCY_REPORTED";
+                          const isResolved = transfer.status === "RESOLVED";
+                          const scriptsMatch =
+                            transfer.scriptsExpected ===
+                            transfer.scriptsReceived;
+
+                          return (
+                            <div key={transfer.id} className="relative pl-14">
                               {/* Timeline dot */}
                               <div
-                                className={`absolute left-0 top-1.5 w-6 h-6 rounded-full border-2 ${
-                                  transfer.status === "CONFIRMED" ||
-                                  transfer.status === "RESOLVED"
-                                    ? "bg-green-500 border-green-600"
-                                    : transfer.status === "DISCREPANCY_REPORTED"
-                                    ? "bg-red-500 border-red-600"
-                                    : "bg-yellow-500 border-yellow-600"
-                                }`}
-                              ></div>
+                                className={`absolute left-4 top-2 h-5 w-5 rounded-full border-4 border-background ${getTransferColorClass(
+                                  transfer.status
+                                )} z-10`}
+                              />
 
-                              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="text-sm">
-                                    <p className="font-medium text-gray-900">
-                                      {transfer.fromHandler.firstName}{" "}
-                                      {transfer.fromHandler.lastName}
-                                    </p>
-                                    <p className="text-gray-600">
-                                      {transfer.fromHandler.role}
-                                    </p>
-                                  </div>
-                                  <span className="text-gray-400 mx-2">→</span>
-                                  <div className="text-sm text-right">
-                                    <p className="font-medium text-gray-900">
-                                      {transfer.toHandler.firstName}{" "}
-                                      {transfer.toHandler.lastName}
-                                    </p>
-                                    <p className="text-gray-600">
-                                      {transfer.toHandler.role}
-                                    </p>
-                                  </div>
-                                </div>
+                              {/* Transfer Card */}
+                              <Card
+                                className={
+                                  hasDiscrepancy && !isResolved
+                                    ? "border-destructive/50 bg-destructive/5"
+                                    : ""
+                                }
+                              >
+                                <CardContent className="p-4 space-y-3">
+                                  {/* Transfer Header */}
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-3 flex-1">
+                                      {/* From Handler */}
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="h-8 w-8">
+                                          <AvatarImage src="" />
+                                          <AvatarFallback className="text-xs">
+                                            {transfer.fromHandler
+                                              ?.firstName?.[0] || ""}
+                                            {transfer.fromHandler
+                                              ?.lastName?.[0] || ""}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                          <p className="text-sm font-medium">
+                                            {transfer.fromHandler?.firstName}{" "}
+                                            {transfer.fromHandler?.lastName}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {transfer.fromHandler?.role.replace(
+                                              /_/g,
+                                              " "
+                                            )}
+                                          </p>
+                                        </div>
+                                      </div>
 
-                                <div className="space-y-1 text-xs text-gray-600">
-                                  <div className="flex justify-between">
-                                    <span>Scripts Expected:</span>
-                                    <span className="font-medium">
-                                      {transfer.scriptsExpected}
-                                    </span>
+                                      <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+
+                                      {/* To Handler */}
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="h-8 w-8">
+                                          <AvatarImage src="" />
+                                          <AvatarFallback className="text-xs">
+                                            {transfer.toHandler
+                                              ?.firstName?.[0] || ""}
+                                            {transfer.toHandler
+                                              ?.lastName?.[0] || ""}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                          <p className="text-sm font-medium">
+                                            {transfer.toHandler?.firstName}{" "}
+                                            {transfer.toHandler?.lastName}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {transfer.toHandler?.role.replace(
+                                              /_/g,
+                                              " "
+                                            )}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <Badge
+                                      variant={getTransferBadgeVariant(
+                                        transfer.status
+                                      )}
+                                    >
+                                      {transfer.status.replace(/_/g, " ")}
+                                    </Badge>
                                   </div>
-                                  {transfer.scriptsReceived !== null && (
-                                    <div className="flex justify-between">
-                                      <span>Scripts Received:</span>
-                                      <span
-                                        className={`font-medium ${
-                                          hasDiscrepancy
-                                            ? "text-red-600"
-                                            : "text-green-600"
+
+                                  {/* Scripts Info */}
+                                  <div className="flex items-center gap-6 text-sm">
+                                    <div className="flex items-center gap-2">
+                                      <Package className="h-4 w-4 text-muted-foreground" />
+                                      <span>
+                                        Expected: {transfer.scriptsExpected}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Package
+                                        className={`h-4 w-4 ${
+                                          scriptsMatch
+                                            ? "text-green-600"
+                                            : "text-red-600"
                                         }`}
+                                      />
+                                      <span
+                                        className={
+                                          scriptsMatch
+                                            ? "text-green-600"
+                                            : "text-red-600"
+                                        }
                                       >
-                                        {transfer.scriptsReceived}
+                                        Received:{" "}
+                                        {transfer.scriptsReceived || 0}
                                       </span>
                                     </div>
-                                  )}
-                                  {transfer.location && (
-                                    <div className="flex justify-between">
-                                      <span>Location:</span>
-                                      <span className="font-medium">
-                                        {transfer.location}
-                                      </span>
-                                    </div>
-                                  )}
-                                  <div className="flex justify-between">
-                                    <span>Requested:</span>
-                                    <span className="font-medium">
-                                      {new Date(
-                                        transfer.requestedAt
-                                      ).toLocaleString()}
-                                    </span>
+                                    {scriptsMatch &&
+                                      transfer.status === "CONFIRMED" && (
+                                        <div className="flex items-center gap-1 text-green-600">
+                                          <CheckCircle2 className="h-4 w-4" />
+                                          <span>Match</span>
+                                        </div>
+                                      )}
                                   </div>
-                                  {transfer.confirmedAt && (
-                                    <div className="flex justify-between">
-                                      <span>Confirmed:</span>
-                                      <span className="font-medium">
+
+                                  {/* Location & Timestamps */}
+                                  <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                      <MapPin className="h-3 w-3" />
+                                      <span>{transfer.location}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      <span>
+                                        Requested:{" "}
                                         {new Date(
-                                          transfer.confirmedAt
+                                          transfer.requestedAt
                                         ).toLocaleString()}
                                       </span>
                                     </div>
-                                  )}
-                                </div>
-
-                                <div className="mt-2">
-                                  <span
-                                    className={`px-2 py-1 text-xs font-medium rounded ${getTransferStatusColor(
-                                      transfer.status
-                                    )}`}
-                                  >
-                                    {transfer.status.replace(/_/g, " ")}
-                                  </span>
-                                </div>
-
-                                {transfer.discrepancyNote && (
-                                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-                                    <p className="text-xs text-red-800">
-                                      <span className="font-semibold">
-                                        ⚠️ Discrepancy:
-                                      </span>{" "}
-                                      {transfer.discrepancyNote}
-                                    </p>
+                                    {transfer.confirmedAt && (
+                                      <div className="flex items-center gap-1 col-span-2">
+                                        <CheckCircle2 className="h-3 w-3" />
+                                        <span>
+                                          Confirmed:{" "}
+                                          {new Date(
+                                            transfer.confirmedAt
+                                          ).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
+
+                                  {/* Discrepancy Note */}
+                                  {hasDiscrepancy &&
+                                    transfer.discrepancyNote && (
+                                      <Card className="border-destructive/50 bg-destructive/10">
+                                        <CardContent className="p-3 flex items-start gap-2">
+                                          <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-destructive">
+                                              Discrepancy Reported
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              {transfer.discrepancyNote}
+                                            </p>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    )}
+
+                                  {/* Resolution Note */}
+                                  {isResolved && transfer.resolutionNote && (
+                                    <Card className="border-blue-500/50 bg-blue-500/10">
+                                      <CardContent className="p-3 flex items-start gap-2">
+                                        <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium text-blue-600">
+                                            Resolved
+                                          </p>
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            {transfer.resolutionNote}
+                                          </p>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  )}
+                                </CardContent>
+                              </Card>
                             </div>
                           );
                         })}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-gray-500 bg-gray-50 rounded-lg">
-                        <p>No transfer history yet</p>
-                        <p className="text-sm mt-1">
-                          Transfers will appear here once initiated
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <p className="text-lg font-medium">Select a batch</p>
-                <p className="text-sm mt-2">
-                  Click on a batch from the list to view its tracking details
-                  and transfer history
-                </p>
-              </div>
-            )}
-          </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       </div>
     </div>

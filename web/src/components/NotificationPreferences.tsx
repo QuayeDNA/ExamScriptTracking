@@ -12,6 +12,19 @@ import {
   savePreferences,
   resetPreferences,
 } from "@/lib/notificationPreferences";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Bell, RotateCcw } from "lucide-react";
 
 export function NotificationPreferences() {
   const [preferences, setPreferences] = useState<NotificationPreferences>(() =>
@@ -42,62 +55,50 @@ export function NotificationPreferences() {
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-6 border-b">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <span className="text-2xl">🔔</span>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bell className="h-5 w-5 text-primary" />
           Notification Preferences
-        </h2>
-      </div>
-      <div className="p-6 space-y-6">
-        <p className="text-sm text-gray-600">
+        </CardTitle>
+        <CardDescription>
           Choose which types of notifications you want to receive. Changes take
           effect immediately.
-        </p>
-
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
         <div className="space-y-4">
-          {notificationTypes.map((type) => (
-            <div
-              key={type}
-              className="flex items-start justify-between space-x-4 rounded-lg border p-4"
-            >
-              <div className="flex-1 space-y-1">
-                <label
-                  htmlFor={type}
-                  className="text-base font-medium cursor-pointer"
-                >
-                  {notificationLabels[type]}
-                </label>
-                <p className="text-sm text-gray-600">
-                  {notificationDescriptions[type]}
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
+          {notificationTypes.map((type, index) => (
+            <div key={type}>
+              <div className="flex items-center justify-between space-x-4 py-3">
+                <div className="flex-1 space-y-1">
+                  <Label
+                    htmlFor={type}
+                    className="text-base font-medium cursor-pointer"
+                  >
+                    {notificationLabels[type]}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {notificationDescriptions[type]}
+                  </p>
+                </div>
+                <Switch
                   id={type}
                   checked={preferences[type]}
-                  onChange={() => handleToggle(type)}
-                  className="sr-only peer"
+                  onCheckedChange={() => handleToggle(type)}
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
+              </div>
+              {index < notificationTypes.length - 1 && <Separator />}
             </div>
           ))}
         </div>
-
-        <div className="flex justify-end pt-4 border-t">
-          <button
-            onClick={handleReset}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <span className="inline-flex items-center gap-2">
-              <span>🔄</span>
-              Reset to Defaults
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+      <CardFooter className="flex justify-end">
+        <Button variant="outline" onClick={handleReset}>
+          <RotateCcw className="h-4 w-4 mr-2" />
+          Reset to Defaults
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }

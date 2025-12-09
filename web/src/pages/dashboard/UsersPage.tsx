@@ -14,6 +14,70 @@ import {
 } from "@/hooks/useAdminActions";
 import { usersApi } from "@/api/users";
 import { Role, type BulkUserCreate } from "@/types";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import {
+  Download,
+  Upload,
+  UserPlus,
+  Users,
+  Unlock,
+  KeyRound,
+  LogOut,
+  Trash2,
+  X,
+  AlertCircle,
+} from "lucide-react";
+
+interface TemporaryCredentials {
+  email: string;
+  password: string;
+}
+
+interface BulkResults {
+  success: Array<{ email: string; temporaryPassword: string }>;
+  failed: Array<{ email: string; error: string }>;
+}
+
+interface UserActionState {
+  type: "unlock" | "reset" | "logout";
+  userId: string;
+}
 
 export const UsersPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -24,10 +88,10 @@ export const UsersPage = () => {
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
-  const [userAction, setUserAction] = useState<{
-    type: "unlock" | "reset" | "logout";
-    userId: string;
-  } | null>(null);
+  const [userAction, setUserAction] = useState<UserActionState | null>(null);
+  const [tempCredentials, setTempCredentials] =
+    useState<TemporaryCredentials | null>(null);
+  const [bulkResults, setBulkResults] = useState<BulkResults | null>(null);
 
   const filters = {
     ...(roleFilter && { role: roleFilter }),
@@ -46,16 +110,6 @@ export const UsersPage = () => {
     useBulkCreateUsers();
   const { mutate: bulkDeactivateUsers, isPending: isBulkDeactivating } =
     useBulkDeactivateUsers();
-
-  const [tempCredentials, setTempCredentials] = useState<{
-    email: string;
-    password: string;
-  } | null>(null);
-
-  const [bulkResults, setBulkResults] = useState<{
-    success: Array<{ email: string; temporaryPassword: string }>;
-    failed: Array<{ email: string; error: string }>;
-  } | null>(null);
 
   const handleCreateUser = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -101,7 +155,7 @@ export const UsersPage = () => {
     }
 
     if (users.length === 0) {
-      alert("No valid users found in CSV");
+      toast.error("No valid users found in CSV");
       return;
     }
 
@@ -110,37 +164,40 @@ export const UsersPage = () => {
         setBulkResults(data);
         setShowBulkImportModal(false);
         e.currentTarget.reset();
+        toast.success(
+          `Imported ${data.success.length} users successfully${
+            data.failed.length > 0 ? `, ${data.failed.length} failed` : ""
+          }`
+        );
       },
-      onError: (err: any) => {
-        alert(err.response?.data?.error || "Failed to create users");
+      onError: (error: Error) => {
+        toast.error("Failed to create users", {
+          description: error.message,
+        });
       },
     });
   };
 
   const handleBulkDeactivate = () => {
     if (selectedUsers.size === 0) {
-      alert("No users selected");
+      toast.error("No users selected");
       return;
     }
 
-    if (
-      confirm(
-        `Are you sure you want to deactivate ${selectedUsers.size} user(s)?`
-      )
-    ) {
-      bulkDeactivateUsers(
-        { userIds: Array.from(selectedUsers) },
-        {
-          onSuccess: () => {
-            alert("Users deactivated successfully");
-            setSelectedUsers(new Set());
-          },
-          onError: (err: any) => {
-            alert(err.response?.data?.error || "Failed to deactivate users");
-          },
-        }
-      );
-    }
+    bulkDeactivateUsers(
+      { userIds: Array.from(selectedUsers) },
+      {
+        onSuccess: () => {
+          toast.success(`Deactivated ${selectedUsers.size} user(s)`);
+          setSelectedUsers(new Set());
+        },
+        onError: (error: Error) => {
+          toast.error("Failed to deactivate users", {
+            description: error.message,
+          });
+        },
+      }
+    );
   };
 
   const handleUserAction = (
@@ -159,11 +216,13 @@ export const UsersPage = () => {
       case "unlock":
         unlockAccount(userId, {
           onSuccess: () => {
-            alert("Account unlocked successfully");
+            toast.success("Account unlocked successfully");
             setUserAction(null);
           },
-          onError: (err: any) => {
-            alert(err.response?.data?.error || "Failed to unlock account");
+          onError: (error: Error) => {
+            toast.error("Failed to unlock account", {
+              description: error.message,
+            });
           },
         });
         break;
@@ -175,20 +234,25 @@ export const UsersPage = () => {
               password: data.temporaryPassword,
             });
             setUserAction(null);
+            toast.success("Password reset successfully");
           },
-          onError: (err: any) => {
-            alert(err.response?.data?.error || "Failed to reset password");
+          onError: (error: Error) => {
+            toast.error("Failed to reset password", {
+              description: error.message,
+            });
           },
         });
         break;
       case "logout":
         forceLogoutUser(userId, {
           onSuccess: (data) => {
-            alert(`Logged out ${data.count} session(s)`);
+            toast.success(`Logged out ${data.count} session(s)`);
             setUserAction(null);
           },
-          onError: (err: any) => {
-            alert(err.response?.data?.error || "Failed to force logout");
+          onError: (error: Error) => {
+            toast.error("Failed to force logout", {
+              description: error.message,
+            });
           },
         });
         break;
@@ -216,6 +280,7 @@ export const UsersPage = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success("Export started");
   };
 
   const toggleUserSelection = (userId: string) => {
@@ -238,562 +303,571 @@ export const UsersPage = () => {
     }
   };
 
+  const clearAllFilters = () => {
+    setRoleFilter("");
+    setIsActiveFilter("");
+    setSearchFilter("");
+    setDateFromFilter("");
+    setDateToFilter("");
+  };
+
+  const hasActiveFilters =
+    roleFilter ||
+    isActiveFilter !== "" ||
+    searchFilter ||
+    dateFromFilter ||
+    dateToFilter;
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExportUsers}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 font-medium"
-          >
-            Export to CSV
-          </button>
-          {selectedUsers.size > 0 && (
-            <button
-              onClick={handleBulkDeactivate}
-              disabled={isBulkDeactivating}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium disabled:opacity-50"
-            >
-              Deactivate Selected ({selectedUsers.size})
-            </button>
-          )}
-          <button
-            onClick={() => setShowBulkImportModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
-          >
-            Bulk Import
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-          >
-            Create User
-          </button>
-        </div>
-      </div>
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-2xl">User Management</CardTitle>
+              <CardDescription>
+                Manage user accounts, roles, and permissions
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleExportUsers} variant="outline">
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+              {selectedUsers.size > 0 && (
+                <Button
+                  onClick={handleBulkDeactivate}
+                  disabled={isBulkDeactivating}
+                  variant="destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Deactivate ({selectedUsers.size})
+                </Button>
+              )}
+              <Button
+                onClick={() => setShowBulkImportModal(true)}
+                variant="outline"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Bulk Import
+              </Button>
+              <Button onClick={() => setShowCreateModal(true)}>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Create User
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm space-y-4">
-        <h3 className="font-medium text-gray-900">Filters</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search
-            </label>
-            <input
-              type="text"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Search by name or email..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="search">Search</Label>
+                <Input
+                  id="search"
+                  type="text"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Search by name or email..."
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Role
-            </label>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as Role | "")}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Roles</option>
-              <option value="ADMIN">Admin</option>
-              <option value="INVIGILATOR">Invigilator</option>
-              <option value="LECTURER">Lecturer</option>
-              <option value="DEPARTMENT_HEAD">Department Head</option>
-              <option value="FACULTY_OFFICER">Faculty Officer</option>
-            </select>
-          </div>
+              <div>
+                <Label htmlFor="role-filter">Role</Label>
+                <Select
+                  value={roleFilter || undefined}
+                  onValueChange={(value) => setRoleFilter(value as Role | "")}
+                >
+                  <SelectTrigger id="role-filter">
+                    <SelectValue placeholder="All Roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="INVIGILATOR">Invigilator</SelectItem>
+                    <SelectItem value="LECTURER">Lecturer</SelectItem>
+                    <SelectItem value="DEPARTMENT_HEAD">
+                      Department Head
+                    </SelectItem>
+                    <SelectItem value="FACULTY_OFFICER">
+                      Faculty Officer
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              value={
-                isActiveFilter === "" ? "" : isActiveFilter ? "true" : "false"
-              }
-              onChange={(e) =>
-                setIsActiveFilter(
-                  e.target.value === "" ? "" : e.target.value === "true"
-                )
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Statuses</option>
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Created From
-            </label>
-            <input
-              type="date"
-              value={dateFromFilter}
-              onChange={(e) => setDateFromFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Created To
-            </label>
-            <input
-              type="date"
-              value={dateToFilter}
-              onChange={(e) => setDateToFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
-
-        {(roleFilter ||
-          isActiveFilter !== "" ||
-          searchFilter ||
-          dateFromFilter ||
-          dateToFilter) && (
-          <button
-            onClick={() => {
-              setRoleFilter("");
-              setIsActiveFilter("");
-              setSearchFilter("");
-              setDateFromFilter("");
-              setDateToFilter("");
-            }}
-            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Clear All Filters
-          </button>
-        )}
-      </div>
-
-      {/* Temporary Credentials Modal */}
-      {tempCredentials && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              User Created Successfully
-            </h3>
-            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md mb-4">
-              <p className="text-sm text-yellow-800 font-medium mb-2">
-                ⚠️ Save these credentials - they will not be shown again!
-              </p>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-xs text-gray-600">Email:</span>
-                  <p className="font-mono text-sm font-medium">
-                    {tempCredentials.email}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-600">
-                    Temporary Password:
-                  </span>
-                  <p className="font-mono text-sm font-medium">
-                    {tempCredentials.password}
-                  </p>
-                </div>
+              <div>
+                <Label htmlFor="status-filter">Status</Label>
+                <Select
+                  value={
+                    isActiveFilter === ""
+                      ? undefined
+                      : isActiveFilter
+                      ? "true"
+                      : "false"
+                  }
+                  onValueChange={(value) => setIsActiveFilter(value === "true")}
+                >
+                  <SelectTrigger id="status-filter">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Active</SelectItem>
+                    <SelectItem value="false">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              Share these credentials with the user securely. They will be
-              required to change their password on first login.
-            </p>
-            <button
-              onClick={() => setTempCredentials(null)}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Bulk Results Modal */}
-      {bulkResults && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 my-8">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Bulk Import Results
-            </h3>
-
-            {bulkResults.success.length > 0 && (
-              <div className="mb-4">
-                <h4 className="font-medium text-green-700 mb-2">
-                  Successfully Created ({bulkResults.success.length})
-                </h4>
-                <div className="bg-green-50 border border-green-200 p-4 rounded-md max-h-60 overflow-y-auto">
-                  {bulkResults.success.map((user, idx) => (
-                    <div
-                      key={idx}
-                      className="mb-3 pb-3 border-b border-green-200 last:border-0"
-                    >
-                      <p className="text-sm font-medium">{user.email}</p>
-                      <p className="text-xs text-gray-600">
-                        Password:{" "}
-                        <span className="font-mono">
-                          {user.temporaryPassword}
-                        </span>
-                      </p>
-                    </div>
-                  ))}
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="date-from">Created From</Label>
+                <Input
+                  id="date-from"
+                  type="date"
+                  value={dateFromFilter}
+                  onChange={(e) => setDateFromFilter(e.target.value)}
+                />
               </div>
-            )}
 
-            {bulkResults.failed.length > 0 && (
-              <div className="mb-4">
-                <h4 className="font-medium text-red-700 mb-2">
-                  Failed ({bulkResults.failed.length})
-                </h4>
-                <div className="bg-red-50 border border-red-200 p-4 rounded-md max-h-40 overflow-y-auto">
-                  {bulkResults.failed.map((user, idx) => (
-                    <div key={idx} className="mb-2 text-sm">
-                      <span className="font-medium">{user.email}</span>:{" "}
-                      {user.error}
-                    </div>
-                  ))}
-                </div>
+              <div>
+                <Label htmlFor="date-to">Created To</Label>
+                <Input
+                  id="date-to"
+                  type="date"
+                  value={dateToFilter}
+                  onChange={(e) => setDateToFilter(e.target.value)}
+                />
               </div>
-            )}
-
-            <button
-              onClick={() => setBulkResults(null)}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* User Action Confirmation Modal */}
-      {userAction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {userAction.type === "unlock" && "Unlock Account"}
-              {userAction.type === "reset" && "Reset Password"}
-              {userAction.type === "logout" && "Force Logout"}
-            </h3>
-            <p className="text-sm text-gray-600 mb-6">
-              {userAction.type === "unlock" &&
-                "Are you sure you want to unlock this account? This will reset the failed login attempts counter."}
-              {userAction.type === "reset" &&
-                "Are you sure you want to reset this user's password? They will need to change it on next login."}
-              {userAction.type === "logout" &&
-                "Are you sure you want to force logout this user from all sessions?"}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setUserAction(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmUserAction}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Confirm
-              </button>
             </div>
+
+            {hasActiveFilters && (
+              <Button onClick={clearAllFilters} variant="ghost" size="sm">
+                <X className="w-4 h-4 mr-2" />
+                Clear All Filters
+              </Button>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Bulk Import Modal */}
-      {showBulkImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Bulk Import Users (CSV)
-            </h3>
-            <form onSubmit={handleBulkImport} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CSV Format: email, role, name, department
-                </label>
-                <div className="bg-gray-50 p-2 rounded text-xs font-mono mb-2">
-                  <div>email,role,name,department</div>
-                  <div>john@example.com,LECTURER,John Doe,Computer Science</div>
-                  <div>jane@example.com,INVIGILATOR,Jane Smith,Mathematics</div>
-                </div>
-                <textarea
-                  name="csvData"
-                  required
-                  rows={10}
-                  placeholder="Paste CSV data here..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                />
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowBulkImportModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium"
-                  disabled={isBulkCreating}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBulkCreating}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium disabled:opacity-50"
-                >
-                  {isBulkCreating ? "Importing..." : "Import Users"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Create New User
-            </h3>
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
-                <select
-                  name="role"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select Role</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="INVIGILATOR">Invigilator</option>
-                  <option value="LECTURER">Lecturer</option>
-                  <option value="DEPARTMENT_HEAD">Department Head</option>
-                  <option value="FACULTY_OFFICER">Faculty Officer</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Department
-                </label>
-                <input
-                  type="text"
-                  name="department"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium"
-                  disabled={isCreating}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50"
-                >
-                  {isCreating ? "Creating..." : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       {/* Users List */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {isLoading && (
-          <div className="p-8 text-center text-gray-600">Loading users...</div>
-        )}
-
-        {error && (
-          <div className="p-8 text-center text-red-600">
-            Error loading users:{" "}
-            {error instanceof Error ? error.message : "Unknown error"}
-          </div>
-        )}
-
-        {usersData && (
-          <>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <p className="text-sm text-gray-600">
-                Showing {usersData.users.length} user
-                {usersData.users.length !== 1 ? "s" : ""}
-              </p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Users
+            {usersData && (
+              <Badge variant="secondary">{usersData.users.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading && (
+            <div className="p-12 text-center text-muted-foreground">
+              Loading users...
             </div>
+          )}
 
+          {error && (
+            <div className="p-12 text-center">
+              <div className="inline-flex items-start gap-2 p-4 bg-destructive/10 border border-destructive/50 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                <div className="text-left">
+                  <p className="font-medium text-destructive">
+                    Error loading users
+                  </p>
+                  <p className="text-sm text-destructive">
+                    {error instanceof Error ? error.message : "Unknown error"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {usersData && usersData.users.length === 0 && (
+            <div className="p-12 text-center text-muted-foreground">
+              <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No users found</p>
+            </div>
+          )}
+
+          {usersData && usersData.users.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left">
-                      <input
-                        type="checkbox"
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
                         checked={selectedUsers.size === usersData.users.length}
-                        onChange={toggleSelectAll}
-                        className="rounded"
+                        onCheckedChange={toggleSelectAll}
                       />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Department
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {usersData.users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="checkbox"
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <Checkbox
                           checked={selectedUsers.has(user.id)}
-                          onChange={() => toggleUserSelection(user.id)}
+                          onCheckedChange={() => toggleUserSelection(user.id)}
                           disabled={user.isSuperAdmin}
-                          className="rounded disabled:opacity-50"
                         />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.name}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{user.name}</p>
+                          {user.isSuperAdmin && (
+                            <Badge variant="default" className="text-xs mt-1">
+                              Super Admin
+                            </Badge>
+                          )}
                         </div>
-                        {user.isSuperAdmin && (
-                          <span className="text-xs text-blue-600 font-medium">
-                            Super Admin
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
                         {user.email}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-xs font-medium uppercase text-gray-700">
-                          {user.role.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {user.role.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
                         {user.department}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                            user.isActive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={user.isActive ? "default" : "destructive"}
                         >
                           {user.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         {!user.isSuperAdmin && (
-                          <div className="flex gap-2">
-                            <button
+                          <div className="flex justify-end gap-2">
+                            <Button
                               onClick={() =>
                                 user.isActive
                                   ? deactivateUser(user.id)
                                   : reactivateUser(user.id)
                               }
-                              className={`font-medium ${
-                                user.isActive
-                                  ? "text-red-600 hover:text-red-800"
-                                  : "text-green-600 hover:text-green-800"
-                              }`}
+                              variant={user.isActive ? "ghost" : "outline"}
+                              size="sm"
                             >
-                              {user.isActive ? "Deactivate" : "Reactivate"}
-                            </button>
-                            <button
+                              {user.isActive ? (
+                                <>
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <Users className="w-4 h-4 mr-1" />
+                                  Reactivate
+                                </>
+                              )}
+                            </Button>
+                            <Button
                               onClick={() =>
                                 handleUserAction("unlock", user.id)
                               }
-                              className="font-medium text-blue-600 hover:text-blue-800"
+                              variant="ghost"
+                              size="sm"
                               title="Unlock account"
                             >
-                              Unlock
-                            </button>
-                            <button
+                              <Unlock className="w-4 h-4" />
+                            </Button>
+                            <Button
                               onClick={() => handleUserAction("reset", user.id)}
-                              className="font-medium text-purple-600 hover:text-purple-800"
+                              variant="ghost"
+                              size="sm"
                               title="Reset password"
                             >
-                              Reset
-                            </button>
-                            <button
+                              <KeyRound className="w-4 h-4" />
+                            </Button>
+                            <Button
                               onClick={() =>
                                 handleUserAction("logout", user.id)
                               }
-                              className="font-medium text-orange-600 hover:text-orange-800"
+                              variant="ghost"
+                              size="sm"
                               title="Force logout"
                             >
-                              Logout
-                            </button>
+                              <LogOut className="w-4 h-4" />
+                            </Button>
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create User Dialog */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New User</DialogTitle>
+            <DialogDescription>
+              Create a new user account with a temporary password
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div>
+              <Label htmlFor="name">Name</Label>
+              <Input id="name" name="name" required />
+            </div>
+
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" required />
+            </div>
+
+            <div>
+              <Label htmlFor="role">Role</Label>
+              <Select name="role" required>
+                <SelectTrigger id="role">
+                  <SelectValue placeholder="Select Role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="INVIGILATOR">Invigilator</SelectItem>
+                  <SelectItem value="LECTURER">Lecturer</SelectItem>
+                  <SelectItem value="DEPARTMENT_HEAD">
+                    Department Head
+                  </SelectItem>
+                  <SelectItem value="FACULTY_OFFICER">
+                    Faculty Officer
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="department">Department</Label>
+              <Input id="department" name="department" required />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCreateModal(false)}
+                disabled={isCreating}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isCreating}>
+                {isCreating ? "Creating..." : "Create User"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={showBulkImportModal} onOpenChange={setShowBulkImportModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Users (CSV)</DialogTitle>
+            <DialogDescription>
+              Import multiple users from CSV format
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleBulkImport} className="space-y-4">
+            <div>
+              <Label>CSV Format</Label>
+              <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1 mt-2">
+                <div className="font-semibold">email,role,name,department</div>
+                <div className="text-muted-foreground">
+                  john@example.com,LECTURER,John Doe,Computer Science
+                </div>
+                <div className="text-muted-foreground">
+                  jane@example.com,INVIGILATOR,Jane Smith,Mathematics
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="csvData">CSV Data</Label>
+              <Textarea
+                id="csvData"
+                name="csvData"
+                required
+                rows={10}
+                placeholder="Paste CSV data here..."
+                className="font-mono text-sm"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowBulkImportModal(false)}
+                disabled={isBulkCreating}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isBulkCreating}>
+                {isBulkCreating ? "Importing..." : "Import Users"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Temporary Credentials Dialog */}
+      <Dialog
+        open={!!tempCredentials}
+        onOpenChange={() => setTempCredentials(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>User Created Successfully</DialogTitle>
+            <DialogDescription>
+              Save these credentials - they will not be shown again!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-4 rounded-lg space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+                Save these credentials securely
+              </p>
+            </div>
+            {tempCredentials && (
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Email</Label>
+                  <p className="font-mono text-sm font-medium">
+                    {tempCredentials.email}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    Temporary Password
+                  </Label>
+                  <p className="font-mono text-sm font-medium">
+                    {tempCredentials.password}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Share these credentials with the user securely. They will be
+            required to change their password on first login.
+          </p>
+          <DialogFooter>
+            <Button onClick={() => setTempCredentials(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Results Dialog */}
+      <Dialog open={!!bulkResults} onOpenChange={() => setBulkResults(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Results</DialogTitle>
+            <DialogDescription>Summary of bulk user creation</DialogDescription>
+          </DialogHeader>
+
+          {bulkResults && (
+            <div className="space-y-4">
+              {bulkResults.success.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Successfully Created ({bulkResults.success.length})
+                  </h4>
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg max-h-60 overflow-y-auto space-y-3">
+                    {bulkResults.success.map((user, idx) => (
+                      <div
+                        key={idx}
+                        className="pb-3 border-b border-green-200 dark:border-green-800 last:border-0"
+                      >
+                        <p className="text-sm font-medium">{user.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Password:{" "}
+                          <span className="font-mono">
+                            {user.temporaryPassword}
+                          </span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {bulkResults.failed.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Failed ({bulkResults.failed.length})
+                  </h4>
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg max-h-40 overflow-y-auto space-y-2">
+                    {bulkResults.failed.map((user, idx) => (
+                      <div key={idx} className="text-sm">
+                        <span className="font-medium">{user.email}</span>:{" "}
+                        {user.error}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setBulkResults(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* User Action Confirmation Dialog */}
+      <Dialog open={!!userAction} onOpenChange={() => setUserAction(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {userAction?.type === "unlock" && "Unlock Account"}
+              {userAction?.type === "reset" && "Reset Password"}
+              {userAction?.type === "logout" && "Force Logout"}
+            </DialogTitle>
+            <DialogDescription>
+              {userAction?.type === "unlock" &&
+                "Are you sure you want to unlock this account? This will reset the failed login attempts counter."}
+              {userAction?.type === "reset" &&
+                "Are you sure you want to reset this user's password? They will need to change it on next login."}
+              {userAction?.type === "logout" &&
+                "Are you sure you want to force logout this user from all sessions?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserAction(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmUserAction}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
