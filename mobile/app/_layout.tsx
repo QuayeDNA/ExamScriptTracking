@@ -7,7 +7,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
-import Toast from "react-native-toast-message";
+import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
 import "../global.css";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -29,7 +29,6 @@ function useProtectedRoute() {
 
     // Wait for router to be ready
     const timeout = setTimeout(() => {
-      const inAuthGroup = segments[0] === "(tabs)";
       const inAuthFlow =
         segments[0] === "login" || segments[0] === "change-password";
 
@@ -58,8 +57,12 @@ function useProtectedRoute() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const initialize = useAuthStore((state) => state.initialize);
-  const notificationListener = useRef<Notifications.Subscription>();
-  const responseListener = useRef<Notifications.Subscription>();
+  const notificationListener = useRef<Notifications.Subscription | undefined>(
+    undefined
+  );
+  const responseListener = useRef<Notifications.Subscription | undefined>(
+    undefined
+  );
   const { handleNotificationTap } = useNotificationNavigation();
 
   // Initialize socket connection
@@ -96,6 +99,7 @@ export default function RootLayout() {
         responseListener.current.remove();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useProtectedRoute();
@@ -144,7 +148,65 @@ export default function RootLayout() {
         />
       </Stack>
       <StatusBar style="auto" />
-      <Toast />
+      <Toast
+        config={{
+          success: (props) => (
+            <BaseToast
+              {...props}
+              style={{ borderLeftColor: "#10b981" }}
+              contentContainerStyle={{ paddingHorizontal: 15 }}
+              text1Style={{
+                fontSize: 15,
+                fontWeight: "600",
+              }}
+              text2Style={{
+                fontSize: 13,
+              }}
+            />
+          ),
+          error: (props) => (
+            <ErrorToast
+              {...props}
+              style={{ borderLeftColor: "#ef4444" }}
+              text1Style={{
+                fontSize: 15,
+                fontWeight: "600",
+              }}
+              text2Style={{
+                fontSize: 13,
+              }}
+            />
+          ),
+          warning: (props) => (
+            <BaseToast
+              {...props}
+              style={{ borderLeftColor: "#f59e0b" }}
+              contentContainerStyle={{ paddingHorizontal: 15 }}
+              text1Style={{
+                fontSize: 15,
+                fontWeight: "600",
+              }}
+              text2Style={{
+                fontSize: 13,
+              }}
+            />
+          ),
+          info: (props) => (
+            <BaseToast
+              {...props}
+              style={{ borderLeftColor: "#3b82f6" }}
+              contentContainerStyle={{ paddingHorizontal: 15 }}
+              text1Style={{
+                fontSize: 15,
+                fontWeight: "600",
+              }}
+              text2Style={{
+                fontSize: 13,
+              }}
+            />
+          ),
+        }}
+      />
     </ThemeProvider>
   );
 }

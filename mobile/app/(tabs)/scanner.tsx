@@ -65,7 +65,13 @@ function ScannerScreen() {
     try {
       const session = await examSessionsApi.getExamSession(batchId);
       setActiveExamSession(session);
-      drawerRef.current?.snapToIndex(0);
+
+      // Use requestAnimationFrame to ensure state is updated before opening drawer
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          drawerRef.current?.snapToIndex(1); // Start at HALF height for better visibility
+        });
+      });
 
       // Animate scan area to adjust for drawer
       Animated.spring(scanAreaHeight, {
@@ -414,78 +420,78 @@ function ScannerScreen() {
           barcodeScannerSettings={{
             barcodeTypes: ["qr"],
           }}
-        >
-          <View style={styles.overlay}>
-            <View style={styles.scanArea}>
-              <View
-                style={[
-                  styles.corner,
-                  styles.topLeft,
-                  { borderColor: colors.primary },
-                ]}
-              />
-              <View
-                style={[
-                  styles.corner,
-                  styles.topRight,
-                  { borderColor: colors.primary },
-                ]}
-              />
-              <View
-                style={[
-                  styles.corner,
-                  styles.bottomLeft,
-                  { borderColor: colors.primary },
-                ]}
-              />
-              <View
-                style={[
-                  styles.corner,
-                  styles.bottomRight,
-                  { borderColor: colors.primary },
-                ]}
-              />
-            </View>
-
-            <View style={styles.instructionContainer}>
-              {!activeExamSession ? (
-                <View
-                  style={[
-                    styles.instructionBox,
-                    { backgroundColor: "rgba(0,0,0,0.7)" },
-                  ]}
-                >
-                  <Ionicons name="cube" size={24} color="#fff" />
-                  <Text style={styles.instructionText}>Scan Batch QR Code</Text>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.instructionBox,
-                    { backgroundColor: "rgba(0,0,0,0.7)" },
-                  ]}
-                >
-                  <Ionicons
-                    name={scanMode === "ENTRY" ? "enter" : "exit"}
-                    size={24}
-                    color="#fff"
-                  />
-                  <Text style={styles.instructionText}>
-                    Scan Student ID - {scanMode}
-                  </Text>
-                </View>
-              )}
-              {scanned && (
-                <View
-                  style={[styles.successBadge, { backgroundColor: "#10b981" }]}
-                >
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                  <Text style={styles.successText}>Scanned</Text>
-                </View>
-              )}
-            </View>
+        />
+        {/* Overlay positioned absolutely on top of camera */}
+        <View style={styles.overlay}>
+          <View style={styles.scanArea}>
+            <View
+              style={[
+                styles.corner,
+                styles.topLeft,
+                { borderColor: colors.primary },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                styles.topRight,
+                { borderColor: colors.primary },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                styles.bottomLeft,
+                { borderColor: colors.primary },
+              ]}
+            />
+            <View
+              style={[
+                styles.corner,
+                styles.bottomRight,
+                { borderColor: colors.primary },
+              ]}
+            />
           </View>
-        </CameraView>
+
+          <View style={styles.instructionContainer}>
+            {!activeExamSession ? (
+              <View
+                style={[
+                  styles.instructionBox,
+                  { backgroundColor: "rgba(0,0,0,0.7)" },
+                ]}
+              >
+                <Ionicons name="cube" size={24} color="#fff" />
+                <Text style={styles.instructionText}>Scan Batch QR Code</Text>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.instructionBox,
+                  { backgroundColor: "rgba(0,0,0,0.7)" },
+                ]}
+              >
+                <Ionicons
+                  name={scanMode === "ENTRY" ? "enter" : "exit"}
+                  size={24}
+                  color="#fff"
+                />
+                <Text style={styles.instructionText}>
+                  Scan Student ID - {scanMode}
+                </Text>
+              </View>
+            )}
+            {scanned && (
+              <View
+                style={[styles.successBadge, { backgroundColor: "#10b981" }]}
+              >
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.successText}>Scanned</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </Animated.View>
 
       {/* Attendance Drawer */}
@@ -567,8 +573,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   overlay: {
-    flex: 1,
-    backgroundColor: "transparent",
+    ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
     paddingVertical: 60,
   },

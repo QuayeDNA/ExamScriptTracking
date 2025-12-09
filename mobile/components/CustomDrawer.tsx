@@ -27,7 +27,7 @@ import { useThemeColors } from "@/constants/design-system";
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const DRAWER_HEIGHTS = {
   CLOSED: 0,
-  PEEK: SCREEN_HEIGHT * 0.15,
+  PEEK: SCREEN_HEIGHT * 0.3,
   HALF: SCREEN_HEIGHT * 0.5,
   FULL: SCREEN_HEIGHT * 0.9,
 };
@@ -269,16 +269,55 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
       }
     };
 
+    const handleHandleTap = () => {
+      // Cycle through sizes on tap
+      if (currentIndex === 0) {
+        setCurrentIndex(1);
+        Animated.spring(drawerHeight, {
+          toValue: DRAWER_HEIGHTS.HALF,
+          useNativeDriver: false,
+          damping: 20,
+          stiffness: 90,
+        }).start();
+      } else if (currentIndex === 1) {
+        setCurrentIndex(2);
+        Animated.spring(drawerHeight, {
+          toValue: DRAWER_HEIGHTS.FULL,
+          useNativeDriver: false,
+          damping: 20,
+          stiffness: 90,
+        }).start();
+      } else if (currentIndex === 2) {
+        setCurrentIndex(1);
+        Animated.spring(drawerHeight, {
+          toValue: DRAWER_HEIGHTS.HALF,
+          useNativeDriver: false,
+          damping: 20,
+          stiffness: 90,
+        }).start();
+      }
+    };
+
     const panResponder = useState(() =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (_, gestureState) => {
-          return Math.abs(gestureState.dy) > 10;
+          return Math.abs(gestureState.dy) > 5;
         },
         onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dy > 80) {
+          // Detect tap (minimal movement)
+          if (
+            Math.abs(gestureState.dy) < 10 &&
+            Math.abs(gestureState.dx) < 10
+          ) {
+            handleHandleTap();
+            return;
+          }
+
+          // Handle swipe gestures
+          if (gestureState.dy > 50) {
             handleSwipeGesture("down");
-          } else if (gestureState.dy < -80) {
+          } else if (gestureState.dy < -50) {
             handleSwipeGesture("up");
           }
         },
