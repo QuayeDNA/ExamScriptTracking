@@ -20,7 +20,6 @@ import BatchDetailsPage from "@/pages/dashboard/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
-import AttendanceSessionsPage from "@/pages/dashboard/AttendanceSessionsPage";
 import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
@@ -91,10 +90,6 @@ function App() {
               <Route element={<ProtectedRoute allowedRoles={[Role.ADMIN]} />}>
                 <Route path="/dashboard" element={<DashboardLayout />}>
                   <Route path="users" element={<UsersPage />} />
-                  <Route
-                    path="attendance-sessions"
-                    element={<AttendanceSessionsPage />}
-                  />
                   <Route
                     path="class-attendance"
                     element={<ClassAttendancePage />}

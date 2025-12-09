@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -16,7 +16,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -26,13 +35,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import {
   ClipboardList,
   Search,
   RefreshCw,
   Eye,
-  Users,
   CheckCircle,
   Clock,
+  MoreVertical,
+  Edit,
+  ShieldOff,
+  Shield,
+  Smartphone,
+  Users,
+  Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -43,22 +65,45 @@ import RecordingDetailsModal from "@/components/RecordingDetailsModal";
 
 export default function ClassAttendancePage() {
   const [searchFilter, setSearchFilter] = useState("");
-  const [sessionFilter, setSessionFilter] = useState<string>("");
+  const [sessionFilter, setSessionFilter] = useState<string>("all");
   const [selectedRecord, setSelectedRecord] = useState<string | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [sessionToUpdate, setSessionToUpdate] =
+    useState<AttendanceSession | null>(null);
+  const [newDeviceName, setNewDeviceName] = useState("");
+
+  const queryClient = useQueryClient();
 
   // Fetch all attendance sessions
   const { data: sessionsData } = useQuery({
     queryKey: ["attendance-sessions-all"],
     queryFn: () =>
       classAttendanceApi.getAttendanceSessions({
-        limit: 100, // Get all sessions for filter
+        limit: 100, // Get all sessions
       }),
   });
 
   const sessions = sessionsData?.sessions || [];
 
-  // Fetch recordings grouped by session
+  // Update session mutation
+  const updateSessionMutation = useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: { deviceName?: string; isActive?: boolean };
+    }) => classAttendanceApi.updateAttendanceSession(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance-sessions-all"] });
+      toast.success("Session updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update session");
+    },
+  });
+
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set()
   );
@@ -78,13 +123,40 @@ export default function ClassAttendancePage() {
     setShowDetailsModal(true);
   };
 
+  const handleUpdateSession = (session: AttendanceSession) => {
+    setSessionToUpdate(session);
+    setNewDeviceName(session.deviceName || "");
+    setShowUpdateDialog(true);
+  };
+
+  const confirmUpdateSession = async () => {
+    if (!sessionToUpdate) return;
+
+    updateSessionMutation.mutate({
+      id: sessionToUpdate.id,
+      data: { deviceName: newDeviceName },
+    });
+
+    setShowUpdateDialog(false);
+    setSessionToUpdate(null);
+    setNewDeviceName("");
+  };
+
+  const handleToggleActive = (session: AttendanceSession) => {
+    updateSessionMutation.mutate({
+      id: session.id,
+      data: { isActive: !session.isActive },
+    });
+  };
+
   const filteredSessions = sessions.filter((session) => {
     const matchesSearch =
       !searchFilter ||
       session.deviceId.toLowerCase().includes(searchFilter.toLowerCase()) ||
       session.deviceName?.toLowerCase().includes(searchFilter.toLowerCase());
 
-    const matchesSession = !sessionFilter || session.id === sessionFilter;
+    const matchesSession =
+      sessionFilter === "all" || session.id === sessionFilter;
 
     return matchesSearch && matchesSession;
   });
@@ -94,11 +166,68 @@ export default function ClassAttendancePage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Class Attendance Recordings
+          Class Attendance Management
         </h1>
         <p className="text-muted-foreground">
-          View and manage all class attendance recordings
+          Manage devices and view attendance recordings
         </p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Sessions
+            </CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{sessions.length}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Active Sessions
+            </CardTitle>
+            <Shield className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-success">
+              {sessions.filter((s) => s.isActive).length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Inactive Sessions
+            </CardTitle>
+            <ShieldOff className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-muted-foreground">
+              {sessions.filter((s) => !s.isActive).length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Recordings
+            </CardTitle>
+            <Calendar className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {sessions.reduce((sum, s) => sum + s.totalRecordings, 0)}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -128,7 +257,7 @@ export default function ClassAttendancePage() {
                 <SelectValue placeholder="All Sessions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Sessions</SelectItem>
+                <SelectItem value="all">All Sessions</SelectItem>
                 {sessions.map((session) => (
                   <SelectItem key={session.id} value={session.id}>
                     {session.deviceName || session.deviceId}
@@ -141,7 +270,7 @@ export default function ClassAttendancePage() {
               variant="outline"
               onClick={() => {
                 setSearchFilter("");
-                setSessionFilter("");
+                setSessionFilter("all");
               }}
             >
               Clear
@@ -170,6 +299,8 @@ export default function ClassAttendancePage() {
               isExpanded={expandedSessions.has(session.id)}
               onToggle={() => handleToggleSession(session.id)}
               onViewDetails={handleViewDetails}
+              onUpdateSession={handleUpdateSession}
+              onToggleActive={handleToggleActive}
             />
           ))
         )}
@@ -186,6 +317,41 @@ export default function ClassAttendancePage() {
           recordId={selectedRecord}
         />
       )}
+
+      {/* Update Device Name Dialog */}
+      <Dialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Device</DialogTitle>
+            <DialogDescription>
+              Update the display name for this attendance device
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="device-name">Device Name</Label>
+              <Input
+                id="device-name"
+                placeholder="Enter device name"
+                value={newDeviceName}
+                onChange={(e) => setNewDeviceName(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Device ID: {sessionToUpdate?.deviceId}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowUpdateDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmUpdateSession}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -196,11 +362,15 @@ function SessionCard({
   isExpanded,
   onToggle,
   onViewDetails,
+  onUpdateSession,
+  onToggleActive,
 }: {
   session: AttendanceSession;
   isExpanded: boolean;
   onToggle: () => void;
   onViewDetails: (recordId: string) => void;
+  onUpdateSession: (session: AttendanceSession) => void;
+  onToggleActive: (session: AttendanceSession) => void;
 }) {
   const { data: recordsData, isLoading } = useQuery({
     queryKey: ["attendance-records", session.id],
@@ -212,18 +382,21 @@ function SessionCard({
 
   return (
     <Card>
-      <CardHeader
-        className="cursor-pointer hover:bg-muted/50"
-        onClick={onToggle}
-      >
+      <CardHeader className="hover:bg-muted/50">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
+          <div className="flex-1 cursor-pointer" onClick={onToggle}>
             <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+              <Smartphone className="h-5 w-5" />
               {session.deviceName || session.deviceId}
-              {session.isActive && (
+              {session.isActive ? (
                 <Badge variant="default" className="ml-2">
+                  <Shield className="h-3 w-3 mr-1" />
                   Active
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="ml-2">
+                  <ShieldOff className="h-3 w-3 mr-1" />
+                  Inactive
                 </Badge>
               )}
             </CardTitle>
@@ -233,9 +406,37 @@ function SessionCard({
               {session.totalRecordings} recording(s)
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm">
-            {isExpanded ? "Hide" : "Show"} Recordings
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onToggle}>
+              {isExpanded ? "Hide" : "Show"} Recordings
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onUpdateSession(session)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Rename Device
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onToggleActive(session)}>
+                  {session.isActive ? (
+                    <>
+                      <ShieldOff className="h-4 w-4 mr-2" />
+                      Deactivate
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4 mr-2" />
+                      Activate
+                    </>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </CardHeader>
 

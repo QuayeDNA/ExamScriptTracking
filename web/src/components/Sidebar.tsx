@@ -62,7 +62,7 @@ const adminItems: NavItem[] = [
   },
   {
     title: "Class Attendance",
-    href: "/dashboard/attendance-sessions",
+    href: "/dashboard/class-attendance",
     icon: Users,
     roles: ["ADMIN"],
   },
