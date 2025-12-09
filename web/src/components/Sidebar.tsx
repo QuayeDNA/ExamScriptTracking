@@ -80,7 +80,7 @@ const adminItems: NavItem[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ className }: { className?: string }) {
   const location = useLocation();
   const { user } = useAuthStore();
 
@@ -94,7 +94,12 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="hidden md:flex h-full w-64 flex-col bg-card border-r border-border">
+    <aside
+      className={cn(
+        "flex h-full w-64 flex-col bg-card border-r border-border",
+        className
+      )}
+    >
       {/* Logo Section */}
       <div className="flex h-16 items-center px-6 border-b border-border">
         <Link to="/dashboard" className="flex items-center gap-2">

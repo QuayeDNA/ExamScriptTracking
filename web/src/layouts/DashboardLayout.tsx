@@ -4,7 +4,13 @@ import { TopBar } from "@/components/TopBar";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 
 export const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,7 +18,7 @@ export const DashboardLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar - Hidden on mobile */}
-      <Sidebar />
+      <Sidebar className="hidden md:flex" />
 
       {/* Mobile Sidebar Sheet */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -22,7 +28,12 @@ export const DashboardLayout = () => {
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-64">
-          <Sidebar />
+          {/* Visually hidden title for accessibility */}
+          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+          <SheetDescription className="sr-only">
+            Main navigation menu for the application
+          </SheetDescription>
+          <Sidebar className="flex" />
         </SheetContent>
       </Sheet>
 
