@@ -1095,25 +1095,35 @@ Index Number,First Name,Last Name,Program,Level,Scan Time
 
 ---
 
-### Admin Panel Features (Web Dashboard)
+### Admin Panel Features (Integrated into Existing Web Dashboard)
 
-#### 1. Session Management Page
+The lecturer attendance system integrates seamlessly into the existing admin dashboard as a dedicated section within the "Administration" panel, maintaining consistency with the current design system and navigation structure.
 
-**Web Page: `AttendanceSessionsPage.tsx`**
+#### 1. Attendance Sessions Management Page
+
+**Web Page: `AttendanceSessionsPage.tsx`** (Location: `/web/src/pages/dashboard/`)
 
 ```typescript
 Features:
-- View all active sessions
+- View all active attendance sessions
 - Session details:
   - Device name
-  - Device ID (masked)
+  - Device ID (masked for security)
   - Total recordings
   - Last activity
   - Created date
 - Revoke session button (with confirmation)
 - Flag suspicious sessions
 - Export session data
+- Search and filter capabilities
+- Session activity timeline
 ```
+
+**Navigation Integration:**
+
+- Added to existing sidebar under "Administration" section
+- Uses same authentication and role-based access as other admin features
+- Follows established dashboard design patterns
 
 #### 2. Session Revocation
 

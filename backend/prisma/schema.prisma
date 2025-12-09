@@ -67,6 +67,7 @@ enum Role {
   DEPARTMENT_HEAD
   FACULTY_OFFICER
   LECTURER
+  CLASS_REP
 }
 
 // Students
@@ -81,6 +82,7 @@ model Student {
   createdAt   DateTime @default(now())
   
   attendances       ExamAttendance[]
+  classAttendances  ClassAttendance[]
 }
 
 // Exam Sessions
@@ -203,6 +205,76 @@ model AuditLog {
   
   @@index([entityId])
   @@index([timestamp])
+  @@index([userId])
+}
+
+// Class Attendance System Models
+
+// Class Attendance Session (Device-based sessions)
+model AttendanceSession {
+  id              String   @id @default(uuid())
+  deviceId        String   @unique // Device UUID or fingerprint
+  deviceName      String?  // User-provided device label
+  sessionToken    String   @unique // Unique session token
+  isActive        Boolean  @default(true)
+  lastActivity    DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  attendanceRecords ClassAttendanceRecord[]
+
+  @@index([deviceId])
+  @@index([isActive])
+}
+
+// Class Attendance Recording
+model ClassAttendanceRecord {
+  id               String            @id @default(uuid())
+  sessionId        String
+  lecturerName     String?           // Optional label
+  courseName       String?           // Optional label
+  courseCode       String?           // Optional label
+  startTime        DateTime          @default(now())
+  endTime          DateTime?
+  status           RecordingStatus   @default(IN_PROGRESS)
+  totalStudents    Int               @default(0)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  session          AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  students         ClassAttendance[]
+
+  @@index([sessionId])
+  @@index([startTime])
+}
+
+// Individual Student Attendance
+model ClassAttendance {
+  id               String                  @id @default(uuid())
+  recordId         String
+  studentId        String                  // From Student model
+  scanTime         DateTime                @default(now())
+  status           ClassAttendanceStatus   @default(PRESENT)
+
+  record           ClassAttendanceRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  student          Student                 @relation(fields: [studentId], references: [id])
+
+  @@unique([recordId, studentId])
+  @@index([recordId])
+  @@index([scanTime])
+}
+
+// Enums for Class Attendance System
+enum RecordingStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ClassAttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
 }
 
 // Refresh Tokens
