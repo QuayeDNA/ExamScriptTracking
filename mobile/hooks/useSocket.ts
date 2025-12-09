@@ -27,5 +27,6 @@ export function useSocket() {
   return {
     isConnected: mobileSocketService.isConnected(),
     emit: mobileSocketService.emit.bind(mobileSocketService),
+    on: mobileSocketService.on.bind(mobileSocketService),
   };
 }

@@ -21,6 +21,7 @@ import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
 import AttendanceSessionsPage from "@/pages/dashboard/AttendanceSessionsPage";
+import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
@@ -93,6 +94,10 @@ function App() {
                   <Route
                     path="attendance-sessions"
                     element={<AttendanceSessionsPage />}
+                  />
+                  <Route
+                    path="class-attendance"
+                    element={<ClassAttendancePage />}
                   />
                   <Route path="audit-logs" element={<AuditLogsPage />} />
                   <Route

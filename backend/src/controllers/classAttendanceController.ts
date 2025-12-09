@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { io } from "../server";
+import {
+  emitClassAttendanceScanned,
+  emitClassAttendanceStarted,
+  emitClassAttendanceEnded,
+} from "../socket/handlers/classAttendanceEvents";
 
 const prisma = new PrismaClient();
 
@@ -25,7 +31,7 @@ const createAttendanceRecordSchema = z.object({
 
 const recordStudentAttendanceSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
-  studentId: z.string().uuid("Invalid student ID"),
+  studentId: z.string().min(1, "Student ID is required"), // Accept any string (UUID or index number)
 });
 
 const endAttendanceRecordSchema = z.object({
@@ -267,6 +273,16 @@ export const createAttendanceRecord = async (req: Request, res: Response) => {
       },
     });
 
+    // Emit socket event for recording started
+    emitClassAttendanceStarted(io, {
+      recordId: record.id,
+      sessionId: record.sessionId,
+      courseName: record.courseName ?? undefined,
+      courseCode: record.courseCode ?? undefined,
+      lecturerName: record.lecturerName ?? undefined,
+      startTime: record.startTime.toISOString(),
+    });
+
     res.json({ record });
   } catch (error) {
     console.error("Create attendance record error:", error);
@@ -292,12 +308,33 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
         .json({ error: "Invalid or completed attendance record" });
     }
 
+    // Try to parse QR code data if it's JSON
+    let studentIdentifier = validatedData.studentId;
+    try {
+      const qrData = JSON.parse(validatedData.studentId);
+      studentIdentifier =
+        qrData.id || qrData.indexNumber || validatedData.studentId;
+    } catch {
+      // Not JSON, use as-is
+    }
+
+    // Find student by UUID or index number
+    const student = await prisma.student.findFirst({
+      where: {
+        OR: [{ id: studentIdentifier }, { indexNumber: studentIdentifier }],
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
     // Check if student already recorded
     const existingAttendance = await prisma.classAttendance.findUnique({
       where: {
         recordId_studentId: {
           recordId: validatedData.recordId,
-          studentId: validatedData.studentId,
+          studentId: student.id,
         },
       },
     });
@@ -308,19 +345,10 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
         .json({ error: "Student already recorded for this session" });
     }
 
-    // Verify student exists
-    const student = await prisma.student.findUnique({
-      where: { id: validatedData.studentId },
-    });
-
-    if (!student) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
     const attendance = await prisma.classAttendance.create({
       data: {
         recordId: validatedData.recordId,
-        studentId: validatedData.studentId,
+        studentId: student.id, // Use the found student's UUID
       },
       include: {
         student: {
@@ -335,13 +363,26 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
     });
 
     // Update total students count
-    await prisma.classAttendanceRecord.update({
+    const updatedRecord = await prisma.classAttendanceRecord.update({
       where: { id: validatedData.recordId },
       data: {
         totalStudents: {
           increment: 1,
         },
       },
+    });
+
+    // Emit socket event for student scanned
+    emitClassAttendanceScanned(io, {
+      recordId: validatedData.recordId,
+      sessionId: record.sessionId,
+      studentId: student.id,
+      studentName: `${student.firstName} ${student.lastName}`,
+      indexNumber: student.indexNumber,
+      scanTime: attendance.scanTime.toISOString(),
+      totalStudents: updatedRecord.totalStudents,
+      courseCode: record.courseCode ?? undefined,
+      courseName: record.courseName ?? undefined,
     });
 
     res.json({
@@ -359,7 +400,9 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
  */
 export const endAttendanceRecord = async (req: Request, res: Response) => {
   try {
-    const validatedData = endAttendanceRecordSchema.parse(req.body);
+    const validatedData = endAttendanceRecordSchema.parse({
+      recordId: req.params.recordId,
+    });
 
     const record = await prisma.classAttendanceRecord.update({
       where: { id: validatedData.recordId },
@@ -381,6 +424,16 @@ export const endAttendanceRecord = async (req: Request, res: Response) => {
           },
         },
       },
+    });
+
+    // Emit socket event for recording ended
+    emitClassAttendanceEnded(io, {
+      recordId: record.id,
+      sessionId: record.sessionId,
+      totalStudents: record.totalStudents,
+      endTime: record.endTime!.toISOString(),
+      courseName: record.courseName ?? undefined,
+      courseCode: record.courseCode ?? undefined,
     });
 
     res.json({
@@ -446,6 +499,52 @@ export const getAttendanceRecords = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Get attendance records error:", error);
     res.status(500).json({ error: "Failed to get attendance records" });
+  }
+};
+
+/**
+ * Get single attendance record by ID with student details
+ */
+export const getAttendanceRecordById = async (req: Request, res: Response) => {
+  try {
+    const { recordId } = req.params;
+
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id: recordId },
+      include: {
+        session: {
+          select: {
+            id: true,
+            deviceId: true,
+            deviceName: true,
+          },
+        },
+        students: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                indexNumber: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+          orderBy: {
+            scanTime: "asc",
+          },
+        },
+      },
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
+    res.json({ record });
+  } catch (error) {
+    console.error("Get attendance record by ID error:", error);
+    res.status(500).json({ error: "Failed to get attendance record" });
   }
 };
 

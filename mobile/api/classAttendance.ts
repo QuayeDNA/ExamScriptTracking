@@ -104,4 +104,10 @@ export const classAttendanceApi = {
   getRecord: async (id: string): Promise<{ record: ClassAttendanceRecord }> => {
     return apiClient.get(`/class-attendance/records/${id}`);
   },
+
+  getAttendanceRecordById: async (
+    recordId: string
+  ): Promise<{ record: ClassAttendanceRecord }> => {
+    return apiClient.get(`/class-attendance/records/${recordId}`);
+  },
 };

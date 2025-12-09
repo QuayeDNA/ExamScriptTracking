@@ -110,6 +110,11 @@ export enum SocketEvents {
   // Attendance events
   ATTENDANCE_RECORDED = "attendance:recorded",
 
+  // Class Attendance events
+  CLASS_ATTENDANCE_STUDENT_SCANNED = "class_attendance:student_scanned",
+  CLASS_ATTENDANCE_RECORDING_STARTED = "class_attendance:recording_started",
+  CLASS_ATTENDANCE_RECORDING_ENDED = "class_attendance:recording_ended",
+
   // Notification events
   NOTIFICATION_NEW = "notification:new",
   NOTIFICATION_READ = "notification:read",

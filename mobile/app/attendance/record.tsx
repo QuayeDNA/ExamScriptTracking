@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CameraView, Camera } from "expo-camera";
 import Toast from "react-native-toast-message";
@@ -16,12 +10,17 @@ import {
   type ClassAttendanceRecord,
 } from "@/api/classAttendance";
 import { useThemeColors } from "@/constants/design-system";
+import { useSocket } from "@/hooks/useSocket";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
 
 export default function AttendanceRecordScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const { recordId } = useLocalSearchParams<{ recordId?: string }>();
+  const socket = useSocket();
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [record, setRecord] = useState<ClassAttendanceRecord | null>(null);
@@ -29,6 +28,7 @@ export default function AttendanceRecordScreen() {
   const [lastStudent, setLastStudent] = useState<string>("");
   const [studentCount, setStudentCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showEndDialog, setShowEndDialog] = useState(false);
 
   const cameraRef = useRef<CameraView | null>(null);
 
@@ -44,6 +44,26 @@ export default function AttendanceRecordScreen() {
     loadRecord();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId]);
+
+  // Listen for real-time socket events
+  useEffect(() => {
+    if (!recordId) return;
+
+    const unsubscribe = socket.on(
+      "class_attendance:student_scanned",
+      (data: any) => {
+        // Only update if this is the active recording
+        if (data.recordId === recordId) {
+          setLastStudent(data.studentName);
+          setStudentCount(data.totalStudents);
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [recordId, socket]);
 
   const loadRecord = async () => {
     if (!recordId) return;
@@ -66,21 +86,38 @@ export default function AttendanceRecordScreen() {
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || !recordId) return;
     setScanned(true);
-    const studentId = data?.trim();
-    if (!studentId) {
+
+    const qrData = data?.trim();
+    if (!qrData) {
       Toast.show({ type: "error", text1: "Scan", text2: "Invalid QR data" });
       setScanned(false);
       return;
     }
 
+    // Try to parse QR code and extract student info
+    let studentId = qrData;
+    let studentName = qrData;
+
+    try {
+      const parsed = JSON.parse(qrData);
+      studentId = parsed.indexNumber || parsed.id || qrData;
+      studentName = parsed.name || parsed.indexNumber || studentId;
+    } catch {
+      // Not JSON, use raw data
+    }
+
     try {
       await classAttendanceApi.recordStudentAttendance({
         recordId,
-        studentId,
+        studentId: qrData, // Send the full QR data to backend
       });
-      setLastStudent(studentId);
+      setLastStudent(studentName);
       setStudentCount((prev) => prev + 1);
-      Toast.show({ type: "success", text1: "Recorded", text2: studentId });
+      Toast.show({
+        type: "success",
+        text1: "✓ Recorded",
+        text2: studentName,
+      });
     } catch (error: any) {
       Toast.show({
         type: "error",
@@ -92,101 +129,117 @@ export default function AttendanceRecordScreen() {
     }
   };
 
-  const handleEndRecording = async () => {
+  const handleEndRecording = () => {
     if (!recordId) return;
-    Alert.alert(
-      "End Recording",
-      "Are you sure you want to end this recording?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "End",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await classAttendanceApi.endRecord(recordId);
-              Toast.show({ type: "success", text1: "Recording ended" });
-              router.replace("/attendance" as any);
-            } catch (error: any) {
-              Toast.show({
-                type: "error",
-                text1: "End recording",
-                text2: error?.error || "Failed to end recording",
-              });
-            }
-          },
-        },
-      ]
-    );
+    setShowEndDialog(true);
+  };
+
+  const confirmEndRecording = async () => {
+    if (!recordId) return;
+    setShowEndDialog(false);
+
+    try {
+      await classAttendanceApi.endRecord(recordId);
+      Toast.show({ type: "success", text1: "Recording ended" });
+      router.replace("/attendance" as any);
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "End recording",
+        text2: error?.error || "Failed to end recording",
+      });
+    }
   };
 
   if (hasPermission === null || loading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.center, { backgroundColor: colors.background }]}
+        edges={["top"]}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (hasPermission === false) {
     return (
-      <View
-        style={[
-          styles.center,
-          { backgroundColor: colors.background, padding: 16 },
-        ]}
+      <SafeAreaView
+        style={[styles.center, { backgroundColor: colors.background }]}
+        edges={["top"]}
       >
-        <Text style={{ color: colors.foreground, textAlign: "center" }}>
-          Camera permission is required to scan attendance QR codes.
-        </Text>
-      </View>
+        <Card elevation="sm" style={{ margin: 16 }}>
+          <CardContent>
+            <View style={styles.permissionContent}>
+              <Ionicons
+                name="camera-outline"
+                size={48}
+                color={colors.foregroundMuted}
+              />
+              <Text
+                style={[styles.permissionText, { color: colors.foreground }]}
+              >
+                Camera permission required
+              </Text>
+              <Text
+                style={[
+                  styles.permissionSubtext,
+                  { color: colors.foregroundMuted },
+                ]}
+              >
+                Please enable camera access to scan attendance QR codes
+              </Text>
+            </View>
+          </CardContent>
+        </Card>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      \
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>
-            Class Attendance
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={["top"]}
+    >
+      {/* Info Bar */}
+      <View
+        style={[
+          styles.infoBar,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        <View style={styles.infoItem}>
+          <Ionicons name="people" size={20} color={colors.primary} />
+          <Text style={[styles.infoValue, { color: colors.foreground }]}>
+            {studentCount}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-            Record ID: {record?.id.slice(0, 8)}...
+          <Text style={[styles.infoLabel, { color: colors.foregroundMuted }]}>
+            scanned
           </Text>
         </View>
-        <View style={styles.stats}>
-          <View style={styles.statItem}>
-            <Ionicons name="people" size={18} color={colors.primary} />
-            <Text style={[styles.statValue, { color: colors.foreground }]}>
-              {studentCount}
-            </Text>
-            <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-              Students
+        {record?.courseCode && (
+          <View style={styles.infoDivider}>
+            <Badge variant="secondary">{record.courseCode}</Badge>
+          </View>
+        )}
+        {lastStudent && (
+          <View style={styles.infoItem}>
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color={colors.success}
+            />
+            <Text
+              style={[styles.infoLabel, { color: colors.foregroundMuted }]}
+              numberOfLines={1}
+            >
+              Last: {lastStudent}
             </Text>
           </View>
-          {lastStudent ? (
-            <View style={styles.statItem}>
-              <Ionicons
-                name="checkmark-circle"
-                size={18}
-                color={colors.success}
-              />
-              <Text
-                style={[styles.statLabel, { color: colors.foregroundMuted }]}
-              >
-                Last
-              </Text>
-              <Text
-                style={[styles.statValue, { color: colors.foreground }]}
-                numberOfLines={1}
-              >
-                {lastStudent}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        )}
       </View>
+
+      {/* Camera */}
       <View style={styles.cameraContainer}>
         <CameraView
           style={StyleSheet.absoluteFill}
@@ -195,18 +248,82 @@ export default function AttendanceRecordScreen() {
           onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
           ref={cameraRef}
         />
-        <View style={styles.overlay}>
-          <Text style={[styles.scanHint, { color: "#fff" }]}>
-            Align QR within frame
-          </Text>
+        <View style={styles.scanFrame}>
+          <View
+            style={[
+              styles.corner,
+              styles.cornerTL,
+              { borderColor: colors.primary },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerTR,
+              { borderColor: colors.primary },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerBL,
+              { borderColor: colors.primary },
+            ]}
+          />
+          <View
+            style={[
+              styles.corner,
+              styles.cornerBR,
+              { borderColor: colors.primary },
+            ]}
+          />
+        </View>
+        <View style={styles.scanHintContainer}>
+          <Text style={styles.scanHint}>Position QR code within frame</Text>
+          {scanned && (
+            <View style={styles.scanningIndicator}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.scanningText}>Processing...</Text>
+            </View>
+          )}
         </View>
       </View>
+
+      {/* Actions */}
       <View style={styles.actions}>
-        <Button variant="destructive" onPress={handleEndRecording}>
-          End Recording
+        <Button
+          variant="destructive"
+          onPress={handleEndRecording}
+          style={styles.endButton}
+        >
+          <Ionicons
+            name="stop-circle"
+            size={18}
+            color="#fff"
+            style={{ marginRight: 8 }}
+          />
+          <Text style={styles.endButtonText}>End Recording</Text>
         </Button>
       </View>
-    </View>
+
+      {/* End Recording Dialog */}
+      <Dialog
+        visible={showEndDialog}
+        onClose={() => setShowEndDialog(false)}
+        title="End Recording"
+        message="Are you sure you want to end this attendance recording? This action cannot be undone."
+        variant="warning"
+        icon="warning"
+        primaryAction={{
+          label: "End Recording",
+          onPress: confirmEndRecording,
+        }}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => setShowEndDialog(false),
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -219,46 +336,96 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  permissionContent: {
     alignItems: "center",
+    paddingVertical: 24,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  subtitle: {
-    fontSize: 13,
-  },
-  stats: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statValue: {
+  permissionText: {
     fontSize: 16,
+    fontWeight: "600",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  permissionSubtext: {
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  infoBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  infoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  infoDivider: {
+    marginHorizontal: 8,
+  },
+  infoValue: {
+    fontSize: 18,
     fontWeight: "700",
   },
-  statLabel: {
+  infoLabel: {
     fontSize: 12,
   },
   cameraContainer: {
     flex: 1,
-    marginHorizontal: 16,
+    margin: 16,
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: "#000",
+    position: "relative",
   },
-  overlay: {
+  scanFrame: {
     position: "absolute",
-    bottom: 16,
+    top: "30%",
+    left: "15%",
+    right: "15%",
+    aspectRatio: 1,
+  },
+  corner: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderWidth: 3,
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 8,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 8,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 8,
+  },
+  scanHintContainer: {
+    position: "absolute",
+    bottom: 24,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -266,8 +433,36 @@ const styles = StyleSheet.create({
   scanHint: {
     fontSize: 14,
     fontWeight: "600",
+    color: "#fff",
+    textShadowColor: "rgba(0, 0, 0, 0.75)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  scanningIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: 20,
+  },
+  scanningText: {
+    fontSize: 13,
+    color: "#fff",
+    fontWeight: "600",
   },
   actions: {
     padding: 16,
+  },
+  endButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  endButtonText: {
+    color: "#fff",
+    fontWeight: "600",
   },
 });

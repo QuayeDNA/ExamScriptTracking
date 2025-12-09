@@ -9,6 +9,7 @@ import {
   endAttendanceRecord,
   getAttendanceRecords,
   getAttendanceRecord,
+  getAttendanceRecordById,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -55,7 +56,14 @@ router.get(
   getAttendanceRecords
 );
 
-// Get specific attendance record
+// Get specific attendance record with full details
+router.get(
+  "/records/:recordId",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  getAttendanceRecordById
+);
+
+// Get specific attendance record (legacy route)
 router.get(
   "/records/:id",
   authorize(Role.ADMIN, Role.CLASS_REP),

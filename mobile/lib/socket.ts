@@ -163,6 +163,42 @@ class MobileSocketService {
       // Could trigger a background data refresh here
       console.log("Dashboard stats updated");
     });
+
+    // Class attendance student scanned
+    this.socket.on(
+      "class_attendance:student_scanned",
+      async (data: unknown) => {
+        const eventData = data as SocketData;
+        console.log("Class attendance student scanned:", eventData);
+        // Note: Notifications handled by active recording screen
+      }
+    );
+
+    // Class attendance recording started
+    this.socket.on(
+      "class_attendance:recording_started",
+      async (data: unknown) => {
+        const eventData = data as SocketData;
+        await scheduleNotification(
+          "Recording Started",
+          `Attendance recording started for ${eventData.courseName || "class"}`,
+          { type: "class_attendance_started", ...eventData }
+        );
+      }
+    );
+
+    // Class attendance recording ended
+    this.socket.on(
+      "class_attendance:recording_ended",
+      async (data: unknown) => {
+        const eventData = data as SocketData;
+        await scheduleNotification(
+          "Recording Completed",
+          `Attendance recording completed: ${eventData.totalStudents || 0} students`,
+          { type: "class_attendance_ended", ...eventData }
+        );
+      }
+    );
   }
 
   disconnect() {
@@ -178,6 +214,24 @@ class MobileSocketService {
 
   emit(event: string, data?: unknown) {
     this.socket?.emit(event, data);
+  }
+
+  /**
+   * Subscribe to a socket event with a callback
+   * Returns an unsubscribe function
+   */
+  on(event: string, callback: (data: unknown) => void): () => void {
+    if (!this.socket) {
+      console.warn("Cannot subscribe to event: socket not connected");
+      return () => {};
+    }
+
+    this.socket.on(event, callback);
+
+    // Return unsubscribe function
+    return () => {
+      this.socket?.off(event, callback);
+    };
   }
 }
 

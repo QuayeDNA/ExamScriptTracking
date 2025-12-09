@@ -5,22 +5,21 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
+  Pressable,
+  Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
-import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Text } from "@/components/ui/typography";
+import { Text, H2 } from "@/components/ui/typography";
 import { Separator } from "@/components/ui/separator";
 import { useThemeColors } from "@/constants/design-system";
 import {
@@ -33,29 +32,41 @@ const DEVICE_ID_KEY = "attendance_device_id";
 const DEVICE_NAME_KEY = "attendance_device_name";
 
 async function getOrCreateDeviceId() {
-  const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
   if (existing) return existing;
 
-  const candidate =
-    Application.getAndroidId() ||
-    (await Application.getIosIdForVendorAsync()) ||
-    `device-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await SecureStore.setItemAsync(DEVICE_ID_KEY, candidate);
+  let candidate: string;
+
+  if (Platform.OS === "web") {
+    // For web, use a combination of browser info and timestamp
+    candidate = `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  } else {
+    // For native platforms
+    candidate =
+      Application.getAndroidId() ||
+      (await Application.getIosIdForVendorAsync()) ||
+      `device-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  await AsyncStorage.setItem(DEVICE_ID_KEY, candidate);
   return candidate;
 }
 
 async function getStoredDeviceName() {
-  return SecureStore.getItemAsync(DEVICE_NAME_KEY);
+  return AsyncStorage.getItem(DEVICE_NAME_KEY);
 }
 
 async function saveDeviceName(name: string) {
-  await SecureStore.setItemAsync(DEVICE_NAME_KEY, name);
+  await AsyncStorage.setItem(DEVICE_NAME_KEY, name);
 }
 
 export default function AttendanceDashboard() {
   const colors = useThemeColors();
   const router = useRouter();
 
+  const [activeTab, setActiveTab] = useState<"record" | "active" | "history">(
+    "record"
+  );
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState("");
   const [session, setSession] = useState<AttendanceSession | null>(null);
@@ -169,224 +180,489 @@ export default function AttendanceDashboard() {
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.center, { backgroundColor: colors.background }]}
+        edges={["top"]}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
+  const renderTabButton = (
+    tab: "record" | "active" | "history",
+    label: string,
+    icon: keyof typeof Ionicons.glyphMap
+  ) => (
+    <Pressable
+      onPress={() => setActiveTab(tab)}
+      style={[
+        styles.tabButton,
+        activeTab === tab && {
+          borderBottomWidth: 2,
+          borderBottomColor: colors.primary,
+        },
+      ]}
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>Class Attendance</CardTitle>
-          <CardDescription>
-            Device session is {session?.isActive ? "active" : "inactive"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <View style={styles.rowBetween}>
-            <Text style={[styles.muted, { color: colors.foregroundMuted }]}>
-              Device ID
-            </Text>
-            <Text style={{ fontFamily: "monospace", color: colors.foreground }}>
-              {deviceId?.slice(0, 6)}...{deviceId?.slice(-4)}
+      <Ionicons
+        name={icon}
+        size={20}
+        color={activeTab === tab ? colors.primary : colors.foregroundMuted}
+      />
+      <Text
+        style={[
+          styles.tabLabel,
+          {
+            color: activeTab === tab ? colors.primary : colors.foregroundMuted,
+            fontWeight: activeTab === tab ? "600" : "400",
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={["top"]}
+    >
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <View style={styles.headerContent}>
+          <H2 style={{ color: colors.foreground }}>Attendance</H2>
+          <View style={styles.headerMeta}>
+            <Badge variant={session?.isActive ? "default" : "secondary"}>
+              {session?.isActive ? "Active" : "Inactive"}
+            </Badge>
+            <Text
+              style={[styles.deviceText, { color: colors.foregroundMuted }]}
+            >
+              {deviceName || `Device ${deviceId?.slice(0, 6)}`}
             </Text>
           </View>
-          <Separator style={styles.separator} />
-          <Input
-            label="Device Name"
-            placeholder="Lecture Hall A - iPad"
-            value={deviceName}
-            onChangeText={setDeviceName}
-          />
-          <Button style={styles.mt12} onPress={handleSaveDeviceName}>
-            Save Device Name
-          </Button>
-        </CardContent>
-      </Card>
+        </View>
+      </View>
 
-      <Card style={styles.mt16}>
-        <CardHeader>
-          <CardTitle>Start New Recording</CardTitle>
-          <CardDescription>Enter optional details</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Input
-            label="Lecturer Name (optional)"
-            placeholder="Dr. Jane Doe"
-            value={lecturerName}
-            onChangeText={setLecturerName}
-          />
-          <View style={styles.mt12} />
-          <Input
-            label="Course Code (optional)"
-            placeholder="CS101"
-            value={courseCode}
-            onChangeText={setCourseCode}
-          />
-          <View style={styles.mt12} />
-          <Input
-            label="Course Name (optional)"
-            placeholder="Intro to CS"
-            value={courseName}
-            onChangeText={setCourseName}
-          />
-          <View style={styles.mt12} />
-          <Input
-            label="Notes (optional)"
-            placeholder="Morning lecture"
-            value={notes}
-            onChangeText={setNotes}
-          />
-          <Button style={styles.mt16} onPress={handleStartRecording}>
-            Start Recording
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Tab Bar */}
+      <View
+        style={[
+          styles.tabBar,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        {renderTabButton("record", "Record", "create-outline")}
+        {renderTabButton("active", "Active", "timer-outline")}
+        {renderTabButton("history", "History", "file-tray-full-outline")}
+      </View>
 
-      <Card style={styles.mt16}>
-        <CardHeader>
-          <CardTitle>Ongoing Recordings</CardTitle>
-          <CardDescription>
-            {activeRecords.length === 0
-              ? "No active recordings"
-              : `${activeRecords.length} active`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activeRecords.length === 0 ? (
-            <Text style={{ color: colors.foregroundMuted }}>
-              Start a new recording to begin scanning attendance.
-            </Text>
-          ) : (
-            activeRecords.map((record) => (
-              <View key={record.id} style={styles.recordRow}>
-                <View>
-                  <Text style={{ color: colors.foreground }}>
-                    {record.courseCode || "Unspecified Course"}
-                  </Text>
-                  <Text
-                    style={[styles.muted, { color: colors.foregroundMuted }]}
-                  >
-                    {record.lecturerName || "No lecturer"}
-                  </Text>
-                </View>
-                <View style={styles.rowGap}>
-                  <Badge>Active</Badge>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/attendance/record" as any,
-                        params: {
-                          recordId: record.id,
-                          sessionId: record.sessionId,
-                        },
-                      })
-                    }
-                  >
-                    Resume
-                  </Button>
-                </View>
-              </View>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {/* Tab Content */}
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {activeTab === "record" && (
+          <View style={styles.tabContent}>
+            {/* Device Setup Card */}
+            <Card elevation="sm" style={styles.card}>
+              <CardContent>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.foreground }]}
+                >
+                  Device Setup
+                </Text>
+                <Input
+                  placeholder="e.g., Lecture Hall A - iPad"
+                  value={deviceName}
+                  onChangeText={setDeviceName}
+                  style={styles.input}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onPress={handleSaveDeviceName}
+                  disabled={!deviceName.trim()}
+                >
+                  Save Device Name
+                </Button>
+              </CardContent>
+            </Card>
 
-      <Card style={styles.mt16}>
-        <CardHeader>
-          <CardTitle>History</CardTitle>
-          <CardDescription>Recent recordings for this device</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {completedRecords.length === 0 ? (
-            <Text style={{ color: colors.foregroundMuted }}>
-              No completed recordings yet.
-            </Text>
-          ) : (
-            completedRecords.map((record) => (
-              <View key={record.id} style={styles.historyRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.foreground }}>
-                    {record.courseCode || "Unspecified Course"}
-                  </Text>
-                  <Text
-                    style={[styles.muted, { color: colors.foregroundMuted }]}
-                  >
-                    {record.courseName || "No title"}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.mutedSmall,
-                      { color: colors.foregroundMuted },
-                    ]}
-                  >
-                    Students: {record.totalStudents}
-                  </Text>
-                </View>
-                <Badge variant="secondary">{record.status}</Badge>
-              </View>
-            ))
-          )}
-        </CardContent>
-      </Card>
-    </ScrollView>
+            {/* Quick Start Card */}
+            <Card elevation="sm" style={styles.card}>
+              <CardContent>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.foreground }]}
+                >
+                  Start Recording
+                </Text>
+                <Input
+                  placeholder="Lecturer Name"
+                  value={lecturerName}
+                  onChangeText={setLecturerName}
+                  style={styles.input}
+                />
+                <Input
+                  placeholder="Course Code"
+                  value={courseCode}
+                  onChangeText={setCourseCode}
+                  style={styles.input}
+                />
+                <Input
+                  placeholder="Course Name"
+                  value={courseName}
+                  onChangeText={setCourseName}
+                  style={styles.input}
+                />
+                <Input
+                  placeholder="Notes (optional)"
+                  value={notes}
+                  onChangeText={setNotes}
+                  style={styles.input}
+                />
+                <Button onPress={handleStartRecording} style={styles.startBtn}>
+                  <Ionicons
+                    name="scan"
+                    size={18}
+                    color="#fff"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.startBtnText}>Start Scanning</Text>
+                </Button>
+              </CardContent>
+            </Card>
+          </View>
+        )}
+
+        {activeTab === "active" && (
+          <View style={styles.tabContent}>
+            {activeRecords.length === 0 ? (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <View style={styles.emptyState}>
+                    <Ionicons
+                      name="timer-outline"
+                      size={48}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.emptyText,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
+                      No active recordings
+                    </Text>
+                    <Text
+                      style={[
+                        styles.emptySubtext,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
+                      Start a new recording to begin
+                    </Text>
+                  </View>
+                </CardContent>
+              </Card>
+            ) : (
+              activeRecords.map((record) => (
+                <Card key={record.id} elevation="sm" style={styles.card}>
+                  <CardContent>
+                    <View style={styles.recordHeader}>
+                      <View style={styles.recordInfo}>
+                        <Text
+                          style={[
+                            styles.recordCourse,
+                            { color: colors.foreground },
+                          ]}
+                        >
+                          {record.courseCode || "Unspecified"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.recordMeta,
+                            { color: colors.foregroundMuted },
+                          ]}
+                        >
+                          {record.lecturerName || "No lecturer"}
+                        </Text>
+                        <View style={styles.recordStats}>
+                          <Ionicons
+                            name="people"
+                            size={14}
+                            color={colors.foregroundMuted}
+                          />
+                          <Text
+                            style={[
+                              styles.recordStatText,
+                              { color: colors.foregroundMuted },
+                            ]}
+                          >
+                            {record.totalStudents} students
+                          </Text>
+                        </View>
+                      </View>
+                      <Badge>Active</Badge>
+                    </View>
+                    <Separator style={styles.recordSeparator} />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/attendance/record" as any,
+                          params: {
+                            recordId: record.id,
+                            sessionId: record.sessionId,
+                          },
+                        })
+                      }
+                    >
+                      <Ionicons
+                        name="play"
+                        size={14}
+                        color={colors.primary}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text>Resume</Text>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeTab === "history" && (
+          <View style={styles.tabContent}>
+            {completedRecords.length === 0 ? (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <View style={styles.emptyState}>
+                    <Ionicons
+                      name="file-tray-full-outline"
+                      size={48}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.emptyText,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
+                      No history yet
+                    </Text>
+                    <Text
+                      style={[
+                        styles.emptySubtext,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
+                      Completed recordings will appear here
+                    </Text>
+                  </View>
+                </CardContent>
+              </Card>
+            ) : (
+              completedRecords.map((record) => (
+                <TouchableOpacity
+                  key={record.id}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    router.push(
+                      `/attendance/details?recordId=${record.id}` as any
+                    )
+                  }
+                >
+                  <Card elevation="sm" style={styles.card}>
+                    <CardContent>
+                      <View style={styles.recordHeader}>
+                        <View style={styles.recordInfo}>
+                          <Text
+                            style={[
+                              styles.recordCourse,
+                              { color: colors.foreground },
+                            ]}
+                          >
+                            {record.courseCode || "Unspecified"}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.recordMeta,
+                              { color: colors.foregroundMuted },
+                            ]}
+                          >
+                            {record.courseName || "No title"}
+                          </Text>
+                          <View style={styles.recordStats}>
+                            <Ionicons
+                              name="people"
+                              size={14}
+                              color={colors.foregroundMuted}
+                            />
+                            <Text
+                              style={[
+                                styles.recordStatText,
+                                { color: colors.foregroundMuted },
+                              ]}
+                            >
+                              {record.totalStudents} students
+                            </Text>
+                            <Ionicons
+                              name="time-outline"
+                              size={14}
+                              color={colors.foregroundMuted}
+                              style={{ marginLeft: 12 }}
+                            />
+                            <Text
+                              style={[
+                                styles.recordStatText,
+                                { color: colors.foregroundMuted },
+                              ]}
+                            >
+                              {new Date(record.startTime).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.recordHeaderRight}>
+                          <Badge variant="secondary">{record.status}</Badge>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={20}
+                            color={colors.foregroundMuted}
+                            style={{ marginLeft: 8 }}
+                          />
+                        </View>
+                      </View>
+                    </CardContent>
+                  </Card>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  separator: {
-    marginVertical: 12,
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
-  rowBetween: {
+  headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  rowGap: {
+  headerMeta: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  mt12: {
-    marginTop: 12,
-  },
-  mt16: {
-    marginTop: 16,
-  },
-  muted: {
-    fontSize: 13,
-  },
-  mutedSmall: {
+  deviceText: {
     fontSize: 12,
   },
-  recordRow: {
+  tabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    gap: 6,
+  },
+  tabLabel: {
+    fontSize: 14,
+  },
+  content: {
+    flex: 1,
+  },
+  tabContent: {
+    padding: 16,
+  },
+  card: {
+    marginBottom: 12,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  input: {
+    marginBottom: 8,
+  },
+  startBtn: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  recordHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
+    alignItems: "flex-start",
   },
-  historyRow: {
+  recordInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  recordHeaderRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 8,
+  },
+  recordCourse: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  recordMeta: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  recordStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  recordStatText: {
+    fontSize: 12,
+  },
+  recordSeparator: {
+    marginVertical: 12,
   },
 });
