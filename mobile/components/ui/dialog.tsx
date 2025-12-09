@@ -20,7 +20,7 @@ interface DialogProps {
   visible: boolean;
   onClose: () => void;
   title: string;
-  message: string;
+  message: React.ReactNode;
   variant?: DialogVariant;
   primaryAction?: {
     label: string;

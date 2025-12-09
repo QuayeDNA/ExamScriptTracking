@@ -117,7 +117,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: colors.card }]}
-            onPress={() => router.push("/transfers")}
+            onPress={() => router.push("/custody")}
             activeOpacity={0.7}
           >
             <View

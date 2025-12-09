@@ -1,19 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/store/auth";
 import * as batchTransfersApi from "@/api/batchTransfers";
 import type { BatchTransfer } from "@/api/batchTransfers";
+import { Ionicons } from "@expo/vector-icons";
+import { Text, Badge, Dialog } from "@/components/ui";
+import { TransferDialog } from "@/components/TransferDialog";
+import { useThemeColors } from "@/constants/design-system";
+import Toast from "react-native-toast-message";
 
 interface BatchWithCustody {
   id: string;
@@ -32,16 +35,28 @@ interface BatchWithCustody {
   pendingTransferCount?: number;
 }
 
+type FilterType = "ALL" | "IN_CUSTODY" | "PENDING" | "TRANSFERRED";
+
 export default function CustodyScreen() {
   const router = useRouter();
   const user = useAuthStore((state: any) => state.user);
+  const colors = useThemeColors();
 
   const [batches, setBatches] = useState<BatchWithCustody[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<
-    "ALL" | "IN_CUSTODY" | "PENDING" | "TRANSFERRED"
-  >("ALL");
+  const [filter, setFilter] = useState<FilterType>("ALL");
+
+  // Transfer dialog state
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState<BatchWithCustody | null>(
+    null
+  );
+
+  // Confirm receipt dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmingBatch, setConfirmingBatch] =
+    useState<BatchWithCustody | null>(null);
 
   const loadBatches = useCallback(async () => {
     if (!user?.id) {
@@ -70,8 +85,7 @@ export default function CustodyScreen() {
       // Build batch list with custody status
       const batchList: BatchWithCustody[] = [];
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      for (const [_sessionId, transfers] of transfersBySession) {
+      for (const transfers of transfersBySession.values()) {
         // Sort by date to get latest transfer
         const sortedTransfers = transfers.sort(
           (a, b) =>
@@ -83,33 +97,29 @@ export default function CustodyScreen() {
         // Determine custody status
         let custodyStatus: BatchWithCustody["custodyStatus"] | null = null;
 
-        // For initial custody (self-transfer), check if both from and to are the same user
+        // For initial custody (self-transfer)
         const isSelfTransfer =
           latestTransfer.fromHandlerId === latestTransfer.toHandlerId &&
           latestTransfer.fromHandlerId === user.id;
 
         if (isSelfTransfer && latestTransfer.status === "CONFIRMED") {
-          // Initial custody established - I have the batch
           custodyStatus = "IN_CUSTODY";
         } else if (latestTransfer.toHandlerId === user.id) {
-          // I'm the receiver (not initial custody)
+          // I'm the receiver
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "PENDING_RECEIPT";
           } else if (latestTransfer.status === "CONFIRMED") {
             custodyStatus = "IN_CUSTODY";
           }
         } else if (latestTransfer.fromHandlerId === user.id) {
-          // I'm the sender (not initial custody)
+          // I'm the sender
           if (latestTransfer.status === "PENDING") {
             custodyStatus = "TRANSFER_INITIATED";
-          }
-          // If status is CONFIRMED, I transferred it away - show as TRANSFERRED
-          else if (latestTransfer.status === "CONFIRMED") {
+          } else if (latestTransfer.status === "CONFIRMED") {
             custodyStatus = "TRANSFERRED";
           }
         }
 
-        // Skip if custody status couldn't be determined (shouldn't happen, but safety check)
         if (!custodyStatus) {
           continue;
         }
@@ -125,7 +135,7 @@ export default function CustodyScreen() {
           courseCode: latestTransfer.examSession.courseCode,
           courseName: latestTransfer.examSession.courseName,
           venue: latestTransfer.examSession.venue,
-          examDate: new Date().toISOString(), // Placeholder
+          examDate: new Date().toISOString(),
           status: latestTransfer.examSession.status || "IN_PROGRESS",
           custodyStatus,
           latestTransfer,
@@ -135,7 +145,11 @@ export default function CustodyScreen() {
 
       setBatches(batchList);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to load batches");
+      Toast.show({
+        type: "error",
+        text1: "Failed to Load",
+        text2: error.error || "Failed to load batches",
+      });
     } finally {
       setLoading(false);
     }
@@ -152,9 +166,12 @@ export default function CustodyScreen() {
   };
 
   const handleBatchPress = (batch: BatchWithCustody) => {
-    console.log("Navigating to batch details:", batch.id);
     if (!batch.id) {
-      Alert.alert("Error", "Batch ID is missing");
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Batch ID is missing",
+      });
       return;
     }
     router.push({
@@ -163,35 +180,52 @@ export default function CustodyScreen() {
     });
   };
 
-  const handleQuickTransfer = (batch: BatchWithCustody) => {
-    // Only allow transfer if user has custody
+  const handleInitiateTransfer = (batch: BatchWithCustody) => {
     if (batch.custodyStatus !== "IN_CUSTODY") {
-      Alert.alert(
-        "Cannot Transfer",
-        "You can only initiate transfers for batches in your custody."
-      );
+      Toast.show({
+        type: "error",
+        text1: "Cannot Transfer",
+        text2: "You can only initiate transfers for batches in your custody.",
+      });
       return;
     }
-
-    router.push({
-      pathname: "/initiate-transfer",
-      params: {
-        examSessionId: batch.id,
-        batchQrCode: batch.batchQrCode,
-        courseCode: batch.courseCode,
-        courseName: batch.courseName,
-        custodyStatus: batch.custodyStatus,
-      },
-    });
+    setSelectedBatch(batch);
+    setShowTransferDialog(true);
   };
 
-  const handleConfirmTransfer = (batch: BatchWithCustody) => {
-    if (!batch.latestTransfer) return;
+  const handleConfirmReceiptRequest = (batch: BatchWithCustody) => {
+    setConfirmingBatch(batch);
+    setShowConfirmDialog(true);
+  };
 
-    router.push({
-      pathname: "/confirm-transfer",
-      params: { transferId: batch.latestTransfer.id },
-    });
+  const handleConfirmReceipt = async () => {
+    if (!confirmingBatch?.latestTransfer) return;
+
+    try {
+      setShowConfirmDialog(false);
+      await batchTransfersApi.confirmTransfer(
+        confirmingBatch.latestTransfer.id,
+        {
+          scriptsReceived: confirmingBatch.latestTransfer.scriptsExpected,
+        }
+      );
+
+      Toast.show({
+        type: "success",
+        text1: "Transfer Confirmed",
+        text2: "Batch receipt confirmed successfully",
+      });
+
+      await loadBatches();
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Confirmation Failed",
+        text2: error.error || "Failed to confirm transfer",
+      });
+    } finally {
+      setConfirmingBatch(null);
+    }
   };
 
   const renderBatch = ({ item }: { item: BatchWithCustody }) => {
@@ -200,33 +234,42 @@ export default function CustodyScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.batchCard}
+        style={[styles.batchCard, { backgroundColor: colors.card }]}
         onPress={() => handleBatchPress(item)}
+        activeOpacity={0.7}
       >
         {/* Header */}
         <View style={styles.batchHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.courseCode}>{item.courseCode}</Text>
-            <Text style={styles.courseName}>{item.courseName}</Text>
+            <Text style={[styles.courseCode, { color: colors.foreground }]}>
+              {item.courseCode}
+            </Text>
+            <Text
+              style={[styles.courseName, { color: colors.foregroundMuted }]}
+            >
+              {item.courseName}
+            </Text>
           </View>
-          <View
-            style={[styles.custodyBadge, { backgroundColor: custodyColor }]}
-          >
-            <Text style={styles.custodyBadgeText}>{custodyLabel}</Text>
-          </View>
+          <Badge variant="default" style={{ backgroundColor: custodyColor }}>
+            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>
+              {custodyLabel}
+            </Text>
+          </Badge>
         </View>
 
         {/* Batch Info */}
         <View style={styles.batchInfo}>
-          <InfoRow label="Batch Code" value={item.batchQrCode} />
-          <InfoRow label="Venue" value={item.venue} />
+          <InfoRow icon="qr-code" label="Batch Code" value={item.batchQrCode} />
+          <InfoRow icon="location" label="Venue" value={item.venue} />
           <InfoRow
+            icon="pulse"
             label="Status"
             value={item.status.replace(/_/g, " ")}
             valueColor={getStatusColor(item.status)}
           />
           {item.pendingTransferCount! > 0 && (
             <InfoRow
+              icon="time"
               label="Pending Transfers"
               value={item.pendingTransferCount!.toString()}
               valueColor="#f59e0b"
@@ -235,33 +278,37 @@ export default function CustodyScreen() {
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actions} key={`actions-${item.id}`}>
+        <View style={styles.actions}>
           {item.custodyStatus === "PENDING_RECEIPT" && (
             <TouchableOpacity
-              key={`confirm-${item.id}`}
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={() => handleConfirmTransfer(item)}
+              style={[styles.actionButton, { backgroundColor: "#10b981" }]}
+              onPress={() => handleConfirmReceiptRequest(item)}
             >
-              <Text style={styles.actionButtonText}>Confirm Receipt →</Text>
+              <Ionicons name="checkmark-circle" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Confirm Receipt</Text>
             </TouchableOpacity>
           )}
 
           {item.custodyStatus === "IN_CUSTODY" && (
             <TouchableOpacity
-              key={`transfer-${item.id}`}
-              style={[styles.actionButton, styles.transferButton]}
-              onPress={() => handleQuickTransfer(item)}
+              style={[styles.actionButton, { backgroundColor: colors.primary }]}
+              onPress={() => handleInitiateTransfer(item)}
             >
-              <Text style={styles.actionButtonText}>Transfer →</Text>
+              <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Transfer</Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            key={`details-${item.id}`}
-            style={[styles.actionButton, styles.detailsButton]}
+            style={[
+              styles.actionButton,
+              styles.detailsButton,
+              { borderColor: colors.border },
+            ]}
             onPress={() => handleBatchPress(item)}
           >
-            <Text style={[styles.actionButtonText, { color: "#3b82f6" }]}>
+            <Ionicons name="eye" size={18} color={colors.primary} />
+            <Text style={[styles.detailsButtonText, { color: colors.primary }]}>
               View Details
             </Text>
           </TouchableOpacity>
@@ -296,93 +343,88 @@ export default function CustodyScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Batch Custody</Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <View
+          style={[
+            styles.header,
+            { backgroundColor: colors.card, borderBottomColor: colors.border },
+          ]}
+        >
+          <Text
+            variant="h2"
+            style={[styles.headerTitle, { color: colors.foreground }]}
+          >
+            Batch Custody
+          </Text>
         </View>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>Loading your batches...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.foregroundMuted }]}>
+            Loading your batches...
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Batch Custody</Text>
-        <Text style={styles.headerSubtitle}>
-          {stats.all} batch{stats.all !== 1 ? "es" : ""}
-        </Text>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        <View>
+          <Text
+            variant="h2"
+            style={[styles.headerTitle, { color: colors.foreground }]}
+          >
+            Batch Custody
+          </Text>
+          <Text
+            style={[styles.headerSubtitle, { color: colors.foregroundMuted }]}
+          >
+            {stats.all} batch{stats.all !== 1 ? "es" : ""}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
+          <Ionicons name="refresh" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === "ALL" && styles.filterActive]}
+      <View
+        style={[
+          styles.filterContainer,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        <FilterTab
+          active={filter === "ALL"}
+          label={`All (${stats.all})`}
           onPress={() => setFilter("ALL")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "ALL" && styles.filterTextActive,
-            ]}
-          >
-            All ({stats.all})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === "IN_CUSTODY" && styles.filterActive,
-          ]}
+        />
+        <FilterTab
+          active={filter === "IN_CUSTODY"}
+          label={`In Custody (${stats.inCustody})`}
           onPress={() => setFilter("IN_CUSTODY")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "IN_CUSTODY" && styles.filterTextActive,
-            ]}
-          >
-            In Custody ({stats.inCustody})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === "PENDING" && styles.filterActive,
-          ]}
+        />
+        <FilterTab
+          active={filter === "PENDING"}
+          label={`Pending (${stats.pending})`}
           onPress={() => setFilter("PENDING")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "PENDING" && styles.filterTextActive,
-            ]}
-          >
-            Pending ({stats.pending})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            filter === "TRANSFERRED" && styles.filterActive,
-          ]}
+        />
+        <FilterTab
+          active={filter === "TRANSFERRED"}
+          label={`Transferred (${stats.transferred})`}
           onPress={() => setFilter("TRANSFERRED")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "TRANSFERRED" && styles.filterTextActive,
-            ]}
-          >
-            Transferred ({stats.transferred})
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {/* Batch List */}
@@ -398,35 +440,136 @@ export default function CustodyScreen() {
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No batches found</Text>
-          <Text style={styles.emptySubtext}>
+          <Ionicons
+            name="file-tray-outline"
+            size={64}
+            color={colors.foregroundMuted}
+          />
+          <Text style={[styles.emptyText, { color: colors.foreground }]}>
+            No batches found
+          </Text>
+          <Text
+            style={[styles.emptySubtext, { color: colors.foregroundMuted }]}
+          >
             {filter === "ALL"
               ? "You don't have any batches in your custody yet"
               : `No batches with ${filter.toLowerCase().replace("_", " ")} status`}
           </Text>
         </View>
       )}
+
+      {/* Transfer Dialog */}
+      {selectedBatch && (
+        <TransferDialog
+          visible={showTransferDialog}
+          onClose={() => {
+            setShowTransferDialog(false);
+            setSelectedBatch(null);
+          }}
+          examSessionId={selectedBatch.id}
+          batchQrCode={selectedBatch.batchQrCode}
+          courseCode={selectedBatch.courseCode}
+          courseName={selectedBatch.courseName}
+          custodyStatus={selectedBatch.custodyStatus}
+          onSuccess={() => {
+            loadBatches();
+          }}
+        />
+      )}
+
+      {/* Confirm Receipt Dialog */}
+      <Dialog
+        visible={showConfirmDialog}
+        onClose={() => {
+          setShowConfirmDialog(false);
+          setConfirmingBatch(null);
+        }}
+        title="Confirm Receipt"
+        message={`Confirm that you have received the batch "${confirmingBatch?.batchQrCode}" for ${confirmingBatch?.courseCode}?`}
+        variant="success"
+        icon="checkmark-circle"
+        primaryAction={{
+          label: "Confirm",
+          onPress: handleConfirmReceipt,
+        }}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setShowConfirmDialog(false);
+            setConfirmingBatch(null);
+          },
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-// Helper components and functions
+// Helper Components
 function InfoRow({
+  icon,
   label,
   value,
   valueColor,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
   valueColor?: string;
 }) {
+  const colors = useThemeColors();
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}:</Text>
-      <Text style={[styles.infoValue, valueColor && { color: valueColor }]}>
+      <View style={styles.infoLabelContainer}>
+        <Ionicons name={icon} size={14} color={colors.foregroundMuted} />
+        <Text style={[styles.infoLabel, { color: colors.foregroundMuted }]}>
+          {label}:
+        </Text>
+      </View>
+      <Text
+        style={[
+          styles.infoValue,
+          { color: colors.foreground },
+          valueColor && { color: valueColor },
+        ]}
+      >
         {value}
       </Text>
     </View>
+  );
+}
+
+function FilterTab({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  const colors = useThemeColors();
+  return (
+    <TouchableOpacity
+      style={[
+        styles.filterButton,
+        { borderColor: colors.border },
+        active && {
+          backgroundColor: colors.primary,
+          borderColor: colors.primary,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.filterText,
+          { color: colors.foreground },
+          active && { color: "#fff" },
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -439,7 +582,7 @@ function getCustodyColor(status: string): string {
     case "TRANSFER_INITIATED":
       return "#8b5cf6";
     case "TRANSFERRED":
-      return "#6b7280"; // Gray - batch has been transferred away
+      return "#6b7280";
     default:
       return "#6b7280";
   }
@@ -486,25 +629,26 @@ function getStatusColor(status: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
   },
   header: {
-    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  refreshButton: {
+    padding: 8,
   },
   centerContainer: {
     flex: 1,
@@ -512,17 +656,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#6b7280",
+    marginTop: 16,
+    fontSize: 14,
   },
   filterContainer: {
     flexDirection: "row",
-    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
     gap: 8,
   },
   filterButton: {
@@ -530,25 +671,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#d1d5db",
-  },
-  filterActive: {
-    backgroundColor: "#3b82f6",
-    borderColor: "#3b82f6",
   },
   filterText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#6b7280",
-  },
-  filterTextActive: {
-    color: "#fff",
   },
   listContent: {
     padding: 16,
   },
   batchCard: {
-    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -565,24 +696,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   courseCode: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#111827",
   },
   courseName: {
-    fontSize: 14,
-    color: "#6b7280",
+    fontSize: 13,
     marginTop: 2,
-  },
-  custodyBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  custodyBadgeText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 11,
   },
   batchInfo: {
     gap: 6,
@@ -591,14 +710,18 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+  },
+  infoLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   infoLabel: {
-    fontSize: 14,
-    color: "#6b7280",
+    fontSize: 13,
   },
   infoValue: {
-    fontSize: 14,
-    color: "#111827",
+    fontSize: 13,
     fontWeight: "500",
   },
   actions: {
@@ -608,26 +731,26 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
-    alignItems: "center",
-  },
-  confirmButton: {
-    backgroundColor: "#10b981",
-  },
-  transferButton: {
-    backgroundColor: "#3b82f6",
-  },
-  detailsButton: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#3b82f6",
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#fff",
+  },
+  detailsButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+  },
+  detailsButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   emptyContainer: {
     flex: 1,
@@ -636,14 +759,13 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#6b7280",
+    marginTop: 16,
     marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: "#9ca3af",
+    fontSize: 13,
     textAlign: "center",
   },
 });

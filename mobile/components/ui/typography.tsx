@@ -3,12 +3,12 @@
  * Mobile implementation matching web design system
  */
 
-import { Text as RNText, StyleSheet, TextStyle } from "react-native";
+import { Text as RNText, StyleSheet, TextStyle, StyleProp } from "react-native";
 import { useThemeColors, Typography } from "@/constants/design-system";
 
 interface TypographyProps {
   children: React.ReactNode;
-  style?: TextStyle;
+  style?: StyleProp<TextStyle>;
   variant?: "default" | "muted" | "h1" | "h2" | "h3";
 }
 

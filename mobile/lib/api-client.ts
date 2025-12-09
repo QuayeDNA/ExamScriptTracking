@@ -6,8 +6,10 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
 
 class ApiClient {
   private client: AxiosInstance;
+  private onAuthInvalid?: () => void;
 
-  constructor() {
+  constructor(onAuthInvalid?: () => void) {
+    this.onAuthInvalid = onAuthInvalid;
     this.client = axios.create({
       baseURL: API_URL,
       timeout: 10000,
@@ -47,6 +49,8 @@ class ApiClient {
 
         if (error.response?.status === 401) {
           await clearAuth();
+          // Notify auth invalidation callback
+          this.onAuthInvalid?.();
         }
 
         const apiError: ApiError = {
@@ -92,6 +96,10 @@ class ApiClient {
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return this.client.delete<T, T>(url, config);
+  }
+
+  setOnAuthInvalid(callback: () => void) {
+    this.onAuthInvalid = callback;
   }
 }
 

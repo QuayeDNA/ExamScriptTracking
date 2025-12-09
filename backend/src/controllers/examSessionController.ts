@@ -818,8 +818,29 @@ export const endExamSession = async (req: Request, res: Response) => {
       },
     });
 
-    // Count submitted scripts
-    const submittedCount = currentSession.attendances.length;
+    // Update attendance records: students who entered and exited should be marked as SUBMITTED
+    await prisma.examAttendance.updateMany({
+      where: {
+        examSessionId: id,
+        entryTime: { not: undefined },
+        exitTime: { not: undefined },
+        status: { not: "SUBMITTED" }, // Don't update already submitted records
+      },
+      data: {
+        status: "SUBMITTED",
+        submissionTime: new Date(), // Set submission time to now when session ends
+      },
+    });
+
+    // Get updated attendance count for submitted scripts
+    const updatedAttendances = await prisma.examAttendance.findMany({
+      where: {
+        examSessionId: id,
+        status: "SUBMITTED",
+      },
+    });
+
+    const submittedCount = updatedAttendances.length;
 
     // Create initial custody record
     const existingTransfers = await prisma.batchTransfer.count({
