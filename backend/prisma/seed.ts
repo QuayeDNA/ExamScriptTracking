@@ -30,6 +30,32 @@ async function main() {
   console.log("🔑 Password: SuperAdmin@123");
   console.log("⚠️  Please change this password after first login!");
 
+  // Create shared CLASS_REP credentials for attendance
+  const classRepPassword = await bcrypt.hash("Attendance@123", 10);
+
+  const classRep = await prisma.user.upsert({
+    where: { email: "attendance@examtrack.com" },
+    update: {},
+    create: {
+      email: "attendance@examtrack.com",
+      password: classRepPassword,
+      role: Role.CLASS_REP,
+      firstName: "Class",
+      lastName: "Attendance",
+      phone: "+1234567891",
+      isSuperAdmin: false,
+      isActive: true,
+      passwordChanged: true, // Set to true so they can use it immediately
+    },
+  });
+
+  console.log("\n✅ CLASS_REP credentials created:", classRep.email);
+  console.log("📧 Email: attendance@examtrack.com");
+  console.log("🔑 Password: Attendance@123");
+  console.log(
+    "📱 Use these shared credentials on mobile devices for class attendance"
+  );
+
   // Create sample students for testing
   console.log("\n🎓 Creating sample students...");
 

@@ -40,6 +40,8 @@ export default function LoginScreen() {
       await saveAuth(response.token, response.refreshToken, response.user);
       setUser(response.user);
 
+      const isAttendanceUser = response.user.role === "CLASS_REP";
+
       Toast.show({
         type: "success",
         text1: "Login Successful",
@@ -49,7 +51,7 @@ export default function LoginScreen() {
       if (!response.user.passwordChanged) {
         router.replace("/change-password");
       } else {
-        router.replace("/(tabs)");
+        router.replace(isAttendanceUser ? ("/attendance" as any) : "/(tabs)");
       }
     } catch (error: any) {
       setError(error.error || "Invalid credentials. Please try again.");

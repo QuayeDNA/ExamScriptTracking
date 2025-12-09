@@ -23,6 +23,8 @@ function useProtectedRoute() {
   const segments = useSegments();
   const router = useRouter();
   const { isAuthenticated, isLoading, user } = useAuthStore();
+  const isAttendanceUser = user?.role === "CLASS_REP";
+  const firstSegment = segments[0] as string | undefined;
 
   useEffect(() => {
     if (isLoading) return;
@@ -30,28 +32,37 @@ function useProtectedRoute() {
     // Wait for router to be ready
     const timeout = setTimeout(() => {
       const inAuthFlow =
-        segments[0] === "login" || segments[0] === "change-password";
+        firstSegment === "login" || firstSegment === "change-password";
 
       // Redirect unauthenticated users to login
       if (!isAuthenticated && !inAuthFlow) {
         router.replace("/login");
-      }
-      // Redirect authenticated users with unchanged password to change password
-      else if (
+      } else if (
         isAuthenticated &&
         !user?.passwordChanged &&
-        segments[0] !== "change-password"
+        firstSegment !== "change-password"
       ) {
         router.replace("/change-password");
-      }
-      // Redirect authenticated users from login/change-password to main app
-      else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
+      } else if (isAuthenticated && user?.passwordChanged && isAttendanceUser) {
+        const inAttendance = firstSegment === "attendance";
+        if (!inAttendance) {
+          router.replace("/attendance" as any);
+        }
+      } else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
         router.replace("/(tabs)");
       }
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, [isAuthenticated, isLoading, segments, user, router]);
+  }, [
+    firstSegment,
+    isAuthenticated,
+    isLoading,
+    isAttendanceUser,
+    segments,
+    user,
+    router,
+  ]);
 }
 
 export default function RootLayout() {
@@ -110,6 +121,11 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="attendance" />
+        <Stack.Screen
+          name="attendance/record"
+          options={{ headerShown: true, title: "Attendance Recording" }}
+        />
         <Stack.Screen
           name="batch-details"
           options={{

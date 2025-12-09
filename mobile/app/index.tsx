@@ -4,6 +4,7 @@ import { View, ActivityIndicator } from "react-native";
 
 export default function Index() {
   const { isAuthenticated, isLoading, user } = useAuthStore();
+  const isAttendanceUser = user?.role === "CLASS_REP";
 
   // Show loading while checking auth state
   if (isLoading) {
@@ -23,5 +24,7 @@ export default function Index() {
     return <Redirect href="/change-password" />;
   }
 
-  return <Redirect href="/(tabs)" />;
+  return (
+    <Redirect href={isAttendanceUser ? ("/attendance" as any) : "/(tabs)"} />
+  );
 }
