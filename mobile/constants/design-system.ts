@@ -219,6 +219,7 @@ export function useThemeColors() {
     background: isDark ? "#0a0a0a" : "#ffffff",
     surface: isDark ? "#1a1a1a" : "#f9fafb",
     card: isDark ? "#1a1a1a" : "#ffffff",
+    muted: isDark ? "#27272a" : "#f4f4f5",
 
     // Foregrounds
     foreground: isDark ? "#fafafa" : "#0a0a0a",
@@ -229,10 +230,10 @@ export function useThemeColors() {
     border: isDark ? "#27272a" : "#e4e4e7",
     borderFocus: isDark ? "#52525b" : "#d4d4d8",
 
-    // Primary
-    primary: isDark ? "#8b5cf6" : "#7c3aed",
+    // Primary (Blue to match web - oklch(0.62 0.25 255))
+    primary: isDark ? "#3b82f6" : "#2563eb",
     primaryForeground: "#ffffff",
-    primaryMuted: isDark ? "#7c3aed" : "#a78bfa",
+    primaryMuted: isDark ? "#2563eb" : "#60a5fa",
 
     // Success
     success: "#22c55e",

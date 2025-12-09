@@ -1,28 +1,36 @@
 import { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import { authApi } from "@/api/auth";
 import { saveAuth } from "@/utils/storage";
 import { useAuthStore } from "@/store/auth";
+import { AuthLayout } from "@/components/AuthLayout";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Alert } from "@/components/ui/alert";
+import { Text } from "@/components/ui/typography";
+import Toast from "react-native-toast-message";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const setUser = useAuthStore((state) => state.setUser);
 
   const handleLogin = async () => {
+    // Clear previous errors
+    setError("");
+
+    // Validation
     if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password");
+      setError("Please enter both email and password");
+      return;
+    }
+
+    if (!email.includes("@")) {
+      setError("Please enter a valid email address");
       return;
     }
 
@@ -32,38 +40,39 @@ export default function LoginScreen() {
       await saveAuth(response.token, response.refreshToken, response.user);
       setUser(response.user);
 
+      Toast.show({
+        type: "success",
+        text1: "Login Successful",
+        text2: `Welcome back, ${response.user.name}!`,
+      });
+
       if (!response.user.passwordChanged) {
         router.replace("/change-password");
       } else {
         router.replace("/(tabs)");
       }
     } catch (error: any) {
-      Alert.alert("Login Failed", error.error || "Invalid credentials");
+      setError(error.error || "Invalid credentials. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-gray-50"
-    >
-      <View className="flex-1 justify-center px-6">
-        <View className="bg-white rounded-lg shadow-lg p-8">
-          <Text className="text-3xl font-bold text-gray-900 mb-2 text-center">
-            Exam Script Tracking
-          </Text>
-          <Text className="text-sm text-gray-600 mb-8 text-center">
-            Handler Login
-          </Text>
+    <AuthLayout title="Exam Script Tracking" subtitle="Handler Login Portal">
+      <Card elevation="md">
+        <View style={styles.cardContent}>
+          {/* Error Alert */}
+          {error && (
+            <View style={styles.alertContainer}>
+              <Alert variant="destructive">{error}</Alert>
+            </View>
+          )}
 
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-gray-700 mb-2">
-              Email
-            </Text>
-            <TextInput
-              className="w-full px-4 py-3 border border-gray-300 rounded-md bg-white"
+          {/* Email Input */}
+          <View style={styles.inputContainer}>
+            <Input
+              label="Email Address"
               placeholder="your.email@example.com"
               value={email}
               onChangeText={setEmail}
@@ -73,13 +82,11 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View className="mb-6">
-            <Text className="text-sm font-medium text-gray-700 mb-2">
-              Password
-            </Text>
-            <TextInput
-              className="w-full px-4 py-3 border border-gray-300 rounded-md bg-white"
-              placeholder="Enter password"
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Input
+              label="Password"
+              placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -87,23 +94,47 @@ export default function LoginScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            className={`w-full py-4 rounded-md ${
-              isLoading ? "bg-blue-400" : "bg-blue-600"
-            }`}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white text-center font-semibold text-base">
-                Sign In
-              </Text>
-            )}
-          </TouchableOpacity>
+          {/* Login Button */}
+          <View style={styles.buttonContainer}>
+            <Button
+              variant="default"
+              size="lg"
+              onPress={handleLogin}
+              disabled={isLoading}
+              style={styles.button}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
+            </Button>
+          </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </Card>
+    </AuthLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  cardContent: {
+    padding: 24,
+  },
+  alertContainer: {
+    marginBottom: 20,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  buttonContainer: {
+    marginTop: 8,
+  },
+  button: {
+    width: "100%",
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});

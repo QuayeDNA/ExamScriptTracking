@@ -1,107 +1,322 @@
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+/**
+ * Home Screen
+ * Main dashboard with SafeAreaView and design system integration
+ */
+
+import {
+  View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth";
+import { useThemeColors } from "@/constants/design-system";
+import { Card } from "@/components/ui/card";
+import { H1, H2, H3, Text } from "@/components/ui/typography";
+import { Badge } from "@/components/ui/badge";
 
 export default function HomeScreen() {
   const { user } = useAuthStore();
+  const colors = useThemeColors();
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-blue-600 px-4 pt-12 pb-6">
-        <Text className="text-2xl font-bold text-white mb-2">
-          Welcome Back!
-        </Text>
-        <Text className="text-base text-blue-100">{user?.name}</Text>
-        <Text className="text-sm text-blue-200">
-          {user?.role.replace("_", " ")} • {user?.department}
-        </Text>
-      </View>
-
-      {/* Quick Stats */}
-      <View className="px-4 py-4">
-        <View className="flex-row justify-between mb-4">
-          <View className="bg-white rounded-lg shadow-sm p-4 flex-1 mr-2">
-            <Text className="text-2xl font-bold text-blue-600 mb-1">0</Text>
-            <Text className="text-xs text-gray-600">Active Sessions</Text>
-          </View>
-          <View className="bg-white rounded-lg shadow-sm p-4 flex-1 ml-2">
-            <Text className="text-2xl font-bold text-orange-600 mb-1">0</Text>
-            <Text className="text-xs text-gray-600">Pending Transfers</Text>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={["top"]}
+    >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: colors.primary }]}>
+          <View style={styles.headerContent}>
+            <H1 style={styles.headerTitle}>Welcome Back!</H1>
+            <Text style={styles.headerName}>{user?.name}</Text>
+            <View style={styles.headerBadges}>
+              <Badge variant="secondary" style={styles.badge}>
+                {user?.role.replace("_", " ")}
+              </Badge>
+              <Badge variant="secondary" style={styles.badge}>
+                {user?.department}
+              </Badge>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Quick Actions */}
-      <View className="px-4">
-        <Text className="text-lg font-bold text-gray-900 mb-3">
-          Quick Actions
-        </Text>
+        {/* Quick Stats */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <Card elevation="sm" style={styles.statCard}>
+              <View style={styles.statContent}>
+                <Text style={[styles.statNumber, { color: colors.primary }]}>
+                  0
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.foregroundMuted }]}
+                >
+                  Active Sessions
+                </Text>
+              </View>
+            </Card>
 
-        <TouchableOpacity
-          className="bg-white rounded-lg p-4 mb-3 flex-row items-center shadow-sm"
-          onPress={() => router.push("/scanner")}
-        >
-          <View className="w-12 h-12 bg-blue-100 rounded-full items-center justify-center mr-4">
-            <Text className="text-2xl">📷</Text>
+            <Card elevation="sm" style={styles.statCard}>
+              <View style={styles.statContent}>
+                <Text style={[styles.statNumber, { color: colors.warning }]}>
+                  0
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.foregroundMuted }]}
+                >
+                  Pending Transfers
+                </Text>
+              </View>
+            </Card>
           </View>
-          <View className="flex-1">
-            <Text className="text-base font-semibold text-gray-900">
-              Scan QR Code
-            </Text>
-            <Text className="text-sm text-gray-500">
-              Scan batch or student QR codes
-            </Text>
-          </View>
-          <Text className="text-gray-400">→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className="bg-white rounded-lg p-4 mb-3 flex-row items-center shadow-sm"
-          onPress={() => router.push("/transfers")}
-        >
-          <View className="w-12 h-12 bg-orange-100 rounded-full items-center justify-center mr-4">
-            <Text className="text-2xl">📦</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-base font-semibold text-gray-900">
-              View Transfers
-            </Text>
-            <Text className="text-sm text-gray-500">
-              Manage pending transfers
-            </Text>
-          </View>
-          <Text className="text-gray-400">→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className="bg-white rounded-lg p-4 mb-3 flex-row items-center shadow-sm"
-          onPress={() => router.push("/(tabs)/custody")}
-        >
-          <View className="w-12 h-12 bg-green-100 rounded-full items-center justify-center mr-4">
-            <Text className="text-2xl">📋</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-base font-semibold text-gray-900">
-              Batch Custody
-            </Text>
-            <Text className="text-sm text-gray-500">
-              View batches in your custody
-            </Text>
-          </View>
-          <Text className="text-gray-400">→</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Recent Activity */}
-      <View className="px-4 mt-6 mb-8">
-        <Text className="text-lg font-bold text-gray-900 mb-3">
-          Recent Activity
-        </Text>
-        <View className="bg-white rounded-lg p-6">
-          <Text className="text-center text-gray-500">No recent activity</Text>
         </View>
-      </View>
-    </ScrollView>
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <H3 style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Quick Actions
+          </H3>
+
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card }]}
+            onPress={() => router.push("/scanner")}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.actionIcon,
+                { backgroundColor: `${colors.primary}15` },
+              ]}
+            >
+              <Ionicons name="scan" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                Scan QR Code
+              </Text>
+              <Text
+                style={[
+                  styles.actionSubtitle,
+                  { color: colors.foregroundMuted },
+                ]}
+              >
+                Scan batch or student QR codes
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.foregroundMuted}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card }]}
+            onPress={() => router.push("/transfers")}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.actionIcon,
+                { backgroundColor: `${colors.warning}15` },
+              ]}
+            >
+              <Ionicons
+                name="swap-horizontal"
+                size={24}
+                color={colors.warning}
+              />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                View Transfers
+              </Text>
+              <Text
+                style={[
+                  styles.actionSubtitle,
+                  { color: colors.foregroundMuted },
+                ]}
+              >
+                Manage pending transfers
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.foregroundMuted}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: colors.card }]}
+            onPress={() => router.push("/(tabs)/custody")}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.actionIcon,
+                { backgroundColor: `${colors.success}15` },
+              ]}
+            >
+              <Ionicons name="cube" size={24} color={colors.success} />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={[styles.actionTitle, { color: colors.foreground }]}>
+                Batch Custody
+              </Text>
+              <Text
+                style={[
+                  styles.actionSubtitle,
+                  { color: colors.foregroundMuted },
+                ]}
+              >
+                View batches in your custody
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.foregroundMuted}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Recent Activity */}
+        <View style={[styles.section, styles.lastSection]}>
+          <H3 style={[styles.sectionTitle, { color: colors.foreground }]}>
+            Recent Activity
+          </H3>
+          <Card elevation="sm">
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="time-outline"
+                size={48}
+                color={colors.foregroundMuted}
+              />
+              <Text
+                style={[styles.emptyText, { color: colors.foregroundMuted }]}
+              >
+                No recent activity
+              </Text>
+            </View>
+          </Card>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingTop: 24,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  headerContent: {
+    gap: 8,
+  },
+  headerTitle: {
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  headerName: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "500",
+    opacity: 0.9,
+  },
+  headerBadges: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  badge: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  statsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+  },
+  statContent: {
+    padding: 16,
+    gap: 4,
+  },
+  statNumber: {
+    fontSize: 32,
+    fontWeight: "bold",
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  lastSection: {
+    paddingBottom: 24,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  actionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  actionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  actionSubtitle: {
+    fontSize: 14,
+  },
+  emptyState: {
+    padding: 48,
+    alignItems: "center",
+    gap: 16,
+  },
+  emptyText: {
+    fontSize: 14,
+  },
+});

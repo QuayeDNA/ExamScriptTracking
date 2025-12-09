@@ -1,12 +1,26 @@
-import { useState, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, Camera } from "expo-camera";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import Toast from "react-native-toast-message";
+import * as SecureStore from "expo-secure-store";
 import CustomDrawer, { type CustomDrawerRef } from "@/components/CustomDrawer";
 import { examSessionsApi, type ExamSession } from "@/api/examSessions";
+import { useThemeColors } from "@/constants/design-system";
 
-export default function ScannerScreen() {
+const CAMERA_PERMISSION_KEY = "camera_permission_granted";
+
+function ScannerScreen() {
+  const colors = useThemeColors();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [scanMode, setScanMode] = useState<"ENTRY" | "EXIT">("ENTRY");
@@ -14,36 +28,74 @@ export default function ScannerScreen() {
     useState<ExamSession | null>(null);
   const drawerRef = useRef<CustomDrawerRef>(null);
   const router = useRouter();
+  const scanAreaHeight = useRef(new Animated.Value(0)).current;
 
-  const requestPermission = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    setHasPermission(status === "granted");
+  // Check for existing camera permission on mount
+  useEffect(() => {
+    checkCameraPermission();
+  }, []);
+
+  const checkCameraPermission = async () => {
+    try {
+      // Check if we've already granted permission
+      const granted = await SecureStore.getItemAsync(CAMERA_PERMISSION_KEY);
+
+      if (granted === "true") {
+        const { status } = await Camera.getCameraPermissionsAsync();
+        if (status === "granted") {
+          setHasPermission(true);
+          return;
+        }
+      }
+
+      // Request permission if not granted
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      if (status === "granted") {
+        await SecureStore.setItemAsync(CAMERA_PERMISSION_KEY, "true");
+        setHasPermission(true);
+      } else {
+        setHasPermission(false);
+      }
+    } catch {
+      setHasPermission(false);
+    }
   };
 
   const loadExamSession = async (batchId: string) => {
     try {
       const session = await examSessionsApi.getExamSession(batchId);
       setActiveExamSession(session);
-      drawerRef.current?.snapToIndex(1);
-    } catch {
-      Alert.alert("Error", "Failed to load exam session details");
+      drawerRef.current?.snapToIndex(0);
+
+      // Animate scan area to adjust for drawer
+      Animated.spring(scanAreaHeight, {
+        toValue: 100,
+        useNativeDriver: false,
+        damping: 20,
+        stiffness: 90,
+      }).start();
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Load Error",
+        text2: error.error || "Failed to load exam session",
+      });
     }
   };
 
   const handleStudentScan = async (qrData: any) => {
     if (!activeExamSession) {
-      Alert.alert(
-        "No Active Exam Session",
-        "Please scan the Batch QR Code first to select an exam session."
-      );
+      Toast.show({
+        type: "warning",
+        text1: "No Active Session",
+        text2: "Please scan the Batch QR Code first",
+      });
       return;
     }
 
     try {
-      // Get student by index number from QR
       const studentIndexNumber = qrData.indexNumber;
 
-      // Find student in database
       const students = await examSessionsApi.getExpectedStudents(
         activeExamSession.id
       );
@@ -52,66 +104,71 @@ export default function ScannerScreen() {
       );
 
       if (!expectedStudent) {
-        Alert.alert(
-          "Student Not Expected",
-          `Student ${studentIndexNumber} is not in the expected list for this exam session.`
-        );
+        Toast.show({
+          type: "error",
+          text1: "Student Not Expected",
+          text2: `${studentIndexNumber} is not in the expected list`,
+        });
         return;
       }
 
       const studentName = `${expectedStudent.firstName || ""} ${expectedStudent.lastName || ""}`;
 
       if (scanMode === "ENTRY") {
-        // Handle entry scanning
         if (expectedStudent.attendance) {
-          Alert.alert(
-            "Already Entered",
-            `${studentName} (${studentIndexNumber}) entered at ${new Date(expectedStudent.attendance.entryTime).toLocaleTimeString()}.`
-          );
+          Toast.show({
+            type: "info",
+            text1: "Already Entered",
+            text2: `${studentName} entered at ${new Date(expectedStudent.attendance.entryTime).toLocaleTimeString()}`,
+          });
           return;
         }
 
-        // Record entry automatically
         await recordStudentEntry(qrData.id);
 
-        Alert.alert(
-          "✓ Entry Recorded",
-          `${studentName} (${studentIndexNumber}) entry recorded!`
-        );
+        Toast.show({
+          type: "success",
+          text1: "✓ Entry Recorded",
+          text2: `${studentName} (${studentIndexNumber})`,
+        });
       } else {
-        // Handle exit scanning
         if (!expectedStudent.attendance) {
-          Alert.alert(
-            "Not Entered Yet",
-            `${studentName} (${studentIndexNumber}) has not entered the exam yet.`
-          );
+          Toast.show({
+            type: "warning",
+            text1: "Not Entered Yet",
+            text2: `${studentName} has not entered the exam yet`,
+          });
           return;
         }
 
         if (expectedStudent.attendance.exitTime) {
-          Alert.alert(
-            "Already Exited",
-            `${studentName} (${studentIndexNumber}) exited at ${new Date(expectedStudent.attendance.exitTime).toLocaleTimeString()}.`
-          );
+          Toast.show({
+            type: "info",
+            text1: "Already Exited",
+            text2: `${studentName} exited at ${new Date(expectedStudent.attendance.exitTime).toLocaleTimeString()}`,
+          });
           return;
         }
 
-        // Record exit automatically
         await recordStudentExit(expectedStudent.attendance.id);
 
-        Alert.alert(
-          "✓ Exit Recorded",
-          `${studentName} (${studentIndexNumber}) exit recorded!`
-        );
+        Toast.show({
+          type: "success",
+          text1: "✓ Exit Recorded",
+          text2: `${studentName} (${studentIndexNumber})`,
+        });
       }
 
-      // Refresh drawer data
       const updatedSession = await examSessionsApi.getExamSession(
         activeExamSession.id
       );
       setActiveExamSession(updatedSession);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to process student scan");
+      Toast.show({
+        type: "error",
+        text1: "Processing Error",
+        text2: error.error || "Failed to process student scan",
+      });
     }
   };
 
@@ -136,38 +193,35 @@ export default function ScannerScreen() {
       const qrData = JSON.parse(data);
 
       if (qrData.type === "EXAM_BATCH") {
-        // Handle batch switching
         if (activeExamSession && activeExamSession.id !== qrData.id) {
-          Alert.alert(
-            "Switch Exam Session?",
-            `You're currently scanning for ${activeExamSession.courseCode}. Switch to ${qrData.courseCode}?`,
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Switch",
-                onPress: () => loadExamSession(qrData.id),
-              },
-            ]
-          );
+          Toast.show({
+            type: "info",
+            text1: "Switch Session?",
+            text2: `Switch from ${activeExamSession.courseCode} to ${qrData.courseCode}?`,
+            visibilityTime: 4000,
+            onPress: () => loadExamSession(qrData.id),
+          });
         } else if (!activeExamSession) {
-          // Load new exam session
           loadExamSession(qrData.id);
         }
-        // If same batch, do nothing
         setTimeout(() => setScanned(false), 1000);
       } else if (qrData.type === "STUDENT") {
-        // Auto-record student entry
         await handleStudentScan(qrData);
         setTimeout(() => setScanned(false), 1500);
       } else {
-        Alert.alert("Invalid QR Code", "This QR code is not recognized.");
+        Toast.show({
+          type: "error",
+          text1: "Invalid QR Code",
+          text2: "This QR code is not recognized",
+        });
         setTimeout(() => setScanned(false), 1000);
       }
     } catch {
-      Alert.alert(
-        "Invalid QR Code",
-        "Unable to read QR code data. Please try again."
-      );
+      Toast.show({
+        type: "error",
+        text1: "Invalid QR Code",
+        text2: "Unable to read QR code data",
+      });
       setTimeout(() => setScanned(false), 1000);
     }
   };
@@ -184,52 +238,56 @@ export default function ScannerScreen() {
   const handleEndSession = async () => {
     if (!activeExamSession) return;
 
-    // Only allow ending if session is IN_PROGRESS
     if (activeExamSession.status !== "IN_PROGRESS") {
-      Alert.alert(
-        "Cannot End Session",
-        "Only sessions that are IN PROGRESS can be ended."
-      );
+      Toast.show({
+        type: "warning",
+        text1: "Cannot End Session",
+        text2: "Only IN PROGRESS sessions can be ended",
+      });
       return;
     }
 
-    Alert.alert(
-      "End Session",
-      `Are you sure you want to end this exam session?\n\nThis will:\n• Mark all scripts as collected\n• Update status to SUBMITTED\n• Close the session for new entries`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "End Session",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await examSessionsApi.endExamSession(activeExamSession.id);
-              Alert.alert(
-                "Session Ended",
-                "Exam session has been successfully ended and marked as SUBMITTED."
-              );
-              setActiveExamSession(null);
-              drawerRef.current?.close();
-            } catch (error: any) {
-              Alert.alert("Error", error.error || "Failed to end exam session");
-            }
-          },
-        },
-      ]
-    );
+    try {
+      await examSessionsApi.endExamSession(activeExamSession.id);
+      Toast.show({
+        type: "success",
+        text1: "Session Ended",
+        text2: "Exam session marked as SUBMITTED",
+      });
+      setActiveExamSession(null);
+      drawerRef.current?.close();
+
+      // Reset scan area
+      Animated.spring(scanAreaHeight, {
+        toValue: 0,
+        useNativeDriver: false,
+        damping: 20,
+        stiffness: 90,
+      }).start();
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "End Session Failed",
+        text2: error.error || "Failed to end exam session",
+      });
+    }
   };
 
   if (hasPermission === null) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>QR Scanner</Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <View style={[styles.header, { backgroundColor: colors.card }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Scanner
+          </Text>
         </View>
         <View style={styles.content}>
-          <Text style={styles.text}>Camera permission required</Text>
-          <TouchableOpacity style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Grant Permission</Text>
-          </TouchableOpacity>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.text, { color: colors.foreground }]}>
+            Checking camera access...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -237,17 +295,27 @@ export default function ScannerScreen() {
 
   if (hasPermission === false) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>QR Scanner</Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <View style={[styles.header, { backgroundColor: colors.card }]}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+            Scanner
+          </Text>
         </View>
         <View style={styles.content}>
-          <Text style={styles.text}>No access to camera</Text>
-          <Text style={styles.subText}>
+          <Ionicons name="camera-outline" size={64} color={colors.border} />
+          <Text style={[styles.text, { color: colors.foreground }]}>
+            Camera access denied
+          </Text>
+          <Text style={[styles.subText, { color: colors.foregroundMuted }]}>
             Please enable camera permissions in settings
           </Text>
-          <TouchableOpacity style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Request Again</Text>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            onPress={checkCameraPermission}
+          >
+            <Text style={styles.buttonText}>Grant Access</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -255,88 +323,170 @@ export default function ScannerScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>QR Scanner</Text>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+          Scanner
+        </Text>
         {activeExamSession && (
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>Session Active</Text>
+          <View style={[styles.activeBadge, { backgroundColor: "#10b981" }]}>
+            <Ionicons name="radio-button-on" size={12} color="#fff" />
+            <Text style={styles.activeBadgeText}>Active</Text>
           </View>
         )}
       </View>
 
       {/* Mode Toggle */}
       {activeExamSession && (
-        <View style={styles.modeToggle}>
+        <View
+          style={[
+            styles.modeToggle,
+            { backgroundColor: colors.card, borderBottomColor: colors.border },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.modeButton,
-              scanMode === "ENTRY" && styles.modeButtonActive,
+              { borderColor: colors.border },
+              scanMode === "ENTRY" && {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+              },
             ]}
             onPress={() => setScanMode("ENTRY")}
           >
+            <Ionicons
+              name="enter"
+              size={18}
+              color={scanMode === "ENTRY" ? "#fff" : colors.foregroundMuted}
+            />
             <Text
               style={[
                 styles.modeButtonText,
-                scanMode === "ENTRY" && styles.modeButtonTextActive,
+                { color: colors.foregroundMuted },
+                scanMode === "ENTRY" && { color: "#fff" },
               ]}
             >
-              ↓ ENTRY
+              ENTRY
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.modeButton,
-              scanMode === "EXIT" && styles.modeButtonActive,
+              { borderColor: colors.border },
+              scanMode === "EXIT" && {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+              },
             ]}
             onPress={() => setScanMode("EXIT")}
           >
+            <Ionicons
+              name="exit"
+              size={18}
+              color={scanMode === "EXIT" ? "#fff" : colors.foregroundMuted}
+            />
             <Text
               style={[
                 styles.modeButtonText,
-                scanMode === "EXIT" && styles.modeButtonTextActive,
+                { color: colors.foregroundMuted },
+                scanMode === "EXIT" && { color: "#fff" },
               ]}
             >
-              ↑ EXIT
+              EXIT
             </Text>
           </TouchableOpacity>
         </View>
       )}
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
-        }}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.scanArea}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
 
-          <View style={styles.instructionContainer}>
-            <Text style={styles.instructionText}>
-              {activeExamSession
-                ? scanMode === "ENTRY"
-                  ? "Scan Student ID for ENTRY"
-                  : "Scan Student ID for EXIT"
-                : "Scan Batch QR Code First"}
-            </Text>
-            {activeExamSession && (
-              <Text style={styles.activeSessionText}>
-                ✓ Exam Session Active
-              </Text>
-            )}
-            {scanned && (
-              <Text style={styles.successText}>✓ Scanned Successfully</Text>
-            )}
+      <Animated.View
+        style={[styles.cameraContainer, { marginBottom: scanAreaHeight }]}
+      >
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["qr"],
+          }}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.scanArea}>
+              <View
+                style={[
+                  styles.corner,
+                  styles.topLeft,
+                  { borderColor: colors.primary },
+                ]}
+              />
+              <View
+                style={[
+                  styles.corner,
+                  styles.topRight,
+                  { borderColor: colors.primary },
+                ]}
+              />
+              <View
+                style={[
+                  styles.corner,
+                  styles.bottomLeft,
+                  { borderColor: colors.primary },
+                ]}
+              />
+              <View
+                style={[
+                  styles.corner,
+                  styles.bottomRight,
+                  { borderColor: colors.primary },
+                ]}
+              />
+            </View>
+
+            <View style={styles.instructionContainer}>
+              {!activeExamSession ? (
+                <View
+                  style={[
+                    styles.instructionBox,
+                    { backgroundColor: "rgba(0,0,0,0.7)" },
+                  ]}
+                >
+                  <Ionicons name="cube" size={24} color="#fff" />
+                  <Text style={styles.instructionText}>Scan Batch QR Code</Text>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.instructionBox,
+                    { backgroundColor: "rgba(0,0,0,0.7)" },
+                  ]}
+                >
+                  <Ionicons
+                    name={scanMode === "ENTRY" ? "enter" : "exit"}
+                    size={24}
+                    color="#fff"
+                  />
+                  <Text style={styles.instructionText}>
+                    Scan Student ID - {scanMode}
+                  </Text>
+                </View>
+              )}
+              {scanned && (
+                <View
+                  style={[styles.successBadge, { backgroundColor: "#10b981" }]}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.successText}>Scanned</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-      </CameraView>
+        </CameraView>
+      </Animated.View>
 
       {/* Attendance Drawer */}
       <CustomDrawer
@@ -355,63 +505,62 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   header: {
-    backgroundColor: "#1f2937",
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderBottomWidth: 1,
   },
   headerTitle: {
-    color: "#fff",
     fontSize: 20,
     fontWeight: "700",
   },
   activeBadge: {
-    backgroundColor: "#10b981",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
   },
   activeBadgeText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   modeToggle: {
     flexDirection: "row",
-    backgroundColor: "#1f2937",
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingVertical: 12,
     gap: 12,
+    borderBottomWidth: 1,
   },
   modeButton: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: "#4b5563",
-    alignItems: "center",
-  },
-  modeButtonActive: {
-    backgroundColor: "#3b82f6",
-    borderColor: "#3b82f6",
+    gap: 6,
   },
   modeButtonText: {
-    color: "#9ca3af",
     fontSize: 14,
     fontWeight: "700",
-  },
-  modeButtonTextActive: {
-    color: "#fff",
   },
   content: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 32,
+    gap: 16,
+  },
+  cameraContainer: {
+    flex: 1,
   },
   camera: {
     flex: 1,
@@ -433,7 +582,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 40,
     height: 40,
-    borderColor: "#fff",
   },
   topLeft: {
     top: 0,
@@ -462,44 +610,44 @@ const styles = StyleSheet.create({
   instructionContainer: {
     alignItems: "center",
     paddingHorizontal: 32,
+    gap: 12,
+  },
+  instructionBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
   },
   instructionText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    fontWeight: "700",
+  },
+  successBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    gap: 6,
   },
   successText: {
-    color: "#4ade80",
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 16,
-  },
-  activeSessionText: {
-    color: "#10b981",
+    color: "#fff",
     fontSize: 14,
-    fontWeight: "600",
-    marginTop: 8,
+    fontWeight: "700",
   },
   text: {
-    color: "#fff",
     fontSize: 16,
-    marginBottom: 12,
-    textAlign: "center",
     fontWeight: "600",
+    textAlign: "center",
   },
   subText: {
-    color: "#9ca3af",
     fontSize: 14,
-    marginBottom: 20,
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#3b82f6",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -510,3 +658,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+export default ScannerScreen;

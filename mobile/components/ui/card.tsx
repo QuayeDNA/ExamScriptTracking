@@ -14,7 +14,7 @@ interface CardProps {
 
 export function Card({ children, style, elevation = "default" }: CardProps) {
   const colors = useThemeColors();
-  const shadow = Shadows[elevation];
+  const shadow = elevation === "default" ? Shadows.DEFAULT : Shadows[elevation];
 
   return (
     <View

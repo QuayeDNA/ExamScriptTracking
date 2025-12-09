@@ -14,20 +14,22 @@ import {
   Animated,
   Dimensions,
   ScrollView,
-  RefreshControl,
-  TouchableWithoutFeedback,
   PanResponder,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import Toast from "react-native-toast-message";
 import type { ExamSession } from "@/api/examSessions";
 import type { ExamAttendance } from "@/types";
 import { examSessionsApi } from "@/api/examSessions";
+import { mobileSocketService } from "@/lib/socket";
+import { useThemeColors } from "@/constants/design-system";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const DRAWER_HEIGHTS = {
   CLOSED: 0,
-  SMALL: SCREEN_HEIGHT * 0.25,
-  MEDIUM: SCREEN_HEIGHT * 0.5,
-  LARGE: SCREEN_HEIGHT * 0.9,
+  PEEK: SCREEN_HEIGHT * 0.15,
+  HALF: SCREEN_HEIGHT * 0.5,
+  FULL: SCREEN_HEIGHT * 0.9,
 };
 
 interface CustomDrawerProps {
@@ -43,13 +45,12 @@ export interface CustomDrawerRef {
 
 const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
   ({ session, onViewDetails, onEndSession }, ref) => {
+    const colors = useThemeColors();
     const [drawerHeight] = useState(new Animated.Value(0));
     const [currentIndex, setCurrentIndex] = useState(-1);
     const [attendances, setAttendances] = useState<ExamAttendance[]>([]);
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
-    const panY = useState(new Animated.Value(0))[0];
 
     useImperativeHandle(ref, () => ({
       snapToIndex: (index: number) => {
@@ -57,13 +58,13 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         let height = 0;
         switch (index) {
           case 0:
-            height = DRAWER_HEIGHTS.SMALL;
+            height = DRAWER_HEIGHTS.PEEK;
             break;
           case 1:
-            height = DRAWER_HEIGHTS.MEDIUM;
+            height = DRAWER_HEIGHTS.HALF;
             break;
           case 2:
-            height = DRAWER_HEIGHTS.LARGE;
+            height = DRAWER_HEIGHTS.FULL;
             break;
           default:
             height = 0;
@@ -71,8 +72,8 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         Animated.spring(drawerHeight, {
           toValue: height,
           useNativeDriver: false,
-          tension: 50,
-          friction: 8,
+          damping: 20,
+          stiffness: 90,
         }).start();
       },
       close: () => {
@@ -80,8 +81,8 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         Animated.spring(drawerHeight, {
           toValue: 0,
           useNativeDriver: false,
-          tension: 50,
-          friction: 8,
+          damping: 20,
+          stiffness: 90,
         }).start();
       },
     }));
@@ -94,61 +95,85 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
         const data = await examSessionsApi.getExamSession(session.id);
 
         if (data.attendances) {
-          setAttendances(data.attendances);
+          setAttendances(data.attendances.slice(0, 5)); // Show only recent 5
         }
 
         if (data.stats) {
           setStats(data.stats);
         }
-      } catch {
-        // Silently handle error
+      } catch (error: any) {
+        Toast.show({
+          type: "error",
+          text1: "Load Error",
+          text2: error.error || "Failed to load attendance data",
+        });
       } finally {
         setLoading(false);
       }
     }, [session]);
 
-    const onRefresh = useCallback(async () => {
-      setRefreshing(true);
-      await loadAttendanceData();
-      setRefreshing(false);
-    }, [loadAttendanceData]);
-
+    // Socket real-time updates
     useEffect(() => {
-      if (session) {
+      if (!session) return;
+
+      const handleAttendanceUpdate = () => {
         loadAttendanceData();
-        // Set up polling for real-time updates every 10 seconds
-        const interval = setInterval(loadAttendanceData, 10000);
-        return () => clearInterval(interval);
+      };
+
+      const handleBatchUpdate = (data: any) => {
+        if (data.id === session.id) {
+          loadAttendanceData();
+        }
+      };
+
+      // Connect to socket events
+      mobileSocketService.emit("join", { examSessionId: session.id });
+
+      const socket = (mobileSocketService as any).socket;
+      if (socket) {
+        socket.on("attendance:recorded", handleAttendanceUpdate);
+        socket.on("batch:status_updated", handleBatchUpdate);
       }
+
+      // Initial load
+      loadAttendanceData();
+
+      return () => {
+        if (socket) {
+          socket.off("attendance:recorded", handleAttendanceUpdate);
+          socket.off("batch:status_updated", handleBatchUpdate);
+        }
+        mobileSocketService.emit("leave", { examSessionId: session.id });
+      };
     }, [session, loadAttendanceData]);
 
     const getStatusColor = (status: string) => {
       switch (status) {
         case "SUBMITTED":
-          return styles.statusSubmitted;
+          return "#10b981";
         case "PRESENT":
-          return styles.statusPresent;
+          return "#3b82f6";
         case "LEFT_WITHOUT_SUBMITTING":
-          return styles.statusLeft;
+          return "#f59e0b";
         default:
-          return styles.statusAbsent;
+          return "#6b7280";
       }
     };
 
     const getBatchStatusColor = (status: string) => {
       switch (status) {
         case "NOT_STARTED":
-          return styles.batchStatusNotStarted;
+          return "#6b7280";
         case "IN_PROGRESS":
-          return styles.batchStatusInProgress;
+          return "#3b82f6";
         case "SUBMITTED":
-          return styles.batchStatusSubmitted;
+          return "#10b981";
         case "IN_TRANSIT":
-          return styles.batchStatusInTransit;
+          return "#f59e0b";
         case "WITH_LECTURER":
-          return styles.batchStatusWithLecturer;
+          return "#8b5cf6";
         default:
-          return styles.batchStatusDefault;
+          return "#6b7280";
       }
     };
 
@@ -196,104 +221,65 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
       });
     };
 
-    const cycleDrawerSize = () => {
-      let newIndex: number;
-      if (currentIndex === 2) {
-        // From large, go to medium
-        newIndex = 1;
-      } else if (currentIndex === 1) {
-        // From medium, go to large
-        newIndex = 2;
+    const handleSwipeGesture = (direction: "up" | "down") => {
+      if (direction === "down") {
+        if (currentIndex === 2) {
+          setCurrentIndex(1);
+          Animated.spring(drawerHeight, {
+            toValue: DRAWER_HEIGHTS.HALF,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 90,
+          }).start();
+        } else if (currentIndex === 1) {
+          setCurrentIndex(0);
+          Animated.spring(drawerHeight, {
+            toValue: DRAWER_HEIGHTS.PEEK,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 90,
+          }).start();
+        } else if (currentIndex === 0) {
+          setCurrentIndex(-1);
+          Animated.spring(drawerHeight, {
+            toValue: 0,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 90,
+          }).start();
+        }
       } else {
-        // From small or closed, go to medium
-        newIndex = 1;
+        if (currentIndex === 0) {
+          setCurrentIndex(1);
+          Animated.spring(drawerHeight, {
+            toValue: DRAWER_HEIGHTS.HALF,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 90,
+          }).start();
+        } else if (currentIndex === 1) {
+          setCurrentIndex(2);
+          Animated.spring(drawerHeight, {
+            toValue: DRAWER_HEIGHTS.FULL,
+            useNativeDriver: false,
+            damping: 20,
+            stiffness: 90,
+          }).start();
+        }
       }
-
-      setCurrentIndex(newIndex);
-      let height = 0;
-      switch (newIndex) {
-        case 0:
-          height = DRAWER_HEIGHTS.SMALL;
-          break;
-        case 1:
-          height = DRAWER_HEIGHTS.MEDIUM;
-          break;
-        case 2:
-          height = DRAWER_HEIGHTS.LARGE;
-          break;
-      }
-      Animated.spring(drawerHeight, {
-        toValue: height,
-        useNativeDriver: false,
-        tension: 50,
-        friction: 8,
-      }).start();
     };
 
     const panResponder = useState(() =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (_, gestureState) => {
-          return Math.abs(gestureState.dy) > 5;
-        },
-        onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dy > 0) {
-            // Swiping down
-            panY.setValue(gestureState.dy);
-          }
+          return Math.abs(gestureState.dy) > 10;
         },
         onPanResponderRelease: (_, gestureState) => {
-          panY.setValue(0);
-
-          if (gestureState.dy > 50) {
-            // Swipe down detected - collapse drawer
-            if (currentIndex === 2) {
-              // From large to medium
-              setCurrentIndex(1);
-              Animated.spring(drawerHeight, {
-                toValue: DRAWER_HEIGHTS.MEDIUM,
-                useNativeDriver: false,
-                tension: 50,
-                friction: 8,
-              }).start();
-            } else if (currentIndex === 1) {
-              // From medium to small
-              setCurrentIndex(0);
-              Animated.spring(drawerHeight, {
-                toValue: DRAWER_HEIGHTS.SMALL,
-                useNativeDriver: false,
-                tension: 50,
-                friction: 8,
-              }).start();
-            } else if (currentIndex === 0) {
-              // From small to closed
-              setCurrentIndex(-1);
-              Animated.spring(drawerHeight, {
-                toValue: 0,
-                useNativeDriver: false,
-                tension: 50,
-                friction: 8,
-              }).start();
-            }
-          } else if (gestureState.dy < -50) {
-            // Swipe up detected - expand drawer
-            if (currentIndex === 0) {
-              setCurrentIndex(1);
-              Animated.spring(drawerHeight, {
-                toValue: DRAWER_HEIGHTS.MEDIUM,
-                useNativeDriver: false,
-                tension: 50,
-                friction: 8,
-              }).start();
-            } else if (currentIndex === 1) {
-              setCurrentIndex(2);
-              Animated.spring(drawerHeight, {
-                toValue: DRAWER_HEIGHTS.LARGE,
-                useNativeDriver: false,
-                tension: 50,
-                friction: 8,
-              }).start();
-            }
+          if (gestureState.dy > 80) {
+            handleSwipeGesture("down");
+          } else if (gestureState.dy < -80) {
+            handleSwipeGesture("up");
           }
         },
       })
@@ -302,156 +288,197 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
     if (!session) return null;
 
     return (
-      <Animated.View style={[styles.drawer, { height: drawerHeight }]}>
+      <Animated.View
+        style={[
+          styles.drawer,
+          { height: drawerHeight, backgroundColor: colors.background },
+        ]}
+      >
         <View {...panResponder.panHandlers}>
-          <TouchableWithoutFeedback onPress={cycleDrawerSize}>
-            <View style={styles.handle}>
-              <View style={styles.handleBar} />
-            </View>
-          </TouchableWithoutFeedback>
+          <View style={styles.handle}>
+            <View
+              style={[styles.handleBar, { backgroundColor: colors.border }]}
+            />
+          </View>
         </View>
 
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+        {/* Drawer Header */}
+        <View
+          style={[
+            styles.drawerHeader,
+            { borderBottomColor: colors.border, backgroundColor: colors.card },
+          ]}
         >
-          {/* Batch Header */}
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <Text style={styles.courseCode}>📚 {session.courseCode}</Text>
+          <View style={styles.headerLeft}>
+            <View>
+              <Text
+                style={[styles.courseName, { color: colors.foreground }]}
+                numberOfLines={1}
+              >
+                {session.courseName}
+              </Text>
+              <Text
+                style={[styles.courseCode, { color: colors.foregroundMuted }]}
+              >
+                {session.courseCode}
+              </Text>
+              <Text style={[styles.sessionId, { color: colors.border }]}>
+                ID: {session.id.slice(0, 8)}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.headerRight}>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getBatchStatusColor(session.status) },
+              ]}
+            >
+              <Text style={styles.statusBadgeText}>
+                {getBatchStatusText(session.status)}
+              </Text>
+            </View>
+            <Text
+              style={[styles.venueText, { color: colors.foregroundMuted }]}
+              numberOfLines={1}
+            >
+              <Ionicons
+                name="location"
+                size={12}
+                color={colors.foregroundMuted}
+              />{" "}
+              {session.venue}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Bar */}
+        <View
+          style={[
+            styles.actionBar,
+            { backgroundColor: colors.card, borderBottomColor: colors.border },
+          ]}
+        >
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.primary }]}
+            onPress={onViewDetails}
+          >
+            <Ionicons name="document-text" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Details</Text>
+          </TouchableOpacity>
+          {session.status === "IN_PROGRESS" && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: "#ef4444" }]}
+              onPress={onEndSession}
+            >
+              <Ionicons name="stop-circle" size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>End</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Stats Section */}
+        {stats && (
+          <View
+            style={[
+              styles.statsContainer,
+              {
+                backgroundColor: colors.card,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.statItem}>
+              <Ionicons name="people" size={20} color={colors.primary} />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {stats.totalAttended || 0}/{stats.expectedStudents || 0}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {stats.submitted || 0}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="time" size={20} color="#3b82f6" />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {stats.present || 0}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="alert-circle" size={20} color="#6b7280" />
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {(stats.expectedStudents || 0) - (stats.totalAttended || 0)}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Recent Attendees */}
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {loading && attendances.length === 0 ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.primary}
+              style={{ marginTop: 20 }}
+            />
+          ) : attendances.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="scan" size={48} color={colors.border} />
+              <Text
+                style={[styles.emptyText, { color: colors.foregroundMuted }]}
+              >
+                No attendances yet
+              </Text>
+            </View>
+          ) : (
+            attendances.map((attendance) => (
               <View
+                key={attendance.id}
                 style={[
-                  styles.batchStatusBadge,
-                  getBatchStatusColor(session.status),
+                  styles.attendanceItem,
+                  { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
               >
-                <Text style={styles.batchStatusText}>
-                  {getBatchStatusText(session.status)}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.courseName}>{session.courseName}</Text>
-            <Text style={styles.venue}>📍 {session.venue}</Text>
-            <Text style={styles.batchCode}>Batch: {session.batchQrCode}</Text>
-          </View>
-
-          {/* Stats Section */}
-          {stats && (
-            <View style={styles.statsCard}>
-              <View style={styles.statRow}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>
-                    {stats.totalAttended || 0}/{stats.expectedStudents || 0}
-                  </Text>
-                  <Text style={styles.statLabel}>Students Present</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: "#10b981" }]}>
-                    {stats.submitted || 0}
-                  </Text>
-                  <Text style={styles.statLabel}>Submitted</Text>
-                </View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: "#3b82f6" }]}>
-                    {stats.present || 0}
-                  </Text>
-                  <Text style={styles.statLabel}>In Progress</Text>
-                </View>
-              </View>
-              {stats.attendanceRate !== undefined && (
-                <Text style={styles.attendanceRate}>
-                  Attendance: {stats.attendanceRate}%
-                </Text>
-              )}
-            </View>
-          )}
-
-          {/* Recent Attendees */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Attendees</Text>
-
-            {loading && attendances.length === 0 ? (
-              <ActivityIndicator
-                size="small"
-                color="#3b82f6"
-                style={{ marginTop: 20 }}
-              />
-            ) : attendances.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No students scanned yet</Text>
-                <Text style={styles.emptySubtext}>
-                  Scan student QR codes to record attendance
-                </Text>
-              </View>
-            ) : (
-              attendances.map((attendance) => (
-                <View key={attendance.id} style={styles.attendanceItem}>
-                  <View style={styles.attendanceHeader}>
-                    <Text style={styles.studentName}>
+                <View style={styles.attendanceRow}>
+                  <View style={styles.attendanceInfo}>
+                    <Text
+                      style={[styles.studentName, { color: colors.foreground }]}
+                      numberOfLines={1}
+                    >
                       {attendance.student.firstName}{" "}
                       {attendance.student.lastName}
                     </Text>
-                    <View
+                    <Text
                       style={[
-                        styles.statusBadge,
-                        getStatusColor(attendance.status),
+                        styles.indexNumber,
+                        { color: colors.foregroundMuted },
                       ]}
                     >
-                      <Text style={styles.statusText}>
-                        {getStatusText(attendance.status)}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.indexNumber}>
-                    {attendance.student.indexNumber}
-                  </Text>
-                  <View style={styles.timeRow}>
-                    {attendance.entryTime && (
-                      <Text style={styles.timeText}>
-                        ⏰ Entry: {formatTime(attendance.entryTime)}
-                      </Text>
-                    )}
-                    {attendance.exitTime && (
-                      <Text style={styles.timeText}>
-                        🚪 Exit: {formatTime(attendance.exitTime)}
-                      </Text>
-                    )}
-                    {attendance.submissionTime && (
-                      <Text style={styles.timeText}>
-                        ✅ Submitted: {formatTime(attendance.submissionTime)}
-                      </Text>
-                    )}
-                  </View>
-                  {attendance.discrepancyNote && (
-                    <Text style={styles.discrepancyNote}>
-                      ⚠️ {attendance.discrepancyNote}
+                      {attendance.student.indexNumber}
                     </Text>
-                  )}
+                  </View>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: getStatusColor(attendance.status) },
+                    ]}
+                  />
                 </View>
-              ))
-            )}
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={onViewDetails}
-            >
-              <Text style={styles.primaryButtonText}>View Full Details →</Text>
-            </TouchableOpacity>
-            {session.status === "IN_PROGRESS" && (
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={onEndSession}
-              >
-                <Text style={styles.secondaryButtonText}>End Session</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                {attendance.entryTime && (
+                  <Text
+                    style={[styles.timeText, { color: colors.foregroundMuted }]}
+                  >
+                    <Ionicons name="enter" size={12} />{" "}
+                    {formatTime(attendance.entryTime)}
+                    {attendance.exitTime &&
+                      ` • ${formatTime(attendance.exitTime)}`}
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
         </ScrollView>
       </Animated.View>
     );
@@ -468,224 +495,149 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
     overflow: "hidden",
   },
   handle: {
-    paddingVertical: 12,
+    paddingVertical: 8,
     alignItems: "center",
   },
   handleBar: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: "#d1d5db",
     borderRadius: 2,
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  courseName: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  courseCode: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  sessionId: {
+    fontSize: 9,
+    fontWeight: "500",
+  },
+  headerRight: {
+    alignItems: "flex-end",
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  venueText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  actionBar: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  statItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   content: {
     flex: 1,
     paddingHorizontal: 16,
   },
-  header: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  courseCode: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  batchStatusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  batchStatusText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  batchStatusNotStarted: {
-    backgroundColor: "#9ca3af",
-  },
-  batchStatusInProgress: {
-    backgroundColor: "#3b82f6",
-  },
-  batchStatusSubmitted: {
-    backgroundColor: "#10b981",
-  },
-  batchStatusInTransit: {
-    backgroundColor: "#f59e0b",
-  },
-  batchStatusWithLecturer: {
-    backgroundColor: "#8b5cf6",
-  },
-  batchStatusDefault: {
-    backgroundColor: "#6b7280",
-  },
-  courseName: {
-    fontSize: 16,
-    color: "#6b7280",
-    marginBottom: 8,
-  },
-  venue: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  batchCode: {
-    fontSize: 12,
-    color: "#9ca3af",
-  },
-  statsCard: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 16,
-  },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 12,
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#3b82f6",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  attendanceRate: {
-    textAlign: "center",
-    fontSize: 14,
-    color: "#059669",
-    fontWeight: "600",
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 12,
-  },
   emptyState: {
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: 40,
+    gap: 8,
   },
   emptyText: {
-    fontSize: 16,
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-  emptySubtext: {
     fontSize: 14,
-    color: "#9ca3af",
+    fontWeight: "500",
   },
   attendanceItem: {
-    backgroundColor: "#f9fafb",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 8,
+    marginTop: 8,
+    borderWidth: 1,
   },
-  attendanceHeader: {
+  attendanceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
-  studentName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111827",
+  attendanceInfo: {
     flex: 1,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusSubmitted: {
-    backgroundColor: "#d1fae5",
-  },
-  statusPresent: {
-    backgroundColor: "#dbeafe",
-  },
-  statusLeft: {
-    backgroundColor: "#fee2e2",
-  },
-  statusAbsent: {
-    backgroundColor: "#f3f4f6",
-  },
-  statusText: {
-    fontSize: 11,
+  studentName: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#111827",
+    marginBottom: 2,
   },
   indexNumber: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "500",
   },
-  timeRow: {
-    gap: 8,
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   timeText: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  discrepancyNote: {
-    fontSize: 12,
-    color: "#dc2626",
-    marginTop: 8,
-    fontStyle: "italic",
-  },
-  actions: {
-    gap: 12,
-    marginBottom: 32,
-  },
-  primaryButton: {
-    backgroundColor: "#3b82f6",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    backgroundColor: "#f3f4f6",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  secondaryButtonText: {
-    color: "#374151",
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

@@ -3,56 +3,67 @@
  * Mobile implementation matching web design system
  */
 
-import { Text, StyleSheet, TextStyle } from "react-native";
+import { Text as RNText, StyleSheet, TextStyle } from "react-native";
 import { useThemeColors, Typography } from "@/constants/design-system";
 
 interface TypographyProps {
   children: React.ReactNode;
   style?: TextStyle;
+  variant?: "default" | "muted" | "h1" | "h2" | "h3";
 }
 
-export function H1({ children, style }: TypographyProps) {
+// Generic Text component with variants
+export function Text({
+  children,
+  style,
+  variant = "default",
+}: TypographyProps) {
+  const colors = useThemeColors();
+
+  const variantStyles = {
+    default: [styles.p, { color: colors.foreground }],
+    muted: [styles.muted, { color: colors.foregroundMuted }],
+    h1: [styles.h1, { color: colors.foreground }],
+    h2: [styles.h2, { color: colors.foreground }],
+    h3: [styles.h3, { color: colors.foreground }],
+  };
+
+  return <RNText style={[variantStyles[variant], style]}>{children}</RNText>;
+}
+
+export function H1({ children, style }: Omit<TypographyProps, "variant">) {
   const colors = useThemeColors();
   return (
-    <Text style={[styles.h1, { color: colors.foreground }, style]}>
+    <RNText style={[styles.h1, { color: colors.foreground }, style]}>
       {children}
-    </Text>
+    </RNText>
   );
 }
 
-export function H2({ children, style }: TypographyProps) {
+export function H2({ children, style }: Omit<TypographyProps, "variant">) {
   const colors = useThemeColors();
   return (
-    <Text style={[styles.h2, { color: colors.foreground }, style]}>
+    <RNText style={[styles.h2, { color: colors.foreground }, style]}>
       {children}
-    </Text>
+    </RNText>
   );
 }
 
-export function H3({ children, style }: TypographyProps) {
+export function H3({ children, style }: Omit<TypographyProps, "variant">) {
   const colors = useThemeColors();
   return (
-    <Text style={[styles.h3, { color: colors.foreground }, style]}>
+    <RNText style={[styles.h3, { color: colors.foreground }, style]}>
       {children}
-    </Text>
+    </RNText>
   );
 }
 
-export function P({ children, style }: TypographyProps) {
+export function P({ children, style }: Omit<TypographyProps, "variant">) {
   const colors = useThemeColors();
   return (
-    <Text style={[styles.p, { color: colors.foreground }, style]}>
+    <RNText style={[styles.p, { color: colors.foreground }, style]}>
       {children}
-    </Text>
-  );
-}
-
-export function Muted({ children, style }: TypographyProps) {
-  const colors = useThemeColors();
-  return (
-    <Text style={[styles.muted, { color: colors.foregroundMuted }, style]}>
-      {children}
-    </Text>
+    </RNText>
   );
 }
 

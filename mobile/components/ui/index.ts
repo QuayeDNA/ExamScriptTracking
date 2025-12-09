@@ -9,4 +9,6 @@ export { Badge } from "./badge";
 export { Input } from "./input";
 export { Alert } from "./alert";
 export { Separator } from "./separator";
-export { H1, H2, H3, P, Muted } from "./typography";
+export { H1, H2, H3, P, Text } from "./typography";
+export { Modal, ModalFooter } from "./modal";
+export { Dialog } from "./dialog";
