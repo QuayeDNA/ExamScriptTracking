@@ -15,6 +15,8 @@ import {
   deleteAttachment,
   deleteIncident,
   getStatistics,
+  exportIncidentPDF,
+  exportIncidentsSummaryExcel,
 } from "../controllers/incidentController";
 
 const router = Router();
@@ -27,6 +29,14 @@ router.use(authenticate);
  * GET /api/incidents/statistics
  */
 router.get("/statistics", getStatistics);
+
+/**
+ * Export
+ * GET /api/incidents/export/summary - Export filtered incidents summary as Excel
+ * GET /api/incidents/:id/export/pdf - Export single incident report as PDF
+ */
+router.get("/export/summary", exportIncidentsSummaryExcel);
+router.get("/:id/export/pdf", exportIncidentPDF);
 
 /**
  * Incident CRUD

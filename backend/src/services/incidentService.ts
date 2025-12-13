@@ -646,12 +646,12 @@ export class IncidentService {
   }
 
   /**
-   * Check if user has access to specific incident
+   * Check if user has access to an incident
    */
-  private hasAccessToIncident(
+  async hasAccessToIncident(
     incident: any,
     userContext: UserContext
-  ): boolean {
+  ): Promise<boolean> {
     const { userId, role, isSuperAdmin } = userContext;
 
     // Admin and super admin can access all

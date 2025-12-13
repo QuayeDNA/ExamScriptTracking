@@ -21,6 +21,9 @@ import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
 import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
+import IncidentsPage from "@/pages/dashboard/IncidentsPage";
+import IncidentDetailsPage from "@/pages/dashboard/IncidentDetailsPage";
+import CreateIncidentPage from "@/pages/dashboard/CreateIncidentPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
@@ -81,6 +84,15 @@ function App() {
                   <Route
                     path="batch-tracking"
                     element={<BatchTrackingPage />}
+                  />
+                  <Route path="incidents" element={<IncidentsPage />} />
+                  <Route
+                    path="incidents/:id"
+                    element={<IncidentDetailsPage />}
+                  />
+                  <Route
+                    path="incidents/create"
+                    element={<CreateIncidentPage />}
                   />
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>

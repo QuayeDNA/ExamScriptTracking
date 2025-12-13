@@ -12,6 +12,7 @@ import {
   Shield,
   FileBarChart,
   UserCog,
+  AlertTriangle,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +46,11 @@ const navItems: NavItem[] = [
     title: "Batch Tracking",
     href: "/dashboard/batch-tracking",
     icon: Package,
+  },
+  {
+    title: "Incidents",
+    href: "/dashboard/incidents",
+    icon: AlertTriangle,
   },
   {
     title: "Settings",

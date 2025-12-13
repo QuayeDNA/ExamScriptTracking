@@ -8,6 +8,10 @@ import {
   IncidentStatus,
 } from "@prisma/client";
 import { deleteIncidentFile, deleteIncidentFolder } from "../middleware/upload";
+import {
+  generateIncidentReportPDF,
+  generateIncidentSummaryExcel,
+} from "../services/exportService";
 
 const prisma = new PrismaClient();
 
@@ -666,5 +670,86 @@ export const getStatistics = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Error fetching statistics:", error);
     res.status(500).json({ error: "Failed to fetch statistics" });
+  }
+};
+
+/**
+ * Export incident report as PDF
+ */
+export const exportIncidentPDF = async (req: Request, res: Response) => {
+  try {
+    const { incidentId } = req.params;
+
+    // Check access
+    const userContext = {
+      userId: req.user!.userId,
+      role: req.user!.role,
+      isSuperAdmin: req.user!.isSuperAdmin,
+    };
+
+    const hasAccess = await incidentService.hasAccessToIncident(
+      incidentId,
+      userContext
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Access denied to this incident" });
+    }
+
+    await generateIncidentReportPDF(incidentId, res);
+  } catch (error: any) {
+    console.error("Error exporting incident PDF:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to export incident report" });
+    }
+  }
+};
+
+/**
+ * Export incident summary as Excel
+ */
+export const exportIncidentsSummaryExcel = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const {
+      type,
+      severity,
+      status,
+      startDate,
+      endDate,
+      assignedToId,
+      isConfidential,
+    } = req.query;
+
+    const filters: any = {};
+    if (type) filters.type = type as string;
+    if (severity) filters.severity = severity as string;
+    if (status) filters.status = status as string;
+    if (startDate) filters.startDate = new Date(startDate as string);
+    if (endDate) filters.endDate = new Date(endDate as string);
+    if (assignedToId) filters.assignedToId = assignedToId as string;
+    if (isConfidential !== undefined)
+      filters.isConfidential = isConfidential === "true";
+
+    const buffer = await generateIncidentSummaryExcel(filters);
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=incident-summary-${
+        new Date().toISOString().split("T")[0]
+      }.xlsx`
+    );
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("Error exporting incidents Excel:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to export incidents summary" });
+    }
   }
 };

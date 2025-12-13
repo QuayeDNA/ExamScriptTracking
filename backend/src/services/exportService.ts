@@ -668,3 +668,541 @@ export const generateAnalyticsOverviewExcel = async (
     throw error;
   }
 };
+
+/**
+ * Generate Incident Report PDF
+ * Shows incident details, timeline, comments, and attachments
+ */
+export const generateIncidentReportPDF = async (
+  incidentId: string,
+  res: Response
+) => {
+  try {
+    const incident = await prisma.incident.findUnique({
+      where: { id: incidentId },
+      include: {
+        reporter: true,
+        assignee: true,
+        student: true,
+        examSession: {
+          include: {
+            createdBy: true,
+          },
+        },
+        attendance: {
+          include: {
+            student: true,
+            examSession: true,
+          },
+        },
+        transfer: {
+          include: {
+            fromHandler: true,
+            toHandler: true,
+            examSession: true,
+          },
+        },
+        attachments: {
+          orderBy: { uploadedAt: "asc" },
+        },
+        comments: {
+          include: {
+            user: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+        statusHistory: {
+          include: {
+            user: true,
+          },
+          orderBy: { changedAt: "asc" },
+        },
+      },
+    });
+
+    if (!incident) {
+      throw new Error("Incident not found");
+    }
+
+    const doc = new PDFDocument({ margin: 50 });
+
+    // Set response headers
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=incident-${incident.incidentNumber}.pdf`
+    );
+
+    doc.pipe(res);
+
+    // Header
+    addPDFHeader(
+      doc,
+      "Incident Report",
+      `Incident #${incident.incidentNumber}`
+    );
+
+    // Incident Overview
+    doc
+      .fontSize(14)
+      .font("Helvetica-Bold")
+      .text("Incident Details", { underline: true });
+    doc.moveDown(0.5);
+
+    doc.fontSize(10).font("Helvetica");
+    doc.text(`Type: ${incident.type.replace(/_/g, " ")}`);
+    doc.text(`Severity: ${incident.severity}`);
+    doc.text(`Status: ${incident.status.replace(/_/g, " ")}`);
+    if (incident.isConfidential) {
+      doc
+        .fillColor("red")
+        .text("⚠ CONFIDENTIAL", { continued: false })
+        .fillColor("black");
+    }
+    doc.text(`Reported: ${formatDate(incident.reportedAt)}`);
+    doc.text(
+      `Reporter: ${incident.reporter.firstName} ${incident.reporter.lastName} (${incident.reporter.email})`
+    );
+    if (incident.assignee) {
+      doc.text(
+        `Assigned To: ${incident.assignee.firstName} ${incident.assignee.lastName}`
+      );
+    }
+    if (incident.resolvedAt) {
+      doc.text(`Resolved: ${formatDate(incident.resolvedAt)}`);
+    }
+    doc.moveDown(1);
+
+    // Description
+    doc
+      .fontSize(14)
+      .font("Helvetica-Bold")
+      .text("Description", { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font("Helvetica");
+    doc.text(incident.description, { align: "justify" });
+    doc.moveDown(1);
+
+    // Resolution (if available)
+    if (incident.resolutionNotes) {
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Resolution", { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).font("Helvetica");
+      doc.text(incident.resolutionNotes, { align: "justify" });
+      doc.moveDown(1);
+    }
+
+    // Related Context
+    if (
+      incident.student ||
+      incident.examSession ||
+      incident.attendance ||
+      incident.transfer
+    ) {
+      doc.addPage();
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Related Information", { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).font("Helvetica");
+
+      if (incident.student) {
+        doc.text("Student Information:");
+        doc.text(
+          `  Name: ${incident.student.firstName} ${incident.student.lastName}`
+        );
+        doc.text(`  Index Number: ${incident.student.indexNumber}`);
+        doc.text(`  Program: ${incident.student.program}`);
+        doc.text(`  Level: ${incident.student.level}`);
+        doc.moveDown(0.5);
+      }
+
+      if (incident.examSession) {
+        doc.text("Exam Session:");
+        doc.text(
+          `  Course: ${incident.examSession.courseCode} - ${incident.examSession.courseName}`
+        );
+        doc.text(`  Batch: ${incident.examSession.batchQrCode}`);
+        doc.text(`  Date: ${formatDate(incident.examSession.examDate)}`);
+        doc.text(`  Venue: ${incident.examSession.venue}`);
+        doc.moveDown(0.5);
+      }
+
+      if (incident.attendance) {
+        doc.text("Attendance Record:");
+        doc.text(
+          `  Student: ${incident.attendance.student.firstName} ${incident.attendance.student.lastName}`
+        );
+        doc.text(`  Status: ${incident.attendance.status}`);
+        if (incident.attendance.entryTime) {
+          doc.text(`  Entry: ${formatDate(incident.attendance.entryTime)}`);
+        }
+        if (incident.attendance.exitTime) {
+          doc.text(`  Exit: ${formatDate(incident.attendance.exitTime)}`);
+        }
+        doc.moveDown(0.5);
+      }
+
+      if (incident.transfer) {
+        doc.text("Batch Transfer:");
+        doc.text(
+          `  From: ${incident.transfer.fromHandler.firstName} ${incident.transfer.fromHandler.lastName}`
+        );
+        doc.text(
+          `  To: ${incident.transfer.toHandler.firstName} ${incident.transfer.toHandler.lastName}`
+        );
+        doc.text(`  Scripts Expected: ${incident.transfer.scriptsExpected}`);
+        doc.text(
+          `  Scripts Received: ${
+            incident.transfer.scriptsReceived || "Pending"
+          }`
+        );
+        doc.text(`  Status: ${incident.transfer.status}`);
+        doc.moveDown(0.5);
+      }
+
+      doc.moveDown(1);
+    }
+
+    // Status Timeline
+    if (incident.statusHistory.length > 0) {
+      doc.addPage();
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Status Timeline", { underline: true });
+      doc.moveDown(1);
+
+      const timelineData = {
+        headers: ["Date/Time", "Status", "Changed By", "Notes"],
+        rows: incident.statusHistory.map((history) => [
+          formatDate(history.changedAt),
+          history.toStatus.replace(/_/g, " "),
+          `${history.user.firstName} ${history.user.lastName}`,
+          history.reason || "-",
+        ]),
+      };
+
+      // @ts-ignore
+      await doc.table(timelineData, {
+        prepareHeader: () => doc.font("Helvetica-Bold").fontSize(9),
+        prepareRow: () => doc.font("Helvetica").fontSize(8),
+        width: 500,
+      });
+
+      doc.moveDown(1);
+    }
+
+    // Comments
+    if (incident.comments.length > 0) {
+      doc.addPage();
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Comments & Discussion", { underline: true });
+      doc.moveDown(1);
+
+      incident.comments.forEach((comment, index) => {
+        doc.fontSize(9).font("Helvetica-Bold");
+        doc.text(
+          `${comment.user.firstName} ${comment.user.lastName} - ${formatDate(
+            comment.createdAt
+          )}`
+        );
+        doc.fontSize(9).font("Helvetica");
+        doc.text(comment.comment, { indent: 20 });
+
+        if (index < incident.comments.length - 1) {
+          doc.moveDown(0.5);
+          doc
+            .strokeColor("#cccccc")
+            .lineWidth(0.5)
+            .moveTo(50, doc.y)
+            .lineTo(550, doc.y)
+            .stroke();
+          doc.moveDown(0.5);
+        }
+      });
+
+      doc.moveDown(1);
+    }
+
+    // Attachments
+    if (incident.attachments.length > 0) {
+      doc.addPage();
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Attachments", { underline: true });
+      doc.moveDown(1);
+
+      const attachmentData = {
+        headers: ["Filename", "Type", "Size", "Uploaded"],
+        rows: incident.attachments.map((attachment) => [
+          attachment.fileName,
+          attachment.fileType,
+          `${(attachment.fileSize / 1024).toFixed(1)} KB`,
+          formatDate(attachment.uploadedAt),
+        ]),
+      };
+
+      // @ts-ignore
+      await doc.table(attachmentData, {
+        prepareHeader: () => doc.font("Helvetica-Bold").fontSize(9),
+        prepareRow: () => doc.font("Helvetica").fontSize(8),
+      });
+
+      doc.moveDown(0.5);
+      doc
+        .fontSize(8)
+        .font("Helvetica-Oblique")
+        .text(
+          "Note: Attachments can be downloaded separately from the incident management system."
+        );
+    }
+
+    // Footer
+    doc
+      .moveDown(2)
+      .fontSize(8)
+      .font("Helvetica-Oblique")
+      .text(
+        "This is a computer-generated document. No signature is required.",
+        { align: "center" }
+      );
+
+    if (incident.isConfidential) {
+      doc
+        .fillColor("red")
+        .text("CONFIDENTIAL - Handle with appropriate discretion", {
+          align: "center",
+        })
+        .fillColor("black");
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Error generating incident report PDF:", error);
+    throw error;
+  }
+};
+
+/**
+ * Generate Incident Summary Excel
+ * Shows filtered list of incidents with statistics
+ */
+export const generateIncidentSummaryExcel = async (filters: {
+  type?: string;
+  severity?: string;
+  status?: string;
+  startDate?: Date;
+  endDate?: Date;
+  assignedToId?: string;
+  isConfidential?: boolean;
+}) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+
+    // Build query filter
+    const where: any = {};
+    if (filters.type) where.type = filters.type;
+    if (filters.severity) where.severity = filters.severity;
+    if (filters.status) where.status = filters.status;
+    if (filters.assignedToId) where.assignedToId = filters.assignedToId;
+    if (filters.isConfidential !== undefined)
+      where.isConfidential = filters.isConfidential;
+    if (filters.startDate || filters.endDate) {
+      where.reportedAt = {};
+      if (filters.startDate) where.reportedAt.gte = filters.startDate;
+      if (filters.endDate) where.reportedAt.lte = filters.endDate;
+    }
+
+    const incidents = await prisma.incident.findMany({
+      where,
+      include: {
+        reporter: true,
+        assignee: true,
+        student: true,
+        examSession: true,
+      },
+      orderBy: { reportedAt: "desc" },
+    });
+
+    // Incidents List Sheet
+    const incidentsSheet = workbook.addWorksheet("Incidents");
+
+    incidentsSheet.columns = [
+      { header: "Incident #", key: "incidentNumber", width: 20 },
+      { header: "Type", key: "type", width: 20 },
+      { header: "Severity", key: "severity", width: 12 },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Description", key: "description", width: 40 },
+      { header: "Reporter", key: "reporter", width: 25 },
+      { header: "Assigned To", key: "assignedTo", width: 25 },
+      { header: "Student", key: "student", width: 25 },
+      { header: "Exam Session", key: "examSession", width: 25 },
+      { header: "Reported At", key: "reportedAt", width: 18 },
+      { header: "Resolved At", key: "resolvedAt", width: 18 },
+      { header: "Confidential", key: "confidential", width: 12 },
+    ];
+
+    // Style header
+    incidentsSheet.getRow(1).font = { bold: true };
+    incidentsSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    incidentsSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+    // Add data
+    incidents.forEach((incident) => {
+      const row = incidentsSheet.addRow({
+        incidentNumber: incident.incidentNumber,
+        type: incident.type.replace(/_/g, " "),
+        severity: incident.severity,
+        status: incident.status.replace(/_/g, " "),
+        description: incident.description,
+        reporter: `${incident.reporter.firstName} ${incident.reporter.lastName}`,
+        assignedTo: incident.assignee
+          ? `${incident.assignee.firstName} ${incident.assignee.lastName}`
+          : "Unassigned",
+        student: incident.student
+          ? `${incident.student.firstName} ${incident.student.lastName} (${incident.student.indexNumber})`
+          : "-",
+        examSession: incident.examSession
+          ? `${incident.examSession.courseCode} - ${incident.examSession.batchQrCode}`
+          : "-",
+        reportedAt: formatDate(incident.reportedAt),
+        resolvedAt: incident.resolvedAt ? formatDate(incident.resolvedAt) : "-",
+        confidential: incident.isConfidential ? "Yes" : "No",
+      });
+
+      // Color code by severity
+      if (incident.severity === "CRITICAL") {
+        row.getCell("severity").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF0000" },
+        };
+        row.getCell("severity").font = { color: { argb: "FFFFFFFF" } };
+      } else if (incident.severity === "HIGH") {
+        row.getCell("severity").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF9900" },
+        };
+      } else if (incident.severity === "MEDIUM") {
+        row.getCell("severity").fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFF00" },
+        };
+      }
+
+      // Mark confidential rows
+      if (incident.isConfidential) {
+        row.eachCell((cell) => {
+          cell.font = { ...cell.font, italic: true };
+        });
+      }
+    });
+
+    // Statistics Sheet
+    const statsSheet = workbook.addWorksheet("Statistics");
+
+    statsSheet.columns = [
+      { header: "Metric", key: "metric", width: 30 },
+      { header: "Value", key: "value", width: 15 },
+    ];
+
+    statsSheet.getRow(1).font = { bold: true };
+    statsSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    statsSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+    // Calculate statistics
+    const totalIncidents = incidents.length;
+    const byType = incidents.reduce((acc, inc) => {
+      acc[inc.type] = (acc[inc.type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const bySeverity = incidents.reduce((acc, inc) => {
+      acc[inc.severity] = (acc[inc.severity] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const byStatus = incidents.reduce((acc, inc) => {
+      acc[inc.status] = (acc[inc.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const resolvedCount = incidents.filter(
+      (i) => i.status === "RESOLVED"
+    ).length;
+    const avgResolutionTime =
+      resolvedCount > 0
+        ? incidents
+            .filter((i) => i.resolvedAt)
+            .reduce((acc, i) => {
+              const duration =
+                new Date(i.resolvedAt!).getTime() -
+                new Date(i.reportedAt).getTime();
+              return acc + duration;
+            }, 0) /
+          resolvedCount /
+          (1000 * 60 * 60)
+        : 0;
+
+    // Add statistics
+    statsSheet.addRow({ metric: "Total Incidents", value: totalIncidents });
+    statsSheet.addRow({ metric: "", value: "" }); // Spacer
+
+    statsSheet.addRow({ metric: "By Type:", value: "" });
+    Object.entries(byType).forEach(([type, count]) => {
+      statsSheet.addRow({
+        metric: `  ${type.replace(/_/g, " ")}`,
+        value: count,
+      });
+    });
+    statsSheet.addRow({ metric: "", value: "" }); // Spacer
+
+    statsSheet.addRow({ metric: "By Severity:", value: "" });
+    Object.entries(bySeverity).forEach(([severity, count]) => {
+      statsSheet.addRow({ metric: `  ${severity}`, value: count });
+    });
+    statsSheet.addRow({ metric: "", value: "" }); // Spacer
+
+    statsSheet.addRow({ metric: "By Status:", value: "" });
+    Object.entries(byStatus).forEach(([status, count]) => {
+      statsSheet.addRow({
+        metric: `  ${status.replace(/_/g, " ")}`,
+        value: count,
+      });
+    });
+    statsSheet.addRow({ metric: "", value: "" }); // Spacer
+
+    statsSheet.addRow({ metric: "Resolved Incidents", value: resolvedCount });
+    statsSheet.addRow({
+      metric: "Avg Resolution Time (hours)",
+      value: avgResolutionTime.toFixed(1),
+    });
+    statsSheet.addRow({
+      metric: "Report Generated",
+      value: new Date().toLocaleString(),
+    });
+
+    return await workbook.xlsx.writeBuffer();
+  } catch (error) {
+    console.error("Error generating incident summary Excel:", error);
+    throw error;
+  }
+};

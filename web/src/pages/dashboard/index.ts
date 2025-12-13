@@ -9,3 +9,6 @@ export { default as BatchDetailsPage } from "./BatchDetailsPage";
 export { default as BatchTrackingPage } from "./BatchTrackingPage";
 export { default as AnalyticsDashboardPage } from "./AnalyticsDashboardPage";
 export { default as SettingsPage } from "./SettingsPage";
+export { default as IncidentsPage } from "./IncidentsPage";
+export { default as IncidentDetailsPage } from "./IncidentDetailsPage";
+export { default as CreateIncidentPage } from "./CreateIncidentPage";
