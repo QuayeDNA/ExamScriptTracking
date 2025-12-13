@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import { createServer } from "http";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
@@ -11,6 +12,7 @@ import batchTransferRoutes from "./routes/batchTransfer";
 import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
 import classAttendanceRoutes from "./routes/classAttendance";
+import incidentRoutes from "./routes/incident";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 import { initializeSocketServer } from "./socket/socketServer";
 
@@ -55,6 +57,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files from uploads directory
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
 // Basic health check route
 app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok", message: "Exam Script Tracking API is running" });
@@ -74,6 +79,7 @@ app.get("/api", (req: Request, res: Response) => {
       attendance: "/api/attendance",
       classAttendance: "/api/class-attendance",
       batchTransfers: "/api/batch-transfers",
+      incidents: "/api/incidents",
       analytics: "/api/analytics",
       reports: "/api/reports/export",
     },
@@ -88,6 +94,7 @@ app.use("/api/exam-sessions", examSessionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/class-attendance", classAttendanceRoutes);
 app.use("/api/batch-transfers", batchTransferRoutes);
+app.use("/api/incidents", incidentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/reports/export", exportRoutes);
 

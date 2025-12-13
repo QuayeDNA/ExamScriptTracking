@@ -35,6 +35,13 @@ model User {
   auditLogs       AuditLog[]
   refreshTokens   RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  
+  // Incident Management relations
+  reportedIncidents      Incident[]              @relation("IncidentReporter")
+  assignedIncidents      Incident[]              @relation("IncidentAssignee")
+  incidentComments       IncidentComment[]
+  incidentStatusChanges  IncidentStatusHistory[]
+  incidentAttachments    IncidentAttachment[]
 }
 
 // Password Reset Tokens
@@ -83,6 +90,7 @@ model Student {
   
   attendances       ExamAttendance[]
   classAttendances  ClassAttendance[]
+  incidents         Incident[]
 }
 
 // Exam Sessions
@@ -106,6 +114,7 @@ model ExamSession {
   attendances      ExamAttendance[]
   transfers        BatchTransfer[]
   expectedStudents ExamSessionStudent[]
+  incidents        Incident[]
 }
 
 enum BatchStatus {
@@ -151,6 +160,7 @@ model ExamAttendance {
   
   student     Student     @relation(fields: [studentId], references: [id])
   examSession ExamSession @relation(fields: [examSessionId], references: [id])
+  incidents   Incident[]
   
   @@unique([studentId, examSessionId])
 }
@@ -179,6 +189,7 @@ model BatchTransfer {
   examSession ExamSession @relation(fields: [examSessionId], references: [id])
   fromHandler User        @relation("Handler", fields: [fromHandlerId], references: [id])
   toHandler   User        @relation("Receiver", fields: [toHandlerId], references: [id])
+  incidents   Incident[]
   
   @@index([examSessionId])
 }
@@ -288,4 +299,154 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([userId])
+}
+
+// ============================================
+// INCIDENT MANAGEMENT SYSTEM
+// ============================================
+
+// Incident Types
+enum IncidentType {
+  MALPRACTICE           // Cheating, unauthorized materials
+  HEALTH_ISSUE          // Medical emergency, student unwell
+  SCRIPT_DAMAGE         // Water damage, torn papers
+  EQUIPMENT_FAILURE     // Scanner issues, printer problems
+  DISRUPTION            // Fire alarm, power outage
+  SECURITY_BREACH       // Unauthorized access
+  PROCEDURAL_VIOLATION  // Protocol not followed
+  OTHER                 // Miscellaneous
+}
+
+enum IncidentSeverity {
+  LOW       // Minor issue, no immediate action needed
+  MEDIUM    // Requires attention within 24h
+  HIGH      // Urgent, requires immediate attention
+  CRITICAL  // Emergency, escalate immediately
+}
+
+enum IncidentStatus {
+  REPORTED              // Initial state, awaiting review
+  UNDER_INVESTIGATION   // Assigned and being investigated
+  RESOLVED              // Investigation complete, action taken
+  CLOSED                // No further action needed
+  ESCALATED             // Sent to higher authority
+}
+
+// Main Incident Model
+model Incident {
+  id                String            @id @default(uuid())
+  incidentNumber    String            @unique // Auto-generated: INC-YYYYMMDD-XXXX
+  
+  // Classification
+  type              IncidentType
+  severity          IncidentSeverity
+  status            IncidentStatus    @default(REPORTED)
+  isConfidential    Boolean           @default(false)
+  autoCreated       Boolean           @default(false)
+  
+  // Description
+  title             String            // Brief summary
+  description       String            @db.Text // Detailed description
+  location          String?           // Venue/room where incident occurred
+  
+  // Relationships
+  reporterId        String            // User who reported
+  assigneeId        String?           // User assigned to investigate
+  studentId         String?           // Involved student (optional)
+  examSessionId     String?           // Related exam session (optional)
+  attendanceId      String?           // Related attendance record (optional)
+  transferId        String?           // Related batch transfer (optional)
+  
+  // Metadata
+  incidentDate      DateTime          // When incident occurred
+  reportedAt        DateTime          @default(now())
+  assignedAt        DateTime?
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  
+  // Additional data
+  metadata          Json?             // Flexible field for extra context
+  resolutionNotes   String?           @db.Text
+  
+  // Relations
+  reporter          User              @relation("IncidentReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  assignee          User?             @relation("IncidentAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  student           Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  examSession       ExamSession?      @relation(fields: [examSessionId], references: [id], onDelete: SetNull)
+  attendance        ExamAttendance?   @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  transfer          BatchTransfer?    @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  
+  attachments       IncidentAttachment[]
+  comments          IncidentComment[]
+  statusHistory     IncidentStatusHistory[]
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@index([reporterId])
+  @@index([assigneeId])
+  @@index([studentId])
+  @@index([examSessionId])
+  @@index([status])
+  @@index([severity])
+  @@index([type])
+  @@index([incidentDate])
+  @@index([isConfidential])
+}
+
+// Incident Attachments (Photos, Videos, Documents)
+model IncidentAttachment {
+  id           String   @id @default(uuid())
+  incidentId   String
+  
+  fileName     String   // Original filename
+  filePath     String   // Relative path: uploads/incidents/{incidentId}/{filename}
+  fileType     String   // MIME type: image/jpeg, video/mp4, application/pdf
+  fileSize     Int      // Size in bytes
+  
+  uploadedBy   String   // User who uploaded
+  uploadedAt   DateTime @default(now())
+  
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  uploader     User     @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+  
+  @@index([incidentId])
+}
+
+// Comments/Notes Thread
+model IncidentComment {
+  id          String   @id @default(uuid())
+  incidentId  String
+  userId      String
+  
+  comment     String   @db.Text
+  isInternal  Boolean  @default(false) // Internal notes vs public comments
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  @@index([incidentId])
+  @@index([userId])
+}
+
+// Status Change History (Audit Trail)
+model IncidentStatusHistory {
+  id          String         @id @default(uuid())
+  incidentId  String
+  
+  fromStatus  IncidentStatus?
+  toStatus    IncidentStatus
+  changedBy   String
+  reason      String?        @db.Text
+  
+  changedAt   DateTime       @default(now())
+  
+  incident    Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [changedBy], references: [id], onDelete: Restrict)
+  
+  @@index([incidentId])
+  @@index([changedAt])
 }

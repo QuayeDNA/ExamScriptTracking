@@ -8,6 +8,7 @@ import {
   emitTransferRejected,
   emitTransferUpdated,
 } from "../socket/handlers/transferEvents";
+import { incidentService } from "../services/incidentService";
 
 const prisma = new PrismaClient();
 
@@ -292,6 +293,45 @@ export const confirmTransfer = async (req: Request, res: Response) => {
         },
       },
     });
+
+    // AUTO-INCIDENT CREATION: Check for script count mismatch
+    if (scriptsReceived !== transfer.scriptsExpected) {
+      const difference = Math.abs(scriptsReceived - transfer.scriptsExpected);
+      const severity =
+        scriptsReceived < transfer.scriptsExpected ? "HIGH" : "MEDIUM";
+
+      try {
+        await incidentService.autoCreateIncident({
+          type: "PROCEDURAL_VIOLATION",
+          severity,
+          title: `Transfer count mismatch - Batch ${updatedTransfer.examSession.batchQrCode}`,
+          description: `Script count discrepancy detected during transfer from ${
+            transfer.fromHandler.firstName
+          } ${transfer.fromHandler.lastName} to ${
+            transfer.toHandler.firstName
+          } ${transfer.toHandler.lastName}.\n\nExpected: ${
+            transfer.scriptsExpected
+          } scripts\nReceived: ${scriptsReceived} scripts\nDifference: ${difference} script(s) ${
+            scriptsReceived < transfer.scriptsExpected ? "missing" : "extra"
+          }\n\n${
+            validatedData.discrepancyNote
+              ? `Note: ${validatedData.discrepancyNote}`
+              : ""
+          }`,
+          location: updatedTransfer.examSession.venue,
+          reporterId: receiverHandlerId,
+          examSessionId: transfer.examSessionId,
+          transferId: transfer.id,
+          incidentDate: new Date(),
+          isConfidential: false,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to create auto-incident for transfer ${transfer.id}:`,
+          error
+        );
+      }
+    }
 
     // Log audit trail
     await prisma.auditLog.create({

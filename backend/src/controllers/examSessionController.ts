@@ -7,6 +7,7 @@ import {
   emitBatchStatusUpdated,
   emitBatchCreated,
 } from "../socket/handlers/batchEvents";
+import { incidentService } from "../services/incidentService";
 
 const prisma = new PrismaClient();
 
@@ -863,6 +864,48 @@ export const endExamSession = async (req: Request, res: Response) => {
       });
     }
 
+    // AUTO-INCIDENT CREATION: Check for attendance discrepancies
+    // Find students who entered but didn't submit (excluding those who exited without submitting)
+    const discrepancyAttendances = await prisma.examAttendance.findMany({
+      where: {
+        examSessionId: id,
+        entryTime: { not: undefined },
+        submissionTime: null,
+        exitTime: null, // Still in exam or didn't mark exit
+      },
+      include: {
+        student: true,
+      },
+    });
+
+    // Create auto-incidents for discrepancies
+    for (const attendance of discrepancyAttendances) {
+      try {
+        await incidentService.autoCreateIncident({
+          type: "PROCEDURAL_VIOLATION",
+          severity: "LOW",
+          title: `Student entry recorded without submission - ${attendance.student.indexNumber}`,
+          description: `Student ${attendance.student.firstName} ${
+            attendance.student.lastName
+          } (${
+            attendance.student.indexNumber
+          }) entered the exam at ${attendance.entryTime.toLocaleTimeString()} but did not submit their script. This may indicate a procedural issue or the student left without proper exit recording.`,
+          location: currentSession.venue,
+          reporterId: req.user!.userId,
+          studentId: attendance.studentId,
+          examSessionId: id,
+          attendanceId: attendance.id,
+          incidentDate: new Date(),
+          isConfidential: false,
+        });
+      } catch (error) {
+        console.error(
+          `Failed to create auto-incident for attendance ${attendance.id}:`,
+          error
+        );
+      }
+    }
+
     // Log audit trail
     await prisma.auditLog.create({
       data: {
@@ -876,6 +919,7 @@ export const endExamSession = async (req: Request, res: Response) => {
             to: "SUBMITTED",
           },
           scriptsCount: submittedCount,
+          discrepanciesFound: discrepancyAttendances.length,
         },
         ipAddress: req.ip || "unknown",
       },

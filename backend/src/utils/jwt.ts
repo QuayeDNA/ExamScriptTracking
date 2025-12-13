@@ -15,8 +15,8 @@ export interface TokenPayload {
 
 export const generateToken = (payload: TokenPayload): string => {
   return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: JWT_EXPIRES_IN,
-  });
+    expiresIn: JWT_EXPIRES_IN as string,
+  } as jwt.SignOptions);
 };
 
 export const verifyToken = (token: string): TokenPayload => {
