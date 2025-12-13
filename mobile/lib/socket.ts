@@ -199,6 +199,70 @@ class MobileSocketService {
         );
       }
     );
+
+    // ============================================
+    // Incident Management Socket Events
+    // ============================================
+
+    // Incident created
+    this.socket.on("incident:created", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "New Incident Reported",
+        `${eventData.incidentNumber}: ${eventData.title}`,
+        { type: "incident_created", ...eventData }
+      );
+    });
+
+    // Incident updated
+    this.socket.on("incident:updated", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "Incident Updated",
+        `${eventData.incidentNumber} has been updated`,
+        { type: "incident_updated", ...eventData }
+      );
+    });
+
+    // Incident assigned
+    this.socket.on("incident:assigned", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "Incident Assigned",
+        `${eventData.incidentNumber} assigned to ${eventData.assigneeName}`,
+        { type: "incident_assigned", ...eventData }
+      );
+    });
+
+    // Incident status changed
+    this.socket.on("incident:status_changed", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "Incident Status Changed",
+        `${eventData.incidentNumber}: ${eventData.oldStatus} → ${eventData.newStatus}`,
+        { type: "incident_status_changed", ...eventData }
+      );
+    });
+
+    // Incident comment added
+    this.socket.on("incident:comment_added", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "New Comment",
+        `${eventData.userName} commented on ${eventData.incidentNumber}`,
+        { type: "incident_comment", ...eventData }
+      );
+    });
+
+    // Incident attachment added
+    this.socket.on("incident:attachment_added", async (data: unknown) => {
+      const eventData = data as SocketData;
+      await scheduleNotification(
+        "New Attachment",
+        `New file attached to ${eventData.incidentNumber}`,
+        { type: "incident_attachment", ...eventData }
+      );
+    });
   }
 
   disconnect() {

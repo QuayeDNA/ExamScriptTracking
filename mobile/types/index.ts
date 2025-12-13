@@ -128,3 +128,96 @@ export interface ApiError {
     message: string;
   }>;
 }
+
+// ============================================
+// Incident Management Types
+// ============================================
+
+export const IncidentType = {
+  MISSING_SCRIPT: "MISSING_SCRIPT",
+  DAMAGED_SCRIPT: "DAMAGED_SCRIPT",
+  MALPRACTICE: "MALPRACTICE",
+  STUDENT_ILLNESS: "STUDENT_ILLNESS",
+  VENUE_ISSUE: "VENUE_ISSUE",
+  COUNT_DISCREPANCY: "COUNT_DISCREPANCY",
+  LATE_SUBMISSION: "LATE_SUBMISSION",
+  OTHER: "OTHER",
+} as const;
+
+export type IncidentType = (typeof IncidentType)[keyof typeof IncidentType];
+
+export const IncidentSeverity = {
+  LOW: "LOW",
+  MEDIUM: "MEDIUM",
+  HIGH: "HIGH",
+  CRITICAL: "CRITICAL",
+} as const;
+
+export type IncidentSeverity =
+  (typeof IncidentSeverity)[keyof typeof IncidentSeverity];
+
+export const IncidentStatus = {
+  REPORTED: "REPORTED",
+  INVESTIGATING: "INVESTIGATING",
+  RESOLVED: "RESOLVED",
+  CLOSED: "CLOSED",
+  ESCALATED: "ESCALATED",
+} as const;
+
+export type IncidentStatus =
+  (typeof IncidentStatus)[keyof typeof IncidentStatus];
+
+export interface Incident {
+  id: string;
+  incidentNumber: string;
+  type: IncidentType;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  title: string;
+  description: string;
+  location?: string;
+  incidentDate?: string;
+  isConfidential: boolean;
+  autoCreated: boolean;
+  reportedAt: string;
+  assignedAt?: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  metadata?: Record<string, unknown>;
+  resolutionNotes?: string;
+  reporterId: string;
+  assigneeId?: string;
+  studentId?: string;
+  examSessionId?: string;
+  reporter?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  assignee?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  student?: {
+    id: string;
+    indexNumber: string;
+    firstName: string;
+    lastName: string;
+    program?: string;
+    level?: number;
+  };
+  examSession?: {
+    id: string;
+    courseCode: string;
+    courseName: string;
+    batchQrCode: string;
+  };
+  _count?: {
+    comments: number;
+    attachments: number;
+    statusHistory: number;
+  };
+}
