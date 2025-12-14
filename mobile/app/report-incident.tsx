@@ -16,11 +16,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
+// import * as ImagePicker from "expo-image-picker"; // Temporarily commented out
 import * as DocumentPicker from "expo-document-picker";
 import * as Location from "expo-location";
 import { useThemeColors } from "@/constants/design-system";
-import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -30,6 +29,15 @@ import {
   type IncidentSeverity,
   getIncidentTypeLabel,
 } from "@/api/incidents";
+
+// Safe ImagePicker wrapper
+let imagePicker: any = null;
+try {
+  const ImagePicker = require("expo-image-picker");
+  imagePicker = ImagePicker;
+} catch (_) {
+  console.warn("ImagePicker not available, camera features disabled");
+}
 
 interface AttachmentFile {
   uri: string;
@@ -107,8 +115,13 @@ export default function ReportIncidentScreen() {
 
   // Take photo with camera
   const takePhoto = async () => {
+    if (!imagePicker) {
+      Alert.alert("Error", "Camera not available");
+      return;
+    }
+
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status } = await imagePicker.requestCameraPermissionsAsync();
 
       if (status !== "granted") {
         Alert.alert(
@@ -118,8 +131,8 @@ export default function ReportIncidentScreen() {
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await imagePicker.launchCameraAsync({
+        mediaTypes: imagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.8,
       });
@@ -143,22 +156,25 @@ export default function ReportIncidentScreen() {
 
   // Pick image from gallery
   const pickImage = async () => {
+    if (!imagePicker) {
+      Alert.alert("Error", "Image picker not available");
+      return;
+    }
+
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      const result = await imagePicker.launchImageLibraryAsync({
+        mediaTypes: imagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
       });
 
       if (!result.canceled) {
-        const newAttachments = result.assets.map(
-          (asset: ImagePicker.ImagePickerAsset) => ({
-            uri: asset.uri,
-            name: `image_${Date.now()}.jpg`,
-            type: "image/jpeg",
-            size: asset.fileSize,
-          })
-        );
+        const newAttachments = result.assets.map((asset: any) => ({
+          uri: asset.uri,
+          name: `image_${Date.now()}.jpg`,
+          type: "image/jpeg",
+          size: asset.fileSize,
+        }));
         setAttachments((prev) => [...prev, ...newAttachments]);
       }
     } catch {

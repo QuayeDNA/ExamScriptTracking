@@ -77,6 +77,9 @@ export interface Incident {
     attachments: number;
     comments: number;
   };
+  attachments?: IncidentAttachment[];
+  comments?: IncidentComment[];
+  statusHistory?: IncidentStatusHistory[];
 }
 
 export interface IncidentAttachment {
@@ -86,8 +89,13 @@ export interface IncidentAttachment {
   filePath: string;
   fileType: string;
   fileSize: number;
-  uploadedById: string;
+  uploadedBy: string;
   uploadedAt: string;
+  uploader?: {
+    firstName: string;
+    lastName: string;
+    role: string;
+  };
 }
 
 export interface IncidentComment {

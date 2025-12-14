@@ -19,6 +19,7 @@ import { initializeSocketServer } from "./socket/socketServer";
 // Load environment variables
 dotenv.config();
 
+
 const app: Express = express();
 const httpServer = createServer(app);
 const PORT = Number(process.env.PORT) || 3000;

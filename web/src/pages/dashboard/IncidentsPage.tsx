@@ -216,30 +216,30 @@ export default function IncidentsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Total Incidents"
-            value={stats.total.toString()}
+            value={stats.total?.toString() || "0"}
             description="All time"
             icon={AlertTriangle}
           />
           <StatCard
             title="Open Incidents"
-            value={stats.openIncidents.toString()}
+            value={stats.openIncidents?.toString() || "0"}
             description="Requires attention"
             icon={TrendingUp}
             trend={
-              stats.openIncidents > 0
-                ? { value: stats.openIncidents, isPositive: false }
+              (stats.openIncidents ?? 0) > 0
+                ? { value: stats.openIncidents ?? 0, isPositive: false }
                 : undefined
             }
           />
           <StatCard
             title="Resolved Today"
-            value={stats.resolvedToday.toString()}
+            value={stats.resolvedToday?.toString() || "0"}
             description="Completed today"
             icon={CheckCircle2}
           />
           <StatCard
             title="Avg Resolution Time"
-            value={`${stats.avgResolutionTime.toFixed(1)}h`}
+            value={`${stats.avgResolutionTime?.toFixed(1) || "0"}h`}
             description="Hours to resolve"
             icon={Clock}
           />

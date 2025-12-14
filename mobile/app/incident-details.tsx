@@ -13,10 +13,13 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Video } from "expo-av";
 import { useThemeColors } from "@/constants/design-system";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -34,6 +37,7 @@ import {
   updateStatus,
   getIncidentTypeLabel,
   type IncidentStatus,
+  type IncidentAttachment,
 } from "@/api/incidents";
 import type { Incident } from "@/types";
 
@@ -49,6 +53,9 @@ export default function IncidentDetailsScreen() {
   const [commentText, setCommentText] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [previewAttachment, setPreviewAttachment] =
+    useState<IncidentAttachment | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const isAdmin =
     user?.role === "ADMIN" ||
@@ -620,8 +627,201 @@ export default function IncidentDetailsScreen() {
               </View>
             </View>
           </Card>
+
+          {/* Attachments */}
+          {incident.attachments && incident.attachments.length > 0 && (
+            <Card>
+              <View className="p-4">
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text
+                    className="text-sm font-semibold"
+                    style={{ color: colors.foreground }}
+                  >
+                    Attachments ({incident.attachments.length})
+                  </Text>
+                </View>
+
+                <View className="gap-3">
+                  {incident.attachments.map((attachment) => (
+                    <TouchableOpacity
+                      key={attachment.id}
+                      onPress={() => {
+                        setPreviewAttachment(attachment);
+                        setIsPreviewOpen(true);
+                      }}
+                      className="flex-row items-center p-3 rounded-lg"
+                      style={{ backgroundColor: colors.muted }}
+                      activeOpacity={0.7}
+                    >
+                      <View
+                        className="w-10 h-10 rounded-lg items-center justify-center mr-3"
+                        style={{ backgroundColor: `${colors.primary}15` }}
+                      >
+                        <Ionicons
+                          name={
+                            attachment.fileName
+                              .toLowerCase()
+                              .match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)
+                              ? "image"
+                              : attachment.fileName
+                                    .toLowerCase()
+                                    .match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
+                                ? "videocam"
+                                : "document"
+                          }
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-sm font-medium"
+                          style={{ color: colors.foreground }}
+                          numberOfLines={1}
+                        >
+                          {attachment.fileName}
+                        </Text>
+                        <Text
+                          className="text-xs"
+                          style={{ color: colors.foregroundMuted }}
+                        >
+                          {(attachment.fileSize / 1024).toFixed(1)} KB •{" "}
+                          {new Date(attachment.uploadedAt).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color={colors.foregroundMuted}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </Card>
+          )}
         </View>
       </ScrollView>
+
+      {/* Attachment Preview Modal */}
+      {previewAttachment && (
+        <Modal
+          visible={isPreviewOpen}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsPreviewOpen(false)}
+        >
+          <View
+            className="flex-1 justify-center items-center"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.8)" }}
+          >
+            <TouchableOpacity
+              className="absolute top-12 right-4 z-10 w-10 h-10 rounded-full items-center justify-center"
+              style={{ backgroundColor: colors.background }}
+              onPress={() => setIsPreviewOpen(false)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={24} color={colors.foreground} />
+            </TouchableOpacity>
+
+            <View className="flex-1 justify-center items-center p-4">
+              {(() => {
+                const fileName = previewAttachment.fileName.toLowerCase();
+                const fileUrl = `http://192.168.43.153:5000/${previewAttachment.filePath}`;
+
+                if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
+                  return (
+                    <View className="w-full max-w-sm">
+                      <Text
+                        className="text-white text-center mb-4 font-medium"
+                        numberOfLines={1}
+                      >
+                        {previewAttachment.fileName}
+                      </Text>
+                      <View
+                        className="rounded-lg overflow-hidden"
+                        style={{ backgroundColor: colors.background }}
+                      >
+                        <Image
+                          source={{ uri: fileUrl }}
+                          className="w-full aspect-square"
+                          resizeMode="contain"
+                          onError={() => {
+                            Alert.alert("Error", "Failed to load image");
+                            setIsPreviewOpen(false);
+                          }}
+                        />
+                      </View>
+                    </View>
+                  );
+                } else if (
+                  fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
+                ) {
+                  return (
+                    <View className="w-full max-w-sm">
+                      <Text
+                        className="text-white text-center mb-4 font-medium"
+                        numberOfLines={1}
+                      >
+                        {previewAttachment.fileName}
+                      </Text>
+                      <View
+                        className="rounded-lg overflow-hidden"
+                        style={{ backgroundColor: colors.background }}
+                      >
+                        <Video
+                          source={{ uri: fileUrl }}
+                          className="w-full aspect-video"
+                          resizeMode="contain"
+                          useNativeControls
+                          shouldPlay={false}
+                          onError={() => {
+                            Alert.alert("Error", "Failed to load video");
+                            setIsPreviewOpen(false);
+                          }}
+                        />
+                      </View>
+                    </View>
+                  );
+                }
+                return (
+                  <View
+                    className="items-center p-8 rounded-lg"
+                    style={{ backgroundColor: colors.background }}
+                  >
+                    <Ionicons
+                      name="document"
+                      size={64}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      className="text-lg font-medium mt-4"
+                      style={{ color: colors.foreground }}
+                    >
+                      {previewAttachment.fileName}
+                    </Text>
+                    <Text
+                      className="text-sm mt-2"
+                      style={{ color: colors.foregroundMuted }}
+                    >
+                      Preview not available for this file type
+                    </Text>
+                    <Button
+                      className="mt-4"
+                      onPress={() => {
+                        // In a real app, you'd open the file with a document viewer
+                        Alert.alert("Info", "Document viewer not implemented");
+                      }}
+                    >
+                      Open File
+                    </Button>
+                  </View>
+                );
+              })()}
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

@@ -18,10 +18,74 @@ import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
 import { H1, H2, H3, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
+import { getUserActivity, type UserActivity } from "@/api/analytics";
+import { useQuery } from "@tanstack/react-query";
+
+// Helper functions for activity display
+const getActivityIcon = (
+  type: UserActivity["type"]
+): keyof typeof Ionicons.glyphMap => {
+  switch (type) {
+    case "audit":
+      return "person-circle-outline";
+    case "incident":
+      return "alert-circle-outline";
+    case "transfer":
+      return "swap-horizontal-outline";
+    case "attendance":
+      return "people-outline";
+    default:
+      return "ellipse-outline";
+  }
+};
+
+const getActivityColor = (status: string, colors: any): string => {
+  switch (status.toLowerCase()) {
+    case "completed":
+    case "resolved":
+    case "confirmed":
+      return colors.success;
+    case "pending":
+    case "investigating":
+    case "requested":
+      return colors.warning;
+    case "failed":
+    case "cancelled":
+      return colors.error;
+    default:
+      return colors.primary;
+  }
+};
+
+const getStatusVariant = (
+  status: string
+): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status.toLowerCase()) {
+    case "completed":
+    case "resolved":
+    case "confirmed":
+      return "default";
+    case "pending":
+    case "investigating":
+    case "requested":
+      return "secondary";
+    case "failed":
+    case "cancelled":
+      return "destructive";
+    default:
+      return "outline";
+  }
+};
 
 export default function HomeScreen() {
   const { user } = useAuthStore();
   const colors = useThemeColors();
+
+  // Fetch user activity
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ["user-activity"],
+    queryFn: getUserActivity,
+  });
 
   return (
     <SafeAreaView
@@ -192,18 +256,124 @@ export default function HomeScreen() {
             Recent Activity
           </H3>
           <Card elevation="sm">
-            <View style={styles.emptyState}>
-              <Ionicons
-                name="time-outline"
-                size={48}
-                color={colors.foregroundMuted}
-              />
-              <Text
-                style={[styles.emptyText, { color: colors.foregroundMuted }]}
-              >
-                No recent activity
-              </Text>
-            </View>
+            {activityLoading ? (
+              <View style={styles.loadingState}>
+                <Ionicons
+                  name="time-outline"
+                  size={48}
+                  color={colors.foregroundMuted}
+                />
+                <Text
+                  style={[
+                    styles.loadingText,
+                    { color: colors.foregroundMuted },
+                  ]}
+                >
+                  Loading activity...
+                </Text>
+              </View>
+            ) : activityData?.activities &&
+              activityData.activities.length > 0 ? (
+              <View style={styles.activityList}>
+                {activityData.activities.slice(0, 5).map((activity) => (
+                  <TouchableOpacity
+                    key={activity.id}
+                    style={styles.activityItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      // Navigate based on activity type
+                      if (activity.type === "incident") {
+                        const incidentId = activity.id.replace("incident-", "");
+                        router.push(
+                          `/incident-details?id=${incidentId}` as any
+                        );
+                      }
+                    }}
+                  >
+                    <View style={styles.activityIcon}>
+                      <Ionicons
+                        name={getActivityIcon(activity.type)}
+                        size={20}
+                        color={getActivityColor(activity.status, colors)}
+                      />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text
+                        style={[
+                          styles.activityTitle,
+                          { color: colors.foreground },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {activity.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activityDescription,
+                          { color: colors.foregroundMuted },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {activity.description}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activityTime,
+                          { color: colors.foregroundMuted },
+                        ]}
+                      >
+                        {new Date(activity.timestamp).toLocaleDateString()} •{" "}
+                        {new Date(activity.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.activityStatus}>
+                      <Badge
+                        variant={getStatusVariant(activity.status)}
+                        style={styles.statusBadge}
+                      >
+                        {activity.status}
+                      </Badge>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {activityData.activities.length > 5 && (
+                  <TouchableOpacity
+                    style={styles.viewAllButton}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      // Could navigate to a full activity screen
+                    }}
+                  >
+                    <Text
+                      style={[styles.viewAllText, { color: colors.primary }]}
+                    >
+                      View all activity ({activityData.activities.length})
+                    </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons
+                  name="time-outline"
+                  size={48}
+                  color={colors.foregroundMuted}
+                />
+                <Text
+                  style={[styles.emptyText, { color: colors.foregroundMuted }]}
+                >
+                  No recent activity
+                </Text>
+              </View>
+            )}
           </Card>
         </View>
       </ScrollView>
@@ -318,5 +488,65 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
+  },
+  loadingState: {
+    padding: 48,
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 14,
+  },
+  activityList: {
+    padding: 16,
+  },
+  activityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  activityContent: {
+    flex: 1,
+    gap: 2,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  activityDescription: {
+    fontSize: 12,
+  },
+  activityTime: {
+    fontSize: 10,
+  },
+  activityStatus: {
+    marginLeft: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginRight: 4,
   },
 });

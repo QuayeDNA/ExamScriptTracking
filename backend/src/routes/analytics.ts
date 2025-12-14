@@ -44,4 +44,7 @@ router.get(
   analyticsController.getExamStats
 );
 
+// GET /api/analytics/user-activity - Recent activity for logged-in user
+router.get("/user-activity", authenticate, analyticsController.getUserActivity);
+
 export default router;

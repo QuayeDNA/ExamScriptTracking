@@ -578,26 +578,49 @@ export class IncidentService {
     const accessWhere = this.buildAccessControlWhere(userContext);
     const finalWhere = accessWhere ? { AND: [where, accessWhere] } : where;
 
-    const [totalIncidents, byType, bySeverity, byStatus, avgResolutionTime] =
-      await Promise.all([
-        prisma.incident.count({ where: finalWhere }),
-        prisma.incident.groupBy({
-          by: ["type"],
-          where: finalWhere,
-          _count: true,
-        }),
-        prisma.incident.groupBy({
-          by: ["severity"],
-          where: finalWhere,
-          _count: true,
-        }),
-        prisma.incident.groupBy({
-          by: ["status"],
-          where: finalWhere,
-          _count: true,
-        }),
-        this.calculateAvgResolutionTime(finalWhere),
-      ]);
+    const [
+      totalIncidents,
+      byType,
+      bySeverity,
+      byStatus,
+      avgResolutionTime,
+      openIncidents,
+      resolvedToday,
+    ] = await Promise.all([
+      prisma.incident.count({ where: finalWhere }),
+      prisma.incident.groupBy({
+        by: ["type"],
+        where: finalWhere,
+        _count: true,
+      }),
+      prisma.incident.groupBy({
+        by: ["severity"],
+        where: finalWhere,
+        _count: true,
+      }),
+      prisma.incident.groupBy({
+        by: ["status"],
+        where: finalWhere,
+        _count: true,
+      }),
+      this.calculateAvgResolutionTime(finalWhere),
+      prisma.incident.count({
+        where: {
+          ...finalWhere,
+          status: { notIn: ["RESOLVED", "CLOSED"] },
+        },
+      }),
+      prisma.incident.count({
+        where: {
+          ...finalWhere,
+          status: "RESOLVED",
+          resolvedAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)), // Start of today
+            lt: new Date(new Date().setHours(23, 59, 59, 999)), // End of today
+          },
+        },
+      }),
+    ]);
 
     return {
       total: totalIncidents,
@@ -613,7 +636,9 @@ export class IncidentService {
         (acc, item) => ({ ...acc, [item.status]: item._count }),
         {}
       ),
-      avgResolutionTimeHours: avgResolutionTime,
+      openIncidents,
+      resolvedToday,
+      avgResolutionTime: avgResolutionTime,
     };
   }
 

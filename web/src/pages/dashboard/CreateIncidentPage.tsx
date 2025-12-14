@@ -276,62 +276,70 @@ export default function CreateIncidentPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Type */}
-                <div className="space-y-2">
-                  <Label htmlFor="type">
-                    Incident Type <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value: IncidentType) =>
-                      handleTypeChange(value)
-                    }
-                  >
-                    <SelectTrigger id="type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INCIDENT_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          <div>
-                            <div className="font-medium">{type.label}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {type.description}
+                {/* Type and Severity on same line */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Type */}
+                  <div className="space-y-2">
+                    <Label htmlFor="type">
+                      Incident Type <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value: IncidentType) =>
+                        handleTypeChange(value)
+                      }
+                    >
+                      <SelectTrigger id="type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INCIDENT_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            <div>
+                              <div className="font-medium">{type.label}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {type.description}
+                              </div>
                             </div>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                {/* Severity */}
-                <div className="space-y-2">
-                  <Label htmlFor="severity">
-                    Severity Level <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={formData.severity}
-                    onValueChange={(value: IncidentSeverity) =>
-                      setFormData((prev) => ({ ...prev, severity: value }))
-                    }
-                  >
-                    <SelectTrigger id="severity">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SEVERITY_LEVELS.map((severity) => (
-                        <SelectItem key={severity.value} value={severity.value}>
-                          <div>
-                            <div className="font-medium">{severity.label}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {severity.description}
+                  {/* Severity */}
+                  <div className="space-y-2">
+                    <Label htmlFor="severity">
+                      Severity Level <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={formData.severity}
+                      onValueChange={(value: IncidentSeverity) =>
+                        setFormData((prev) => ({ ...prev, severity: value }))
+                      }
+                    >
+                      <SelectTrigger id="severity">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SEVERITY_LEVELS.map((severity) => (
+                          <SelectItem
+                            key={severity.value}
+                            value={severity.value}
+                          >
+                            <div>
+                              <div className="font-medium">
+                                {severity.label}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {severity.description}
+                              </div>
                             </div>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Title */}

@@ -579,3 +579,167 @@ export const getExamStats = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch exam statistics" });
   }
 };
+
+/**
+ * GET /api/analytics/user-activity
+ *
+ * Get recent activity for the logged-in user
+ *
+ * @returns {Object} User activity data including:
+ *   - Recent audit logs for the user
+ *   - Recent incidents assigned to the user
+ *   - Recent batch transfers involving the user
+ *   - Recent attendance sessions
+ */
+export const getUserActivity = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    // Get recent audit logs for this user (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentAuditLogs = await prisma.auditLog.findMany({
+      where: {
+        userId,
+        timestamp: { gte: thirtyDaysAgo },
+      },
+      orderBy: { timestamp: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        action: true,
+        entity: true,
+        entityId: true,
+        timestamp: true,
+        details: true,
+      },
+    });
+
+    // Get recent incidents assigned to this user
+    const recentIncidents = await prisma.incident.findMany({
+      where: {
+        assigneeId: userId,
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        incidentNumber: true,
+        title: true,
+        status: true,
+        severity: true,
+        createdAt: true,
+      },
+    });
+
+    // Get recent batch transfers involving this user
+    const recentTransfers = await prisma.batchTransfer.findMany({
+      where: {
+        OR: [{ fromHandlerId: userId }, { toHandlerId: userId }],
+        requestedAt: { gte: thirtyDaysAgo },
+      },
+      orderBy: { requestedAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        status: true,
+        requestedAt: true,
+        confirmedAt: true,
+        examSession: {
+          select: {
+            batchQrCode: true,
+            courseCode: true,
+            courseName: true,
+          },
+        },
+      },
+    });
+
+    // Get recent attendance sessions for this user (if applicable)
+    // Note: Attendance sessions are device-based, not directly tied to users in current schema
+    const recentAttendance: any[] = []; // Temporarily disabled
+
+    // Combine and sort all activities by date
+    const activities = [
+      ...recentAuditLogs.map((log) => ({
+        id: `audit-${log.id}`,
+        type: "audit" as const,
+        title: getActivityTitle(log.action, log.entity),
+        description: log.details || `${log.action} on ${log.entity}`,
+        timestamp: log.timestamp,
+        status: "completed" as const,
+      })),
+      ...recentIncidents.map((incident) => ({
+        id: `incident-${incident.id}`,
+        type: "incident" as const,
+        title: `Incident Assigned: ${incident.incidentNumber}`,
+        description: incident.title,
+        timestamp: incident.createdAt,
+        status: incident.status.toLowerCase() as any,
+      })),
+      ...recentTransfers.map((transfer) => ({
+        id: `transfer-${transfer.id}`,
+        type: "transfer" as const,
+        title: `Batch Transfer: ${
+          transfer.examSession?.batchQrCode || "Unknown"
+        }`,
+        description: `${transfer.examSession?.courseCode} - ${transfer.examSession?.courseName}`,
+        timestamp: transfer.requestedAt,
+        status: transfer.status.toLowerCase() as any,
+      })),
+      // Attendance tracking temporarily disabled due to schema limitations
+      // ...recentAttendance.map((session) => ({
+      //   id: `attendance-${session.id}`,
+      //   type: "attendance" as const,
+      //   title: `Attendance Session: ${
+      //     session.record.session.sessionName || session.record.session.lecturerName || "Session"
+      //   }`,
+      //   description: `${session.record.session.courseCode} - ${session.record.session.courseName}`,
+      //   timestamp: session.scanTime,
+      //   status: session.status.toLowerCase() as any,
+      // })),
+    ]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, 20);
+
+    res.json({
+      activities,
+      summary: {
+        totalActivities: activities.length,
+        auditLogs: recentAuditLogs.length,
+        incidents: recentIncidents.length,
+        transfers: recentTransfers.length,
+        attendance: recentAttendance.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching user activity:", error);
+    res.status(500).json({ message: "Failed to fetch user activity" });
+  }
+};
+
+// Helper function to get human-readable activity titles
+function getActivityTitle(action: string, entity: string): string {
+  const actionMap: Record<string, string> = {
+    LOGIN: "Logged in",
+    LOGOUT: "Logged out",
+    PASSWORD_CHANGE: "Changed password",
+    FIRST_TIME_PASSWORD_CHANGE: "Set initial password",
+    CREATE: `Created ${entity.toLowerCase()}`,
+    UPDATE: `Updated ${entity.toLowerCase()}`,
+    DELETE: `Deleted ${entity.toLowerCase()}`,
+    REACTIVATE: `Reactivated ${entity.toLowerCase()}`,
+    DEACTIVATE: `Deactivated ${entity.toLowerCase()}`,
+    UPLOAD: `Uploaded to ${entity.toLowerCase()}`,
+    DOWNLOAD: `Downloaded from ${entity.toLowerCase()}`,
+  };
+
+  return actionMap[action] || `${action} ${entity.toLowerCase()}`;
+}

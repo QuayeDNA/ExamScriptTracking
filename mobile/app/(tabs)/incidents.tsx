@@ -200,7 +200,11 @@ export default function IncidentsScreen() {
               <StatsCard
                 icon="trending-up"
                 label="Avg Resolution"
-                value={`${statistics.avgResolutionTime.toFixed(1)}h`}
+                value={
+                  statistics.avgResolutionTime
+                    ? `${statistics.avgResolutionTime.toFixed(1)}h`
+                    : "N/A"
+                }
                 iconColor={colors.info}
               />
             </ScrollView>

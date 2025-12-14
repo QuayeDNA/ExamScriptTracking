@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// import AsyncStorage from "@react-native-async-storage/async-storage"; // Temporarily commented out
 import * as Application from "expo-application";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,21 @@ import {
 const DEVICE_ID_KEY = "attendance_device_id";
 const DEVICE_NAME_KEY = "attendance_device_name";
 
+// Safe AsyncStorage wrapper
+let asyncStorage: any = null;
+try {
+  asyncStorage = require("@react-native-async-storage/async-storage").default;
+} catch (e) {
+  console.warn("AsyncStorage not available, using fallback storage");
+}
+
 async function getOrCreateDeviceId() {
-  const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
+  if (!asyncStorage) {
+    // Fallback for when AsyncStorage is not available
+    return `fallback-${Date.now()}`;
+  }
+
+  const existing = await asyncStorage.getItem(DEVICE_ID_KEY);
   if (existing) return existing;
 
   let candidate: string;
@@ -48,16 +61,18 @@ async function getOrCreateDeviceId() {
       `device-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  await AsyncStorage.setItem(DEVICE_ID_KEY, candidate);
+  await asyncStorage.setItem(DEVICE_ID_KEY, candidate);
   return candidate;
 }
 
 async function getStoredDeviceName() {
-  return AsyncStorage.getItem(DEVICE_NAME_KEY);
+  if (!asyncStorage) return null;
+  return asyncStorage.getItem(DEVICE_NAME_KEY);
 }
 
 async function saveDeviceName(name: string) {
-  await AsyncStorage.setItem(DEVICE_NAME_KEY, name);
+  if (!asyncStorage) return;
+  await asyncStorage.setItem(DEVICE_NAME_KEY, name);
 }
 
 export default function AttendanceDashboard() {
