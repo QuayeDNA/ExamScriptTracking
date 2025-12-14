@@ -10,6 +10,7 @@ interface TypographyProps {
   children: React.ReactNode;
   style?: StyleProp<TextStyle>;
   variant?: "default" | "muted" | "h1" | "h2" | "h3";
+  numberOfLines?: number;
 }
 
 // Generic Text component with variants
@@ -17,6 +18,7 @@ export function Text({
   children,
   style,
   variant = "default",
+  numberOfLines,
 }: TypographyProps) {
   const colors = useThemeColors();
 
@@ -28,7 +30,14 @@ export function Text({
     h3: [styles.h3, { color: colors.foreground }],
   };
 
-  return <RNText style={[variantStyles[variant], style]}>{children}</RNText>;
+  return (
+    <RNText
+      style={[variantStyles[variant], style]}
+      numberOfLines={numberOfLines}
+    >
+      {children}
+    </RNText>
+  );
 }
 
 export function H1({ children, style }: Omit<TypographyProps, "variant">) {

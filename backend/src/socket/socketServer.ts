@@ -20,6 +20,9 @@ export function initializeSocketServer(httpServer: HTTPServer) {
         "http://localhost:5173", // Vite dev server (web)
         "http://localhost:8081", // Expo dev server (mobile)
         "http://localhost:19006", // Expo web
+        "http://192.168.43.153:8081", // Mobile app on network
+        "http://192.168.43.153:19006", // Mobile app web
+        "*", // Allow all origins for development (be more specific in production)
       ],
       methods: ["GET", "POST"],
       credentials: true,

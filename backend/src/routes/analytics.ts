@@ -47,4 +47,11 @@ router.get(
 // GET /api/analytics/user-activity - Recent activity for logged-in user
 router.get("/user-activity", authenticate, analyticsController.getUserActivity);
 
+// DELETE /api/analytics/user-activity - Clear recent activity for logged-in user
+router.delete(
+  "/user-activity",
+  authenticate,
+  analyticsController.clearUserActivity
+);
+
 export default router;

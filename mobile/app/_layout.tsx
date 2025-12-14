@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "../global.css";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -76,6 +77,16 @@ export default function RootLayout() {
   );
   const { handleNotificationTap } = useNotificationNavigation();
 
+  // Create QueryClient instance
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 2,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+      },
+    },
+  });
+
   // Initialize socket connection
   useSocket();
 
@@ -116,113 +127,126 @@ export default function RootLayout() {
   useProtectedRoute();
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="change-password" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="attendance/index" />
-        <Stack.Screen
-          name="attendance/record"
-          options={{ headerShown: true, title: "Attendance Recording" }}
-        />
-        <Stack.Screen
-          name="batch-details"
-          options={{
-            headerShown: true,
-            title: "Batch Details",
-            presentation: "card",
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="change-password" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="attendance/index" />
+          <Stack.Screen
+            name="attendance/record"
+            options={{ headerShown: true, title: "Attendance Recording" }}
+          />
+          <Stack.Screen
+            name="batch-details"
+            options={{
+              headerShown: true,
+              title: "Batch Details",
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
+            name="student-attendance"
+            options={{
+              headerShown: true,
+              title: "Student Attendance",
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
+            name="initiate-transfer"
+            options={{
+              headerShown: true,
+              title: "Initiate Transfer",
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
+            name="confirm-transfer"
+            options={{
+              headerShown: true,
+              title: "Confirm Transfer",
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
+            name="recent-activity"
+            options={{
+              headerShown: false, // Custom header in component
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
+            name="modal"
+            options={{
+              presentation: "modal",
+              headerShown: true,
+              title: "Modal",
+            }}
+          />
+        </Stack>
+        <StatusBar style="auto" />
+        <Toast
+          config={{
+            success: (props) => (
+              <BaseToast
+                {...props}
+                style={{ borderLeftColor: "#10b981" }}
+                contentContainerStyle={{ paddingHorizontal: 15 }}
+                text1Style={{
+                  fontSize: 15,
+                  fontWeight: "600",
+                }}
+                text2Style={{
+                  fontSize: 13,
+                }}
+              />
+            ),
+            error: (props) => (
+              <ErrorToast
+                {...props}
+                style={{ borderLeftColor: "#ef4444" }}
+                text1Style={{
+                  fontSize: 15,
+                  fontWeight: "600",
+                }}
+                text2Style={{
+                  fontSize: 13,
+                }}
+              />
+            ),
+            warning: (props) => (
+              <BaseToast
+                {...props}
+                style={{ borderLeftColor: "#f59e0b" }}
+                contentContainerStyle={{ paddingHorizontal: 15 }}
+                text1Style={{
+                  fontSize: 15,
+                  fontWeight: "600",
+                }}
+                text2Style={{
+                  fontSize: 13,
+                }}
+              />
+            ),
+            info: (props) => (
+              <BaseToast
+                {...props}
+                style={{ borderLeftColor: "#3b82f6" }}
+                contentContainerStyle={{ paddingHorizontal: 15 }}
+                text1Style={{
+                  fontSize: 15,
+                  fontWeight: "600",
+                }}
+                text2Style={{
+                  fontSize: 13,
+                }}
+              />
+            ),
           }}
         />
-        <Stack.Screen
-          name="student-attendance"
-          options={{
-            headerShown: true,
-            title: "Student Attendance",
-            presentation: "card",
-          }}
-        />
-        <Stack.Screen
-          name="initiate-transfer"
-          options={{
-            headerShown: true,
-            title: "Initiate Transfer",
-            presentation: "card",
-          }}
-        />
-        <Stack.Screen
-          name="confirm-transfer"
-          options={{
-            headerShown: true,
-            title: "Confirm Transfer",
-            presentation: "card",
-          }}
-        />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal", headerShown: true, title: "Modal" }}
-        />
-      </Stack>
-      <StatusBar style="auto" />
-      <Toast
-        config={{
-          success: (props) => (
-            <BaseToast
-              {...props}
-              style={{ borderLeftColor: "#10b981" }}
-              contentContainerStyle={{ paddingHorizontal: 15 }}
-              text1Style={{
-                fontSize: 15,
-                fontWeight: "600",
-              }}
-              text2Style={{
-                fontSize: 13,
-              }}
-            />
-          ),
-          error: (props) => (
-            <ErrorToast
-              {...props}
-              style={{ borderLeftColor: "#ef4444" }}
-              text1Style={{
-                fontSize: 15,
-                fontWeight: "600",
-              }}
-              text2Style={{
-                fontSize: 13,
-              }}
-            />
-          ),
-          warning: (props) => (
-            <BaseToast
-              {...props}
-              style={{ borderLeftColor: "#f59e0b" }}
-              contentContainerStyle={{ paddingHorizontal: 15 }}
-              text1Style={{
-                fontSize: 15,
-                fontWeight: "600",
-              }}
-              text2Style={{
-                fontSize: 13,
-              }}
-            />
-          ),
-          info: (props) => (
-            <BaseToast
-              {...props}
-              style={{ borderLeftColor: "#3b82f6" }}
-              contentContainerStyle={{ paddingHorizontal: 15 }}
-              text1Style={{
-                fontSize: 15,
-                fontWeight: "600",
-              }}
-              text2Style={{
-                fontSize: 13,
-              }}
-            />
-          ),
-        }}
-      />
-    </ThemeProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }

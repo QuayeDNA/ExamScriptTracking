@@ -669,7 +669,9 @@ export const getUserActivity = async (req: Request, res: Response) => {
         id: `audit-${log.id}`,
         type: "audit" as const,
         title: getActivityTitle(log.action, log.entity),
-        description: log.details || `${log.action} on ${log.entity}`,
+        description:
+          formatActivityDescription(log.details) ||
+          `${log.action} on ${log.entity}`,
         timestamp: log.timestamp,
         status: "completed" as const,
       })),
@@ -721,7 +723,43 @@ export const getUserActivity = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching user activity:", error);
-    res.status(500).json({ message: "Failed to fetch user activity" });
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * DELETE /api/analytics/user-activity
+ *
+ * Clear all recent activity for the logged-in user
+ *
+ * @returns {Object} Success message
+ */
+export const clearUserActivity = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    // Delete all audit logs for this user (older than 30 days will be kept automatically)
+    // Note: In a production system, you might want to soft delete or archive instead
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const deletedCount = await prisma.auditLog.deleteMany({
+      where: {
+        userId,
+        timestamp: { gte: thirtyDaysAgo }, // Only delete recent logs
+      },
+    });
+
+    res.json({
+      message: "Recent activity cleared successfully",
+      deletedCount,
+    });
+  } catch (error) {
+    console.error("Error clearing user activity:", error);
+    res.status(500).json({ message: "Failed to clear user activity" });
   }
 };
 
@@ -742,4 +780,30 @@ function getActivityTitle(action: string, entity: string): string {
   };
 
   return actionMap[action] || `${action} ${entity.toLowerCase()}`;
+}
+
+// Helper function to format activity descriptions
+function formatActivityDescription(details: any): string | null {
+  if (!details) return null;
+
+  // If details is already a string, return it
+  if (typeof details === "string") return details;
+
+  // If details is an object, format it nicely
+  if (typeof details === "object") {
+    const parts: string[] = [];
+
+    if (details.email) parts.push(`Email: ${details.email}`);
+    if (details.role) parts.push(`Role: ${details.role}`);
+    if (details.name) parts.push(`Name: ${details.name}`);
+    if (details.firstName && details.lastName) {
+      parts.push(`Name: ${details.firstName} ${details.lastName}`);
+    }
+    if (details.department) parts.push(`Department: ${details.department}`);
+    if (details.faculty) parts.push(`Faculty: ${details.faculty}`);
+
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+
+  return null;
 }

@@ -32,3 +32,14 @@ export const getUserActivity = async (): Promise<UserActivityResponse> => {
   const response = await apiClient.get("/analytics/user-activity");
   return response as UserActivityResponse;
 };
+
+/**
+ * Clear all recent activity for the logged-in user
+ */
+export const clearUserActivity = async (): Promise<{
+  message: string;
+  deletedCount: number;
+}> => {
+  const response = await apiClient.delete("/analytics/user-activity");
+  return response as { message: string; deletedCount: number };
+};

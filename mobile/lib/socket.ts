@@ -35,9 +35,12 @@ class MobileSocketService {
       return;
     }
 
-    // Use the actual IP address of your development machine
-    // Replace with your backend URL in production
-    const SOCKET_URL = "http://192.168.43.153:3000";
+    // Use the same base URL as the API client, but without /api suffix
+    const API_BASE =
+      process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+    const SOCKET_URL = API_BASE.replace("/api", "");
+
+    console.log("🔌 Attempting socket connection to:", SOCKET_URL);
 
     this.socket = io(SOCKET_URL, {
       auth: {
@@ -47,31 +50,45 @@ class MobileSocketService {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: this.maxReconnectAttempts,
+      timeout: 20000, // Increase timeout for mobile connections
+      transports: ["websocket", "polling"], // Try websocket first, fallback to polling
+      forceNew: false,
+      upgrade: true,
     });
 
     this.socket.on("connect", () => {
-      console.log("Socket connected:", this.socket?.id);
+      console.log("✅ Socket connected successfully:", this.socket?.id);
       this.reconnectAttempts = 0;
     });
 
     this.socket.on("disconnect", (reason) => {
-      console.log("Socket disconnected:", reason);
+      console.log("❌ Socket disconnected:", reason);
     });
 
     this.socket.on("connect_error", (error) => {
-      // Don't log authentication errors as errors, they're expected during development
-      if (error.message.includes("Authentication")) {
-        console.log("Socket authentication failed - please log in again");
-        this.disconnect(); // Stop trying to reconnect with invalid token
-        return;
-      }
+      console.error("❌ Socket connection error:", error.message);
+      console.log("🔍 Connection details:", {
+        url: SOCKET_URL,
+        tokenPresent: !!token,
+        tokenLength: token?.length,
+        error: error.message,
+      });
 
-      console.error("Socket connection error:", error.message);
       this.reconnectAttempts++;
 
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error("Max reconnection attempts reached");
+        console.error("🚫 Max reconnection attempts reached");
       }
+    });
+
+    this.socket.on("reconnect_attempt", (attempt) => {
+      console.log(
+        `🔄 Socket reconnection attempt ${attempt}/${this.maxReconnectAttempts}`
+      );
+    });
+
+    this.socket.on("reconnect", (attempt) => {
+      console.log(`✅ Socket reconnected after ${attempt} attempts`);
     });
 
     // Setup event listeners

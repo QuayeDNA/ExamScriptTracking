@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Video } from "expo-av";
+import { VideoView } from "expo-video";
 import { useThemeColors } from "@/constants/design-system";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -769,12 +769,12 @@ export default function IncidentDetailsScreen() {
                         className="rounded-lg overflow-hidden"
                         style={{ backgroundColor: colors.background }}
                       >
-                        <Video
+                        <VideoView
                           source={{ uri: fileUrl }}
-                          className="w-full aspect-video"
+                          style={{ width: "100%", aspectRatio: 16 / 9 }}
                           resizeMode="contain"
-                          useNativeControls
-                          shouldPlay={false}
+                          allowsFullscreen
+                          allowsPictureInPicture={false}
                           onError={() => {
                             Alert.alert("Error", "Failed to load video");
                             setIsPreviewOpen(false);

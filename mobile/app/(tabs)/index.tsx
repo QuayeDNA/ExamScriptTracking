@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -18,7 +19,11 @@ import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
 import { H1, H2, H3, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
-import { getUserActivity, type UserActivity } from "@/api/analytics";
+import {
+  getUserActivity,
+  type UserActivity,
+  type UserActivityResponse,
+} from "@/api/analytics";
 import { useQuery } from "@tanstack/react-query";
 
 // Helper functions for activity display
@@ -59,7 +64,7 @@ const getActivityColor = (status: string, colors: any): string => {
 
 const getStatusVariant = (
   status: string
-): "default" | "secondary" | "destructive" | "outline" => {
+): "default" | "secondary" | "error" | "outline" => {
   switch (status.toLowerCase()) {
     case "completed":
     case "resolved":
@@ -71,7 +76,7 @@ const getStatusVariant = (
       return "secondary";
     case "failed":
     case "cancelled":
-      return "destructive";
+      return "error";
     default:
       return "outline";
   }
@@ -82,10 +87,11 @@ export default function HomeScreen() {
   const colors = useThemeColors();
 
   // Fetch user activity
-  const { data: activityData, isLoading: activityLoading } = useQuery({
-    queryKey: ["user-activity"],
-    queryFn: getUserActivity,
-  });
+  const { data: activityData, isLoading: activityLoading } =
+    useQuery<UserActivityResponse>({
+      queryKey: ["user-activity"],
+      queryFn: getUserActivity,
+    });
 
   return (
     <SafeAreaView
@@ -97,13 +103,13 @@ export default function HomeScreen() {
         <View style={[styles.header, { backgroundColor: colors.primary }]}>
           <View style={styles.headerContent}>
             <H1 style={styles.headerTitle}>Welcome Back!</H1>
-            <Text style={styles.headerName}>{user?.name}</Text>
+            <Text style={styles.headerName}>{user?.name || "User"}</Text>
             <View style={styles.headerBadges}>
               <Badge variant="secondary" style={styles.badge}>
-                {user?.role.replace("_", " ")}
+                {user?.role?.replace("_", " ") || "Unknown Role"}
               </Badge>
               <Badge variant="secondary" style={styles.badge}>
-                {user?.department}
+                {user?.department || "Unknown Department"}
               </Badge>
             </View>
           </View>
@@ -274,10 +280,13 @@ export default function HomeScreen() {
               </View>
             ) : activityData?.activities &&
               activityData.activities.length > 0 ? (
-              <View style={styles.activityList}>
-                {activityData.activities.slice(0, 5).map((activity) => (
+              <FlatList
+                style={styles.activityScrollView}
+                showsVerticalScrollIndicator={false}
+                data={activityData.activities.slice(0, 10)}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item: activity }) => (
                   <TouchableOpacity
-                    key={activity.id}
                     style={styles.activityItem}
                     activeOpacity={0.7}
                     onPress={() => {
@@ -338,28 +347,30 @@ export default function HomeScreen() {
                       </Badge>
                     </View>
                   </TouchableOpacity>
-                ))}
-                {activityData.activities.length > 5 && (
-                  <TouchableOpacity
-                    style={styles.viewAllButton}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      // Could navigate to a full activity screen
-                    }}
-                  >
-                    <Text
-                      style={[styles.viewAllText, { color: colors.primary }]}
-                    >
-                      View all activity ({activityData.activities.length})
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
                 )}
-              </View>
+                ListFooterComponent={
+                  activityData.activities.length > 10 ? (
+                    <TouchableOpacity
+                      style={styles.viewAllButton}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        router.push("/recent-activity");
+                      }}
+                    >
+                      <Text
+                        style={[styles.viewAllText, { color: colors.primary }]}
+                      >
+                        View all activity ({activityData.activities.length})
+                      </Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons
@@ -497,8 +508,10 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
   },
-  activityList: {
-    padding: 16,
+  activityScrollView: {
+    maxHeight: 400, // Limit height to make it scrollable
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   activityItem: {
     flexDirection: "row",
