@@ -12,11 +12,12 @@
 2. [Getting Started](#getting-started)
 3. [Web Dashboard Guide (Admin)](#web-dashboard-guide-admin)
 4. [Mobile App Guide (Handlers)](#mobile-app-guide-handlers)
-5. [Workflows & Processes](#workflows--processes)
-6. [Class Attendance System](#class-attendance-system)
-7. [Troubleshooting](#troubleshooting)
-8. [Best Practices](#best-practices)
-9. [Glossary](#glossary)
+5. [Incident Management](#incident-management)
+6. [Workflows & Processes](#workflows--processes)
+7. [Class Attendance System](#class-attendance-system)
+8. [Troubleshooting](#troubleshooting)
+9. [Best Practices](#best-practices)
+10. [Glossary](#glossary)
 
 ---
 
@@ -52,6 +53,17 @@ The Exam Script Tracking System is a comprehensive solution for tracking examina
 - ✅ Real-time student scanning
 - ✅ Recording history and reports
 - ✅ Admin oversight
+
+#### Incident Management System
+
+- ✅ Real-time incident reporting and tracking
+- ✅ 8 incident types (Academic Dishonesty, Security Breach, etc.)
+- ✅ 4 severity levels (Low, Medium, High, Critical)
+- ✅ Comment system with internal notes
+- ✅ File attachments (photos, documents)
+- ✅ GPS location tracking
+- ✅ Real-time notifications
+- ✅ Admin oversight and status management
 
 ### User Roles
 

@@ -61,3 +61,6 @@ mobile/android/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# APK files
+web/public/ExamTrack.apk

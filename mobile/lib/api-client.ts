@@ -1,8 +1,29 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
+import Constants from "expo-constants";
 import type { ApiError } from "@/types";
 import { getToken, clearAuth } from "@/utils/storage";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+// Base API URL: allow overriding via EXPO_PUBLIC_API_URL, otherwise fall back to localhost.
+// When running on a physical device or Expo Go, replace 'localhost' with the packager host IP
+// (available via Expo Constants) so the app can reach the machine running the backend.
+let API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+
+try {
+  if (API_URL.includes("localhost")) {
+    // debuggerHost looks like "192.168.0.5:19001" in Expo
+    const debuggerHost =
+      (Constants as any)?.manifest?.debuggerHost ||
+      (Constants as any)?.expoGo?.packagerOpts?.hostUri;
+    if (debuggerHost) {
+      const host = String(debuggerHost).split(":")[0];
+      API_URL = API_URL.replace("localhost", host);
+    }
+  }
+} catch (e) {
+  // Guard against unexpected runtime errors; keep the fallback URL intact
+  // eslint-disable-next-line no-console
+  console.warn("Could not resolve debugger host for API_URL replacement", e);
+}
 
 class ApiClient {
   private client: AxiosInstance;
@@ -17,6 +38,10 @@ class ApiClient {
         "Content-Type": "application/json",
       },
     });
+
+    // Helpful runtime info for debugging network issues on devices
+    // eslint-disable-next-line no-console
+    console.log("API client using baseURL:", API_URL);
 
     this.setupInterceptors();
   }

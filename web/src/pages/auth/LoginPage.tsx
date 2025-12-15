@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { LogIn, AlertCircle } from "lucide-react";
+import { LogIn, AlertCircle, Download } from "lucide-react";
 
 export const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -25,78 +25,90 @@ export const LoginPage = () => {
   };
 
   return (
-    <Card className="shadow-lg">
-      <CardHeader className="space-y-1 text-center">
-        <div className="flex justify-center mb-4">
-          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <LogIn className="h-6 w-6 text-primary" />
-          </div>
-        </div>
-        <CardTitle className="text-2xl font-bold">
-          Exam Script Tracking
-        </CardTitle>
-        <CardDescription>Sign in to your account to continue</CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {error instanceof Error
-                  ? error.message
-                  : "Login failed. Please check your credentials."}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email Address</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isPending}
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <Link
-                to="/forgot-password"
-                className="text-sm text-primary hover:underline"
-                tabIndex={-1}
-              >
-                Forgot password?
-              </Link>
+    <>
+      <Card className="shadow-lg">
+        <CardHeader className="space-y-1 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <LogIn className="h-6 w-6 text-primary" />
             </div>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isPending}
-              autoComplete="current-password"
-            />
           </div>
+          <CardTitle className="text-2xl font-bold">
+            Exam Script Tracking
+          </CardTitle>
+          <CardDescription>Sign in to your account to continue</CardDescription>
+        </CardHeader>
 
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {error instanceof Error
+                    ? error.message
+                    : "Login failed. Please check your credentials."}
+                </AlertDescription>
+              </Alert>
+            )}
 
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          Need help? Contact your system administrator
-        </div>
-      </CardContent>
-    </Card>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isPending}
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-primary hover:underline"
+                  tabIndex={-1}
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isPending}
+                autoComplete="current-password"
+              />
+            </div>
+
+            <Button type="submit" className="w-full" disabled={isPending}>
+              {isPending ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            Need help? Contact your system administrator
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Floating Action Button for APK Download */}
+      <a
+        href="/ExamTrack.apk"
+        download="ExamTrack.apk"
+        className="fixed bottom-6 right-6 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+        title="Download Mobile App"
+      >
+        <Download className="h-6 w-6" />
+      </a>
+    </>
   );
 };
