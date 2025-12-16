@@ -1,7 +1,7 @@
 # Exam Script Tracking System - User Manual
 
-**Version:** 1.0.0  
-**Last Updated:** December 9, 2025  
+**Version:** 1.1.0  
+**Last Updated:** December 15, 2025  
 **Status:** Production Ready
 
 ---
@@ -32,6 +32,7 @@ The Exam Script Tracking System is a comprehensive solution for tracking examina
 - **Handshake-based transfer** protocol
 - **Complete audit trail** of all movements
 - **Analytics and reporting** capabilities
+- **Incident management** for exam irregularities
 - **Multi-platform access** (Web dashboard + Mobile app)
 
 ### Key Features
@@ -67,14 +68,14 @@ The Exam Script Tracking System is a comprehensive solution for tracking examina
 
 ### User Roles
 
-| Role                | Access Level | Primary Functions                                   |
-| ------------------- | ------------ | --------------------------------------------------- |
-| **ADMIN**           | Full access  | User management, system configuration, all features |
-| **INVIGILATOR**     | Handler      | Exam supervision, attendance recording, QR scanning |
-| **LECTURER**        | Handler      | Transfer management, custody tracking               |
-| **FACULTY_OFFICER** | Handler      | Transfer management, custody tracking               |
-| **DEPARTMENT_HEAD** | Handler      | Transfer management, custody tracking, approvals    |
-| **CLASS_REP**       | Limited      | Class attendance recording only                     |
+| Role                | Access Level | Primary Functions                                                        |
+| ------------------- | ------------ | ------------------------------------------------------------------------ |
+| **ADMIN**           | Full access  | User management, system configuration, incident management, all features |
+| **INVIGILATOR**     | Handler      | Exam supervision, attendance recording, QR scanning, incident reporting  |
+| **LECTURER**        | Handler      | Transfer management, custody tracking, incident reporting                |
+| **FACULTY_OFFICER** | Handler      | Transfer management, custody tracking, incident management               |
+| **DEPARTMENT_HEAD** | Handler      | Transfer management, custody tracking, approvals, incident management    |
+| **CLASS_REP**       | Limited      | Class attendance recording, incident reporting only                      |
 
 ---
 
@@ -754,6 +755,13 @@ The mobile app is designed for on-the-ground handlers who manage exam scripts an
 - Transfer management
 - Custody history
 
+**Incidents Tab** 🚨
+
+- Incident reporting and tracking
+- Real-time incident list
+- Status updates and comments
+- File attachments and GPS
+
 **Scanner Tab** 📷
 
 - QR code scanner
@@ -1101,6 +1109,243 @@ The mobile app sends real-time notifications for important events.
 1. Settings → Apps → ExamTrack → Notifications
 2. Toggle Show notifications
 3. Choose importance
+
+---
+
+## Incident Management
+
+The Incident Management system allows users to report and track incidents that occur during examinations or related activities. This feature is available on the mobile app and provides real-time tracking, notifications, and administrative oversight.
+
+### Incident Types
+
+The system supports 8 types of incidents:
+
+- **Academic Dishonesty** - Cheating, plagiarism, unauthorized materials
+- **Security Breach** - Unauthorized access, tampering with exam materials
+- **Technical Issues** - Equipment failure, software problems, connectivity issues
+- **Health & Safety** - Medical emergencies, safety hazards, environmental issues
+- **Student Misconduct** - Disruptive behavior, rule violations
+- **Staff Issues** - Invigilator problems, procedural errors
+- **Material Problems** - Missing scripts, damaged materials, printing errors
+- **Other** - Any incident not covered by above categories
+
+### Severity Levels
+
+Incidents are categorized by severity:
+
+- **LOW** (Green) - Minor issues with minimal impact
+- **MEDIUM** (Yellow) - Moderate issues requiring attention
+- **HIGH** (Orange) - Serious issues affecting exam integrity
+- **CRITICAL** (Red) - Severe issues requiring immediate action
+
+### Reporting an Incident
+
+#### From Mobile App
+
+1. **Open the App** and ensure you're logged in
+2. **Navigate to Incidents Tab** (bottom navigation, alert-circle icon)
+3. **Tap "Report Incident"** button (top-right corner)
+4. **Select Incident Type** from the horizontal scrollable chips
+5. **Choose Severity Level** (4 options available)
+6. **Fill in Details:**
+   - **Title** - Brief description (required)
+   - **Description** - Detailed explanation (required)
+   - **Location** - Tap "Use Current Location" for GPS or enter manually
+7. **Add Attachments** (optional, up to 5 files):
+   - **Camera** - Take photos of the incident
+   - **Gallery** - Select existing photos
+   - **Documents** - Attach PDFs, documents, or other files
+8. **Toggle Confidential** if the incident should be restricted to admins only
+9. **Submit** - Tap the submit button
+10. **Confirmation** - You'll see success message and option to view the incident
+
+#### Attachments Guidelines
+
+- **Maximum 5 files** per incident
+- **Supported formats:** Images (JPG, PNG), Documents (PDF, DOC, TXT), Videos
+- **File size limit:** 10MB per file
+- **Photos are compressed** automatically for faster upload
+
+#### Location Tracking
+
+- **GPS coordinates** are captured automatically when using "Use Current Location"
+- **Address lookup** converts coordinates to readable addresses
+- **Manual entry** available if GPS is unavailable
+- **Location data** helps administrators respond effectively
+
+### Viewing Incidents
+
+#### Incidents List
+
+1. **Navigate to Incidents Tab**
+2. **View Statistics Cards:**
+   - Total incidents
+   - Open incidents
+   - Resolved today
+   - Average resolution time
+3. **Browse Incident Cards:**
+   - Incident number and title
+   - Type, severity, and status badges
+   - Location and timestamps
+   - Reporter and assignee information
+   - Comment and attachment counts
+4. **Use Filters:**
+   - **Search** - Filter by title, description, or reporter
+   - **Type** - Filter by incident category
+   - **Severity** - Filter by severity level
+   - **Status** - Filter by current status
+5. **Pull to Refresh** - Swipe down to update the list
+
+#### Incident Details
+
+1. **Tap on any incident card** to open details
+2. **View Complete Information:**
+   - Full title and description
+   - Incident type and severity badges
+   - Location with map link (if coordinates available)
+   - Reporter details
+   - Current assignee (if assigned)
+   - Resolution notes (if resolved)
+3. **Timeline View:**
+   - Reported timestamp
+   - Assigned timestamp (if applicable)
+   - Resolved/Closed timestamps
+   - Status change history
+4. **Comments Section:**
+   - All comments in chronological order
+   - User information and timestamps
+   - Internal notes (admin only, marked with different styling)
+5. **Attachments:**
+   - Thumbnail previews for images
+   - Download links for documents
+   - File names and upload timestamps
+
+### Managing Incidents (Admin Only)
+
+#### Status Updates
+
+Admins can update incident status using quick action buttons:
+
+- **Investigate** - Mark as under investigation
+- **Resolve** - Mark as resolved with resolution notes
+- **Escalate** - Escalate to higher authority
+- **Close** - Close the incident
+
+#### Assignment
+
+- **Assign to Self** - Take ownership of the incident
+- **Assign to Others** - Reassign to different admin/staff member
+
+#### Adding Comments
+
+1. **Scroll to Comments Section**
+2. **Tap "Add Comment"**
+3. **Type your comment**
+4. **Toggle "Internal Note"** (admin only - restricts visibility)
+5. **Submit**
+
+**Internal Notes:**
+
+- Only visible to admins and department heads
+- Marked with yellow background
+- Used for sensitive discussions
+
+### Real-time Notifications
+
+The system provides instant notifications for incident events:
+
+#### Notification Types
+
+- **New Incident Reported** - When someone submits an incident
+- **Incident Assigned** - When assigned to you
+- **Status Changed** - When incident status updates
+- **New Comment** - When someone comments on your incidents
+- **Incident Resolved** - When incident is resolved
+
+#### Notification Channels
+
+- **Push Notifications** - Instant alerts on mobile device
+- **In-App Notifications** - Bell icon in the app
+- **Email Notifications** - Configurable in settings
+
+#### Managing Notifications
+
+**iOS:**
+
+1. Settings → Notifications → ExamTrack
+2. Toggle Allow Notifications
+3. Choose style (Banners, Alerts)
+
+**Android:**
+
+1. Settings → Apps → ExamTrack → Notifications
+2. Toggle Show notifications
+3. Choose importance
+
+### Incident Statistics
+
+#### Dashboard Metrics
+
+- **Total Incidents** - All-time incident count
+- **Open Incidents** - Currently active incidents
+- **Resolved Today** - Incidents resolved in the last 24 hours
+- **Average Resolution Time** - Mean time to resolve incidents
+
+#### Filtering and Search
+
+- **Real-time Search** - Filter incidents by keywords
+- **Advanced Filters** - Combine type, severity, status, date range
+- **Export Options** - Generate reports (future feature)
+
+### Best Practices
+
+#### For Reporters
+
+- **Be Specific** - Provide detailed descriptions
+- **Include Evidence** - Attach photos/videos when possible
+- **Use Appropriate Severity** - Don't over/under-state importance
+- **Location Accuracy** - Use GPS when reporting location-based incidents
+
+#### For Administrators
+
+- **Respond Quickly** - Acknowledge incidents within 1 hour
+- **Document Actions** - Add comments for all status changes
+- **Use Internal Notes** - For sensitive discussions
+- **Regular Review** - Check incident list daily
+
+#### Privacy Considerations
+
+- **Confidential Incidents** - Use for sensitive matters
+- **Internal Notes** - For admin-only discussions
+- **Attachment Security** - Files are stored securely and access-controlled
+
+### Troubleshooting
+
+#### Common Issues
+
+**Can't Submit Incident:**
+
+- Check internet connection
+- Ensure all required fields are filled
+- Verify file sizes are under 10MB
+
+**Location Not Working:**
+
+- Grant location permissions in app settings
+- Try manual location entry
+- Check GPS signal
+
+**Notifications Not Working:**
+
+- Verify notification permissions
+- Check if notifications are enabled for the app
+- Restart the app
+
+**Attachments Not Uploading:**
+
+- Check file format support
+- Ensure files are not corrupted
+- Verify internet connection
 
 ---
 
