@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { View, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { router } from "expo-router";
 import { authApi } from "@/api/auth";
 import { saveAuth } from "@/utils/storage";
@@ -10,33 +15,43 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Text } from "@/components/ui/typography";
+import { useThemeColors } from "@/constants/design-system";
 import Toast from "react-native-toast-message";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const setUser = useAuthStore((state) => state.setUser);
+  const colors = useThemeColors();
 
   const handleLogin = async () => {
     // Clear previous errors
     setError("");
 
     // Validation
-    if (!email || !password) {
-      setError("Please enter both email and password");
+    if (!identifier || !password) {
+      setError("Please enter both identifier and password");
       return;
     }
 
-    if (!email.includes("@")) {
+    if (loginMethod === "email" && !identifier.includes("@")) {
       setError("Please enter a valid email address");
+      return;
+    }
+
+    if (loginMethod === "phone" && !/^(\+233|0)[0-9]{9}$/.test(identifier)) {
+      setError(
+        "Please enter a valid phone number (e.g., 0241234567 or +233241234567)"
+      );
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await authApi.login({ email, password });
+      const response = await authApi.login({ identifier, password });
       await saveAuth(response.token, response.refreshToken, response.user);
       setUser(response.user);
 
@@ -64,6 +79,62 @@ export default function LoginScreen() {
     <AuthLayout title="Exam Script Tracking" subtitle="Handler Login Portal">
       <Card elevation="md">
         <View style={styles.cardContent}>
+          {/* Login Method Toggle */}
+          <View
+            style={[styles.toggleContainer, { borderColor: colors.border }]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                { backgroundColor: colors.muted },
+                loginMethod === "email" && [
+                  styles.toggleButtonActive,
+                  { backgroundColor: colors.primary },
+                ],
+              ]}
+              onPress={() => setLoginMethod("email")}
+              disabled={isLoading}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: colors.foregroundMuted },
+                  loginMethod === "email" && [
+                    styles.toggleTextActive,
+                    { color: colors.primaryForeground },
+                  ],
+                ]}
+              >
+                Email Login
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                { backgroundColor: colors.muted },
+                loginMethod === "phone" && [
+                  styles.toggleButtonActive,
+                  { backgroundColor: colors.primary },
+                ],
+              ]}
+              onPress={() => setLoginMethod("phone")}
+              disabled={isLoading}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  { color: colors.foregroundMuted },
+                  loginMethod === "phone" && [
+                    styles.toggleTextActive,
+                    { color: colors.primaryForeground },
+                  ],
+                ]}
+              >
+                Phone Login
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Error Alert */}
           {error && (
             <View style={styles.alertContainer}>
@@ -71,15 +142,21 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* Email Input */}
+          {/* Identifier Input */}
           <View style={styles.inputContainer}>
             <Input
-              label="Email Address"
-              placeholder="your.email@example.com"
-              value={email}
-              onChangeText={setEmail}
+              label={loginMethod === "email" ? "Email Address" : "Phone Number"}
+              placeholder={
+                loginMethod === "email"
+                  ? "your.email@example.com"
+                  : "0241234567 or +233241234567"
+              }
+              value={identifier}
+              onChangeText={setIdentifier}
               autoCapitalize="none"
-              keyboardType="email-address"
+              keyboardType={
+                loginMethod === "email" ? "email-address" : "phone-pad"
+              }
               editable={!isLoading}
             />
           </View>
@@ -106,11 +183,30 @@ export default function LoginScreen() {
               style={styles.button}
             >
               {isLoading ? (
-                <ActivityIndicator color="#ffffff" />
+                <ActivityIndicator color={colors.primaryForeground} />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  Sign In
+                </Text>
               )}
             </Button>
+          </View>
+
+          {/* QR Registration Link */}
+          <View style={styles.linkContainer}>
+            <TouchableOpacity
+              onPress={() => router.push("/qr-registration")}
+              disabled={isLoading}
+            >
+              <Text style={[styles.linkText, { color: colors.primary }]}>
+                Register with QR Code
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Card>
@@ -121,6 +217,29 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   cardContent: {
     padding: 24,
+  },
+  toggleContainer: {
+    flexDirection: "row",
+    marginBottom: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  toggleButtonActive: {
+    // backgroundColor is now set dynamically
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  toggleTextActive: {
+    // color is now set dynamically
   },
   alertContainer: {
     marginBottom: 20,
@@ -135,8 +254,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   buttonText: {
-    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  linkContainer: {
+    marginTop: 16,
+    alignItems: "center",
+  },
+  linkText: {
+    fontSize: 16,
+    textDecorationLine: "underline",
   },
 });

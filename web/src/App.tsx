@@ -24,6 +24,7 @@ import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import IncidentsPage from "@/pages/dashboard/IncidentsPage";
 import IncidentDetailsPage from "@/pages/dashboard/IncidentDetailsPage";
 import CreateIncidentPage from "@/pages/dashboard/CreateIncidentPage";
+import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
@@ -118,6 +119,10 @@ function App() {
                     <Route
                       path="analytics"
                       element={<AnalyticsDashboardPage />}
+                    />
+                    <Route
+                      path="qr-registration"
+                      element={<QRRegistrationPage />}
                     />
                   </Route>
                 </Route>

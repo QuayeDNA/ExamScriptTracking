@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 // Validation schemas
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  identifier: z.string().min(1, "Email or phone number is required"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -42,25 +42,36 @@ const firstTimePasswordSchema = z.object({
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log("[LOGIN] Login attempt for email:", req.body.email);
+    console.log("[LOGIN] Login attempt for identifier:", req.body.identifier);
     console.log("[LOGIN] Request IP:", req.ip);
 
-    const { email, password } = loginSchema.parse(req.body);
+    const { identifier, password } = loginSchema.parse(req.body);
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Determine if identifier is email or phone
+    const isEmail = identifier.includes("@");
+    const isPhone = /^(\+233|0)[0-9]{9}$/.test(identifier);
+
+    if (!isEmail && !isPhone) {
+      res.status(400).json({
+        error: "Please provide a valid email address or phone number",
+      });
+      return;
+    }
+
+    // Find user by email or phone
+    const user = await prisma.user.findFirst({
+      where: isEmail ? { email: identifier } : { phone: identifier },
     });
 
     if (!user) {
-      console.log("[LOGIN] User not found:", email);
+      console.log("[LOGIN] User not found:", identifier);
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
 
     // Check if user is active
     if (!user.isActive) {
-      console.log("[LOGIN] Inactive account attempt:", email);
+      console.log("[LOGIN] Inactive account attempt:", identifier);
       res.status(403).json({
         error: "Account has been deactivated. Contact administrator.",
       });
@@ -74,7 +85,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       );
       console.log(
         "[LOGIN] Account locked:",
-        email,
+        identifier,
         "Minutes left:",
         minutesLeft
       );
@@ -88,7 +99,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      console.log("[LOGIN] Invalid password for user:", email);
+      console.log("[LOGIN] Invalid password for user:", identifier);
 
       // Increment failed login attempts
       const failedAttempts = user.failedLoginAttempts + 1;
@@ -116,6 +127,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
               reason: "Too many failed login attempts",
               attempts: failedAttempts,
               lockedUntil: lockUntil.toISOString(),
+              identifier: identifier,
             },
             ipAddress: req.ip,
           },
@@ -125,7 +137,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
           "[LOGIN] Account locked after",
           failedAttempts,
           "failed attempts:",
-          email
+          identifier
         );
         res.status(403).json({
           error:
@@ -187,14 +199,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         entity: "User",
         entityId: user.id,
         details: {
-          email: user.email,
+          identifier: identifier,
+          loginMethod: isEmail ? "email" : "phone",
           role: user.role,
         },
         ipAddress: req.ip,
       },
     });
 
-    console.log("[LOGIN] Successful login:", email, "Role:", user.role);
+    console.log(
+      "[LOGIN] Successful login:",
+      identifier,
+      "Role:",
+      user.role,
+      "Method:",
+      isEmail ? "email" : "phone"
+    );
 
     res.json({
       message: "Login successful",

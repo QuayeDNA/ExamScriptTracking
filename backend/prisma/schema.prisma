@@ -19,6 +19,7 @@ model User {
   firstName         String
   lastName          String
   phone             String?
+  department        String?  // User's department
   profilePicture    String?  // URL or path to profile picture
   isActive          Boolean  @default(true)
   isSuperAdmin      Boolean  @default(false)
@@ -26,6 +27,7 @@ model User {
   lastLogin         DateTime?
   failedLoginAttempts Int    @default(0)
   lockedUntil       DateTime?
+  registrationToken String?  @unique // Token for QR code registration
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -35,6 +37,7 @@ model User {
   auditLogs       AuditLog[]
   refreshTokens   RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  createdRegistrationSessions RegistrationSession[]
   
   // Incident Management relations
   reportedIncidents      Incident[]              @relation("IncidentReporter")
@@ -42,6 +45,9 @@ model User {
   incidentComments       IncidentComment[]
   incidentStatusChanges  IncidentStatusHistory[]
   incidentAttachments    IncidentAttachment[]
+  
+  // Class Attendance relations
+  classAttendanceRecords ClassAttendanceRecord[]
 }
 
 // Password Reset Tokens
@@ -54,6 +60,23 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Registration Session for QR Code Registration
+model RegistrationSession {
+  id          String   @id @default(uuid())
+  qrToken     String   @unique // Token encoded in QR code
+  createdById String   // Admin who created the session
+  expiresAt   DateTime // When the QR code expires
+  used        Boolean  @default(false)
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+  
+  createdBy User @relation(fields: [createdById], references: [id])
+  
+  @@index([qrToken])
+  @@index([expiresAt])
+  @@index([used])
 }
 
 // Blacklisted Access Tokens (for immediate session revocation)
@@ -241,6 +264,7 @@ model AttendanceSession {
 model ClassAttendanceRecord {
   id               String            @id @default(uuid())
   sessionId        String
+  userId           String?           // User who created this record (optional for migration)
   lecturerName     String?           // Optional label
   courseName       String?           // Optional label
   courseCode       String?           // Optional label
@@ -253,9 +277,11 @@ model ClassAttendanceRecord {
   updatedAt        DateTime          @updatedAt
 
   session          AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   students         ClassAttendance[]
 
   @@index([sessionId])
+  @@index([userId])
   @@index([startTime])
 }
 

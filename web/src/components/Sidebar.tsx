@@ -13,6 +13,7 @@ import {
   FileBarChart,
   UserCog,
   AlertTriangle,
+  QrCode,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -82,6 +83,12 @@ const adminItems: NavItem[] = [
     title: "Audit Logs",
     href: "/dashboard/audit-logs",
     icon: Shield,
+    roles: ["ADMIN"],
+  },
+  {
+    title: "QR Registration",
+    href: "/dashboard/qr-registration",
+    icon: QrCode,
     roles: ["ADMIN"],
   },
 ];

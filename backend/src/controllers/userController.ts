@@ -87,7 +87,7 @@ export const createUser = async (
         password: hashedPassword,
         firstName: data.name.split(" ")[0] || data.name,
         lastName: data.name.split(" ").slice(1).join(" ") || "",
-        phone: data.department, // Store department in phone field for now
+        department: data.department,
         role: data.role,
         isSuperAdmin: false,
         isActive: true,
@@ -99,6 +99,7 @@ export const createUser = async (
         firstName: true,
         lastName: true,
         phone: true,
+        department: true,
         role: true,
         isActive: true,
         passwordChanged: true,

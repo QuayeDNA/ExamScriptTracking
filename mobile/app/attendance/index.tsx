@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
 // import AsyncStorage from "@react-native-async-storage/async-storage"; // Temporarily commented out
 import * as Application from "expo-application";
+import * as Device from "expo-device";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,8 @@ import {
   type ClassAttendanceRecord,
   type AttendanceSession,
 } from "@/api/classAttendance";
+import { useAuthStore } from "@/store/auth";
+import { authApi } from "@/api/auth";
 
 const DEVICE_ID_KEY = "attendance_device_id";
 const DEVICE_NAME_KEY = "attendance_device_name";
@@ -75,6 +78,34 @@ async function saveDeviceName(name: string) {
   await asyncStorage.setItem(DEVICE_NAME_KEY, name);
 }
 
+async function getDeviceName() {
+  try {
+    if (Platform.OS === "web") {
+      return `Web Browser`;
+    } else {
+      // Get device name using expo-device
+      const deviceName = await Device.getDeviceTypeAsync();
+      const modelName =
+        Device.modelName || Device.deviceName || "Unknown Device";
+
+      // Create a readable device name
+      let readableName = modelName;
+
+      // Add OS info
+      if (Platform.OS === "ios") {
+        readableName += " (iOS)";
+      } else if (Platform.OS === "android") {
+        readableName += " (Android)";
+      }
+
+      return readableName;
+    }
+  } catch (error) {
+    console.warn("Failed to get device name:", error);
+    return Platform.OS === "web" ? "Web Browser" : "Mobile Device";
+  }
+}
+
 export default function AttendanceDashboard() {
   const colors = useThemeColors();
   const router = useRouter();
@@ -94,14 +125,127 @@ export default function AttendanceDashboard() {
   const [lecturerName, setLecturerName] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Autocomplete data
+  const [autocompleteData, setAutocompleteData] = useState<{
+    lecturerNames: string[];
+    courseNames: string[];
+    courseCodes: string[];
+  }>({
+    lecturerNames: [],
+    courseNames: [],
+    courseCodes: [],
+  });
+  const [showLecturerDropdown, setShowLecturerDropdown] = useState(false);
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
+  const [showCourseCodeDropdown, setShowCourseCodeDropdown] = useState(false);
+
   useEffect(() => {
     (async () => {
       const id = await getOrCreateDeviceId();
-      const storedName = (await getStoredDeviceName()) || "";
+      let storedName = (await getStoredDeviceName()) || "";
+
+      // If no device name is stored, get the device name and save it
+      if (!storedName) {
+        storedName = await getDeviceName();
+        if (storedName) {
+          await saveDeviceName(storedName);
+        }
+      }
+
       setDeviceId(id);
       setDeviceName(storedName);
+
+      // Load autocomplete data
+      loadAutocompleteData();
     })();
   }, []);
+
+  const loadAutocompleteData = async () => {
+    try {
+      const data = await classAttendanceApi.getAutocompleteValues();
+      setAutocompleteData(data);
+    } catch (error) {
+      console.warn("Failed to load autocomplete data:", error);
+      // Continue without autocomplete data
+    }
+  };
+
+  // Filter functions for autocomplete
+  const getFilteredLecturerNames = (query: string) => {
+    if (!query) return [];
+    return autocompleteData.lecturerNames
+      .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 5); // Limit to 5 suggestions
+  };
+
+  const getFilteredCourseNames = (query: string) => {
+    if (!query) return [];
+    return autocompleteData.courseNames
+      .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 5);
+  };
+
+  const getFilteredCourseCodes = (query: string) => {
+    if (!query) return [];
+    return autocompleteData.courseCodes
+      .filter((code) => code.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 5);
+  };
+
+  // Autocomplete Input Component
+  const AutocompleteInput = ({
+    value,
+    onChangeText,
+    placeholder,
+    suggestions,
+    showDropdown,
+    onFocus,
+    onBlur,
+    onSelectSuggestion,
+  }: {
+    value: string;
+    onChangeText: (text: string) => void;
+    placeholder: string;
+    suggestions: string[];
+    showDropdown: boolean;
+    onFocus: () => void;
+    onBlur: () => void;
+    onSelectSuggestion: (suggestion: string) => void;
+  }) => (
+    <View style={styles.inputContainer}>
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        style={styles.input}
+      />
+      {showDropdown && suggestions.length > 0 && (
+        <View
+          style={[
+            styles.dropdown,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          {suggestions.map((suggestion, index) => (
+            <TouchableOpacity
+              key={index}
+              onPress={() => onSelectSuggestion(suggestion)}
+              style={[
+                styles.dropdownItem,
+                { borderBottomColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.dropdownText, { color: colors.foreground }]}>
+                {suggestion}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
 
   useEffect(() => {
     if (!deviceId) return;
@@ -150,6 +294,26 @@ export default function AttendanceDashboard() {
         type: "error",
         text1: "Device name",
         text2: error?.error || "Could not save device name",
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+      const { logout } = useAuthStore.getState();
+      await logout();
+      Toast.show({
+        type: "success",
+        text1: "Logged Out",
+        text2: "You have been successfully logged out",
+      });
+      router.replace("/login");
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Logout Failed",
+        text2: error.error || "An error occurred",
       });
     }
   };
@@ -247,16 +411,17 @@ export default function AttendanceDashboard() {
       <View style={[styles.header, { backgroundColor: colors.card }]}>
         <View style={styles.headerContent}>
           <H2 style={{ color: colors.foreground }}>Attendance</H2>
-          <View style={styles.headerMeta}>
-            <Badge variant={session?.isActive ? "default" : "secondary"}>
-              {session?.isActive ? "Active" : "Inactive"}
-            </Badge>
-            <Text
-              style={[styles.deviceText, { color: colors.foregroundMuted }]}
-            >
-              {deviceName || `Device ${deviceId?.slice(0, 6)}`}
-            </Text>
-          </View>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <Ionicons name="log-out-outline" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.headerMeta}>
+          <Badge variant={session?.isActive ? "default" : "secondary"}>
+            {session?.isActive ? "Active" : "Inactive"}
+          </Badge>
+          <Text style={[styles.deviceText, { color: colors.foregroundMuted }]}>
+            {deviceName || `Device ${deviceId?.slice(0, 6)}`}
+          </Text>
         </View>
       </View>
 
@@ -315,23 +480,59 @@ export default function AttendanceDashboard() {
                 >
                   Start Recording
                 </Text>
-                <Input
-                  placeholder="Lecturer Name"
+                <AutocompleteInput
                   value={lecturerName}
-                  onChangeText={setLecturerName}
-                  style={styles.input}
+                  onChangeText={(text) => {
+                    setLecturerName(text);
+                    setShowLecturerDropdown(text.length > 0);
+                  }}
+                  placeholder="Lecturer Name"
+                  suggestions={getFilteredLecturerNames(lecturerName)}
+                  showDropdown={showLecturerDropdown}
+                  onFocus={() => setShowLecturerDropdown(true)}
+                  onBlur={() =>
+                    setTimeout(() => setShowLecturerDropdown(false), 200)
+                  }
+                  onSelectSuggestion={(suggestion) => {
+                    setLecturerName(suggestion);
+                    setShowLecturerDropdown(false);
+                  }}
                 />
-                <Input
-                  placeholder="Course Code"
+                <AutocompleteInput
                   value={courseCode}
-                  onChangeText={setCourseCode}
-                  style={styles.input}
+                  onChangeText={(text) => {
+                    setCourseCode(text);
+                    setShowCourseCodeDropdown(text.length > 0);
+                  }}
+                  placeholder="Course Code"
+                  suggestions={getFilteredCourseCodes(courseCode)}
+                  showDropdown={showCourseCodeDropdown}
+                  onFocus={() => setShowCourseCodeDropdown(true)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCourseCodeDropdown(false), 200)
+                  }
+                  onSelectSuggestion={(suggestion) => {
+                    setCourseCode(suggestion);
+                    setShowCourseCodeDropdown(false);
+                  }}
                 />
-                <Input
-                  placeholder="Course Name"
+                <AutocompleteInput
                   value={courseName}
-                  onChangeText={setCourseName}
-                  style={styles.input}
+                  onChangeText={(text) => {
+                    setCourseName(text);
+                    setShowCourseDropdown(text.length > 0);
+                  }}
+                  placeholder="Course Name"
+                  suggestions={getFilteredCourseNames(courseName)}
+                  showDropdown={showCourseDropdown}
+                  onFocus={() => setShowCourseDropdown(true)}
+                  onBlur={() =>
+                    setTimeout(() => setShowCourseDropdown(false), 200)
+                  }
+                  onSelectSuggestion={(suggestion) => {
+                    setCourseName(suggestion);
+                    setShowCourseDropdown(false);
+                  }}
                 />
                 <Input
                   placeholder="Notes (optional)"
@@ -584,6 +785,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  logoutButton: {
+    padding: 8,
+  },
   headerMeta: {
     flexDirection: "row",
     alignItems: "center",
@@ -679,5 +883,31 @@ const styles = StyleSheet.create({
   },
   recordSeparator: {
     marginVertical: 12,
+  },
+  inputContainer: {
+    position: "relative",
+    marginBottom: 16,
+  },
+  dropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: 8,
+    maxHeight: 150,
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownText: {
+    fontSize: 14,
   },
 });

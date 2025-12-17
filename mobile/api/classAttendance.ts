@@ -110,4 +110,12 @@ export const classAttendanceApi = {
   ): Promise<{ record: ClassAttendanceRecord }> => {
     return apiClient.get(`/class-attendance/records/${recordId}`);
   },
+
+  getAutocompleteValues: async (): Promise<{
+    lecturerNames: string[];
+    courseNames: string[];
+    courseCodes: string[];
+  }> => {
+    return apiClient.get("/class-attendance/autocomplete");
+  },
 };

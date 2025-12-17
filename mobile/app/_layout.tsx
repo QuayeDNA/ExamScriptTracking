@@ -33,7 +33,9 @@ function useProtectedRoute() {
     // Wait for router to be ready
     const timeout = setTimeout(() => {
       const inAuthFlow =
-        firstSegment === "login" || firstSegment === "change-password";
+        firstSegment === "login" ||
+        firstSegment === "change-password" ||
+        firstSegment === "qr-registration";
 
       // Redirect unauthenticated users to login
       if (!isAuthenticated && !inAuthFlow) {

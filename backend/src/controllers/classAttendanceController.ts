@@ -266,6 +266,7 @@ export const createAttendanceRecord = async (req: Request, res: Response) => {
     const record = await prisma.classAttendanceRecord.create({
       data: {
         sessionId: validatedData.sessionId,
+        userId: req.user!.userId,
         lecturerName: validatedData.lecturerName,
         courseName: validatedData.courseName,
         courseCode: validatedData.courseCode,
@@ -593,5 +594,76 @@ export const getAttendanceRecord = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Get attendance record error:", error);
     res.status(500).json({ error: "Failed to get attendance record" });
+  }
+};
+
+/**
+ * Get distinct values for autocomplete (lecturer names, course names, course codes)
+ */
+export const getAutocompleteValues = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    // Get distinct lecturer names
+    const lecturerNames = await prisma.classAttendanceRecord.findMany({
+      where: {
+        userId: userId, // Only get records created by this user
+        lecturerName: {
+          not: null,
+        },
+      },
+      select: {
+        lecturerName: true,
+      },
+      distinct: ["lecturerName"],
+      orderBy: {
+        lecturerName: "asc",
+      },
+    });
+
+    // Get distinct course names
+    const courseNames = await prisma.classAttendanceRecord.findMany({
+      where: {
+        userId: userId,
+        courseName: {
+          not: null,
+        },
+      },
+      select: {
+        courseName: true,
+      },
+      distinct: ["courseName"],
+      orderBy: {
+        courseName: "asc",
+      },
+    });
+
+    // Get distinct course codes
+    const courseCodes = await prisma.classAttendanceRecord.findMany({
+      where: {
+        userId: userId,
+        courseCode: {
+          not: null,
+        },
+      },
+      select: {
+        courseCode: true,
+      },
+      distinct: ["courseCode"],
+      orderBy: {
+        courseCode: "asc",
+      },
+    });
+
+    res.json({
+      lecturerNames: lecturerNames
+        .map((item) => item.lecturerName)
+        .filter(Boolean),
+      courseNames: courseNames.map((item) => item.courseName).filter(Boolean),
+      courseCodes: courseCodes.map((item) => item.courseCode).filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Get autocomplete values error:", error);
+    res.status(500).json({ error: "Failed to get autocomplete values" });
   }
 };

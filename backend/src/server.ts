@@ -13,6 +13,7 @@ import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
 import classAttendanceRoutes from "./routes/classAttendance";
 import incidentRoutes from "./routes/incident";
+import registrationRoutes from "./routes/registration";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 import { initializeSocketServer } from "./socket/socketServer";
 
@@ -498,6 +499,7 @@ app.use("/api/class-attendance", classAttendanceRoutes);
 app.use("/api/batch-transfers", batchTransferRoutes);
 app.use("/api/incidents", incidentRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/registration", registrationRoutes);
 app.use("/api/reports/export", exportRoutes);
 
 // 404 handler

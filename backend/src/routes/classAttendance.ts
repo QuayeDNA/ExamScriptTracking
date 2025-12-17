@@ -10,6 +10,7 @@ import {
   getAttendanceRecords,
   getAttendanceRecord,
   getAttendanceRecordById,
+  getAutocompleteValues,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -47,6 +48,13 @@ router.post(
   "/records/:recordId/end",
   authorize(Role.ADMIN, Role.CLASS_REP),
   endAttendanceRecord
+);
+
+// Get autocomplete values (lecturer names, course names, course codes)
+router.get(
+  "/autocomplete",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  getAutocompleteValues
 );
 
 // Get attendance records for a session
