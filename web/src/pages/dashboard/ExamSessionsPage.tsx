@@ -326,6 +326,12 @@ export default function ExamSessionsPage() {
   };
 
   const openDeleteModal = (session: ExamSession) => {
+    if (session._count?.attendances > 0) {
+      toast.error(
+        `Cannot delete exam session with ${session._count.attendances} attendance record(s)`
+      );
+      return;
+    }
     setSelectedSession(session);
     setIsDeleteModalOpen(true);
   };
@@ -564,7 +570,12 @@ export default function ExamSessionsPage() {
                                 onClick={() => openDeleteModal(session)}
                                 variant="ghost"
                                 size="icon"
-                                title="Delete"
+                                title={
+                                  session._count?.attendances > 0
+                                    ? `Cannot delete: ${session._count.attendances} attendance record(s) exist`
+                                    : "Delete"
+                                }
+                                disabled={session._count?.attendances > 0}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -854,7 +865,8 @@ export default function ExamSessionsPage() {
             </DialogTitle>
             <DialogDescription>
               Are you sure you want to delete {selectedSession?.courseCode} -{" "}
-              {selectedSession?.courseName}? This action cannot be undone.
+              {selectedSession?.courseName}? This action cannot be undone and
+              will permanently remove the exam session and all associated data.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
