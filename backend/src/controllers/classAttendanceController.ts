@@ -32,6 +32,14 @@ const createAttendanceRecordSchema = z.object({
 const recordStudentAttendanceSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
   studentId: z.string().min(1, "Student ID is required"), // Accept any string (UUID or index number)
+  studentData: z
+    .object({
+      indexNumber: z.string(),
+      name: z.string(),
+      program: z.string().optional(),
+      level: z.string().optional(),
+    })
+    .optional(),
 });
 
 const endAttendanceRecordSchema = z.object({
@@ -320,11 +328,45 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
     }
 
     // Find student by UUID or index number
-    const student = await prisma.student.findFirst({
+    let student = await prisma.student.findFirst({
       where: {
         OR: [{ id: studentIdentifier }, { indexNumber: studentIdentifier }],
       },
     });
+
+    // If student not found and studentData provided, create the student
+    if (!student && validatedData.studentData) {
+      // Split name into first and last name
+      const nameParts = validatedData.studentData.name.trim().split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      try {
+        student = await prisma.student.create({
+          data: {
+            indexNumber: validatedData.studentData.indexNumber,
+            firstName,
+            lastName,
+            program: validatedData.studentData.program || null,
+            level: validatedData.studentData.level
+              ? parseInt(validatedData.studentData.level)
+              : null,
+          },
+        });
+      } catch (createError: any) {
+        // If creation fails (e.g., duplicate index number), try to find again
+        student = await prisma.student.findFirst({
+          where: {
+            OR: [{ id: studentIdentifier }, { indexNumber: studentIdentifier }],
+          },
+        });
+        if (!student) {
+          return res
+            .status(400)
+            .json({ error: "Failed to create or find student" });
+        }
+      }
+    }
 
     if (!student) {
       return res.status(404).json({ error: "Student not found" });

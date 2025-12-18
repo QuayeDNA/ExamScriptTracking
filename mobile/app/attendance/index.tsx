@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
-// import AsyncStorage from "@react-native-async-storage/async-storage"; // Temporarily commented out
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,8 +37,8 @@ const DEVICE_NAME_KEY = "attendance_device_name";
 // Safe AsyncStorage wrapper
 let asyncStorage: any = null;
 try {
-  asyncStorage = require("@react-native-async-storage/async-storage").default;
-} catch (e) {
+  asyncStorage = AsyncStorage;
+} catch {
   console.warn("AsyncStorage not available, using fallback storage");
 }
 
@@ -84,7 +84,6 @@ async function getDeviceName() {
       return `Web Browser`;
     } else {
       // Get device name using expo-device
-      const deviceName = await Device.getDeviceTypeAsync();
       const modelName =
         Device.modelName || Device.deviceName || "Unknown Device";
 
@@ -125,20 +124,6 @@ export default function AttendanceDashboard() {
   const [lecturerName, setLecturerName] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Autocomplete data
-  const [autocompleteData, setAutocompleteData] = useState<{
-    lecturerNames: string[];
-    courseNames: string[];
-    courseCodes: string[];
-  }>({
-    lecturerNames: [],
-    courseNames: [],
-    courseCodes: [],
-  });
-  const [showLecturerDropdown, setShowLecturerDropdown] = useState(false);
-  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
-  const [showCourseCodeDropdown, setShowCourseCodeDropdown] = useState(false);
-
   useEffect(() => {
     (async () => {
       const id = await getOrCreateDeviceId();
@@ -154,98 +139,8 @@ export default function AttendanceDashboard() {
 
       setDeviceId(id);
       setDeviceName(storedName);
-
-      // Load autocomplete data
-      loadAutocompleteData();
     })();
   }, []);
-
-  const loadAutocompleteData = async () => {
-    try {
-      const data = await classAttendanceApi.getAutocompleteValues();
-      setAutocompleteData(data);
-    } catch (error) {
-      console.warn("Failed to load autocomplete data:", error);
-      // Continue without autocomplete data
-    }
-  };
-
-  // Filter functions for autocomplete
-  const getFilteredLecturerNames = (query: string) => {
-    if (!query) return [];
-    return autocompleteData.lecturerNames
-      .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 5); // Limit to 5 suggestions
-  };
-
-  const getFilteredCourseNames = (query: string) => {
-    if (!query) return [];
-    return autocompleteData.courseNames
-      .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 5);
-  };
-
-  const getFilteredCourseCodes = (query: string) => {
-    if (!query) return [];
-    return autocompleteData.courseCodes
-      .filter((code) => code.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 5);
-  };
-
-  // Autocomplete Input Component
-  const AutocompleteInput = ({
-    value,
-    onChangeText,
-    placeholder,
-    suggestions,
-    showDropdown,
-    onFocus,
-    onBlur,
-    onSelectSuggestion,
-  }: {
-    value: string;
-    onChangeText: (text: string) => void;
-    placeholder: string;
-    suggestions: string[];
-    showDropdown: boolean;
-    onFocus: () => void;
-    onBlur: () => void;
-    onSelectSuggestion: (suggestion: string) => void;
-  }) => (
-    <View style={styles.inputContainer}>
-      <Input
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        style={styles.input}
-      />
-      {showDropdown && suggestions.length > 0 && (
-        <View
-          style={[
-            styles.dropdown,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          {suggestions.map((suggestion, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => onSelectSuggestion(suggestion)}
-              style={[
-                styles.dropdownItem,
-                { borderBottomColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.dropdownText, { color: colors.foreground }]}>
-                {suggestion}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </View>
-  );
 
   useEffect(() => {
     if (!deviceId) return;
@@ -480,59 +375,23 @@ export default function AttendanceDashboard() {
                 >
                   Start Recording
                 </Text>
-                <AutocompleteInput
-                  value={lecturerName}
-                  onChangeText={(text) => {
-                    setLecturerName(text);
-                    setShowLecturerDropdown(text.length > 0);
-                  }}
+                <Input
                   placeholder="Lecturer Name"
-                  suggestions={getFilteredLecturerNames(lecturerName)}
-                  showDropdown={showLecturerDropdown}
-                  onFocus={() => setShowLecturerDropdown(true)}
-                  onBlur={() =>
-                    setTimeout(() => setShowLecturerDropdown(false), 200)
-                  }
-                  onSelectSuggestion={(suggestion) => {
-                    setLecturerName(suggestion);
-                    setShowLecturerDropdown(false);
-                  }}
+                  value={lecturerName}
+                  onChangeText={setLecturerName}
+                  style={styles.input}
                 />
-                <AutocompleteInput
-                  value={courseCode}
-                  onChangeText={(text) => {
-                    setCourseCode(text);
-                    setShowCourseCodeDropdown(text.length > 0);
-                  }}
+                <Input
                   placeholder="Course Code"
-                  suggestions={getFilteredCourseCodes(courseCode)}
-                  showDropdown={showCourseCodeDropdown}
-                  onFocus={() => setShowCourseCodeDropdown(true)}
-                  onBlur={() =>
-                    setTimeout(() => setShowCourseCodeDropdown(false), 200)
-                  }
-                  onSelectSuggestion={(suggestion) => {
-                    setCourseCode(suggestion);
-                    setShowCourseCodeDropdown(false);
-                  }}
+                  value={courseCode}
+                  onChangeText={setCourseCode}
+                  style={styles.input}
                 />
-                <AutocompleteInput
-                  value={courseName}
-                  onChangeText={(text) => {
-                    setCourseName(text);
-                    setShowCourseDropdown(text.length > 0);
-                  }}
+                <Input
                   placeholder="Course Name"
-                  suggestions={getFilteredCourseNames(courseName)}
-                  showDropdown={showCourseDropdown}
-                  onFocus={() => setShowCourseDropdown(true)}
-                  onBlur={() =>
-                    setTimeout(() => setShowCourseDropdown(false), 200)
-                  }
-                  onSelectSuggestion={(suggestion) => {
-                    setCourseName(suggestion);
-                    setShowCourseDropdown(false);
-                  }}
+                  value={courseName}
+                  onChangeText={setCourseName}
+                  style={styles.input}
                 />
                 <Input
                   placeholder="Notes (optional)"
@@ -883,31 +742,5 @@ const styles = StyleSheet.create({
   },
   recordSeparator: {
     marginVertical: 12,
-  },
-  inputContainer: {
-    position: "relative",
-    marginBottom: 16,
-  },
-  dropdown: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    borderWidth: 1,
-    borderRadius: 8,
-    maxHeight: 150,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-  },
-  dropdownText: {
-    fontSize: 14,
   },
 });

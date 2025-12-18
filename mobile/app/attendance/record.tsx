@@ -164,6 +164,12 @@ export default function AttendanceRecordScreen() {
       await classAttendanceApi.recordStudentAttendance({
         recordId,
         studentId: student.indexNumber,
+        studentData: {
+          indexNumber: student.indexNumber,
+          name: student.name,
+          program: student.program,
+          level: student.level,
+        },
       });
 
       // Update local state
