@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { attendanceApi, type ExamAttendance } from "@/api/attendance";
+import { useSessionStore } from "@/store/session";
 
 export default function StudentAttendanceScreen() {
   const { studentId, examSessionId } = useLocalSearchParams<{
@@ -74,6 +75,14 @@ export default function StudentAttendanceScreen() {
       setActionLoading(true);
       const data = await attendanceApi.recordEntry(studentId, examSessionId);
       setAttendance(data);
+
+      // Set the current session for incident reporting location
+      if (data.examSession) {
+        useSessionStore.getState().setCurrentSession(data.examSession);
+        // Mark that first attendance has been recorded for this session
+        useSessionStore.getState().setFirstAttendanceRecorded(true);
+      }
+
       Alert.alert("Success", "Student entry recorded successfully");
     } catch (error: any) {
       Alert.alert("Error", error.error || "Failed to record entry");

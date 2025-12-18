@@ -105,3 +105,5 @@ export const isAuthenticated = async (): Promise<boolean> => {
   const token = await getToken();
   return token !== null;
 };
+
+export { storage };

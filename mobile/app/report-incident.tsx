@@ -19,9 +19,15 @@ import { Ionicons } from "@expo/vector-icons";
 // import * as ImagePicker from "expo-image-picker"; // Temporarily commented out
 import * as DocumentPicker from "expo-document-picker";
 import * as Location from "expo-location";
-import { useThemeColors } from "@/constants/design-system";
+import {
+  useThemeColors,
+  Spacing,
+  Typography,
+  BorderRadius,
+} from "@/constants/design-system";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   createIncident,
   uploadAttachments,
@@ -29,6 +35,11 @@ import {
   type IncidentSeverity,
   getIncidentTypeLabel,
 } from "@/api/incidents";
+import { useSessionStore } from "@/store/session";
+import {
+  searchIncidentTemplates,
+  type IncidentTemplate,
+} from "@/constants/incident-templates";
 
 // Safe ImagePicker wrapper
 let imagePicker: any = null;
@@ -48,6 +59,7 @@ interface AttachmentFile {
 
 export default function ReportIncidentScreen() {
   const colors = useThemeColors();
+  const { currentSession } = useSessionStore();
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<{
@@ -68,6 +80,10 @@ export default function ReportIncidentScreen() {
 
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [titleSuggestions, setTitleSuggestions] = useState<IncidentTemplate[]>(
+    []
+  );
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Handle form field change
   const handleChange = (field: string, value: any) => {
@@ -111,6 +127,44 @@ export default function ReportIncidentScreen() {
     } finally {
       setFetchingLocation(false);
     }
+  };
+
+  // Auto-populate location from current exam session
+  const populateLocationFromSession = () => {
+    if (currentSession?.venue && !formData.location) {
+      handleChange("location", currentSession.venue);
+    }
+  };
+
+  // Handle title input change with smart suggestions
+  const handleTitleChange = (text: string) => {
+    handleChange("title", text);
+
+    if (text.trim().length > 0) {
+      const suggestions = searchIncidentTemplates(text, formData.type);
+      setTitleSuggestions(suggestions.slice(0, 5)); // Limit to 5 suggestions
+      setShowSuggestions(suggestions.length > 0);
+    } else {
+      setTitleSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  // Select a template suggestion
+  const selectTemplate = (template: IncidentTemplate) => {
+    handleChange("title", template.title);
+    handleChange("description", template.description);
+    handleChange("severity", template.severity);
+    setTitleSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  // Handle incident type change - update suggestions
+  const handleTypeChange = (type: IncidentType) => {
+    handleChange("type", type);
+    // Clear suggestions when type changes
+    setTitleSuggestions([]);
+    setShowSuggestions(false);
   };
 
   // Take photo with camera
@@ -308,18 +362,23 @@ export default function ReportIncidentScreen() {
           </View>
         </View>
 
-        <View className="px-4 gap-4">
+        <View style={{ paddingHorizontal: Spacing[4], gap: Spacing[4] }}>
           {/* Type Selection */}
           <Card>
-            <View className="p-4">
+            <View style={{ padding: Spacing[4] }}>
               <Text
-                className="text-sm font-semibold mb-3"
-                style={{ color: colors.foreground }}
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[3] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
               >
                 Incident Type *
               </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-2">
+                <View style={{ flexDirection: "row", gap: Spacing[2] }}>
                   {(
                     [
                       "MISSING_SCRIPT",
@@ -334,19 +393,26 @@ export default function ReportIncidentScreen() {
                   ).map((type) => (
                     <TouchableOpacity
                       key={type}
-                      onPress={() => handleChange("type", type)}
-                      className={`px-4 py-2 rounded-lg ${formData.type === type ? "bg-primary" : "bg-muted"}`}
+                      onPress={() => handleTypeChange(type)}
                       style={{
+                        paddingHorizontal: Spacing[3],
+                        paddingVertical: Spacing[2],
+                        borderRadius: BorderRadius.md,
                         borderWidth: 1,
                         borderColor:
                           formData.type === type
                             ? colors.primary
                             : colors.border,
+                        backgroundColor:
+                          formData.type === type
+                            ? colors.primary
+                            : colors.muted,
                       }}
                     >
                       <Text
-                        className="text-sm font-medium"
                         style={{
+                          fontSize: Typography.fontSize.sm,
+                          fontWeight: Typography.fontWeight.medium,
                           color:
                             formData.type === type
                               ? "white"
@@ -364,32 +430,45 @@ export default function ReportIncidentScreen() {
 
           {/* Severity Selection */}
           <Card>
-            <View className="p-4">
+            <View style={{ padding: Spacing[4] }}>
               <Text
-                className="text-sm font-semibold mb-3"
-                style={{ color: colors.foreground }}
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[3] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
               >
                 Severity Level *
               </Text>
-              <View className="flex-row gap-2">
+              <View style={{ flexDirection: "row", gap: Spacing[2] }}>
                 {(
                   ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as IncidentSeverity[]
                 ).map((severity) => (
                   <TouchableOpacity
                     key={severity}
                     onPress={() => handleChange("severity", severity)}
-                    className={`flex-1 py-3 rounded-lg items-center ${formData.severity === severity ? "bg-primary" : "bg-muted"}`}
                     style={{
+                      flex: 1,
+                      paddingVertical: Spacing[3],
+                      borderRadius: BorderRadius.md,
+                      alignItems: "center",
                       borderWidth: 1,
                       borderColor:
                         formData.severity === severity
                           ? colors.primary
                           : colors.border,
+                      backgroundColor:
+                        formData.severity === severity
+                          ? colors.primary
+                          : colors.muted,
                     }}
                   >
                     <Text
-                      className="text-sm font-medium"
                       style={{
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
                         color:
                           formData.severity === severity
                             ? "white"
@@ -404,106 +483,251 @@ export default function ReportIncidentScreen() {
             </View>
           </Card>
 
-          {/* Title */}
+          {/* Title with Smart Suggestions */}
           <Card>
-            <View className="p-4">
+            <View style={{ padding: Spacing[4] }}>
               <Text
-                className="text-sm font-semibold mb-2"
-                style={{ color: colors.foreground }}
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[2] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
               >
                 Title *
               </Text>
-              <TextInput
-                className="p-3 rounded-lg text-base"
-                placeholder="Brief description of the incident"
-                placeholderTextColor={colors.foregroundMuted}
-                value={formData.title}
-                onChangeText={(value) => handleChange("title", value)}
-                style={{
-                  backgroundColor: colors.background,
-                  color: colors.foreground,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              />
+              <View style={{ position: "relative" }}>
+                <TextInput
+                  style={{
+                    padding: Spacing[3],
+                    borderRadius: BorderRadius.md,
+                    fontSize: Typography.fontSize.base,
+                    backgroundColor: colors.background,
+                    color: colors.foreground,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                  placeholder="Brief description of the incident"
+                  placeholderTextColor={colors.foregroundMuted}
+                  value={formData.title}
+                  onChangeText={handleTitleChange}
+                  onFocus={() => {
+                    if (titleSuggestions.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay hiding suggestions to allow selection
+                    setTimeout(() => setShowSuggestions(false), 200);
+                  }}
+                />
+
+                {/* Smart Suggestions */}
+                {showSuggestions && titleSuggestions.length > 0 && (
+                  <Card
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      zIndex: 1000,
+                      marginTop: Spacing[1],
+                      maxHeight: 200,
+                    }}
+                  >
+                    <ScrollView showsVerticalScrollIndicator={false}>
+                      {titleSuggestions.map((template) => (
+                        <TouchableOpacity
+                          key={template.id}
+                          onPress={() => selectTemplate(template)}
+                          style={{
+                            padding: Spacing[3],
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: Typography.fontSize.sm,
+                              fontWeight: Typography.fontWeight.medium,
+                              color: colors.foreground,
+                              marginBottom: Spacing[1],
+                            }}
+                            numberOfLines={1}
+                          >
+                            {template.title}
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: Typography.fontSize.xs,
+                              color: colors.foregroundMuted,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {template.description}
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              marginTop: Spacing[1],
+                            }}
+                          >
+                            <Badge
+                              variant={
+                                template.severity === "CRITICAL"
+                                  ? "error"
+                                  : template.severity === "HIGH"
+                                    ? "warning"
+                                    : template.severity === "MEDIUM"
+                                      ? "default"
+                                      : "secondary"
+                              }
+                              style={{ marginRight: Spacing[2] }}
+                            >
+                              {template.severity}
+                            </Badge>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </Card>
+                )}
+              </View>
             </View>
           </Card>
 
           {/* Description */}
           <Card>
-            <View className="p-4">
+            <View style={{ padding: Spacing[4] }}>
               <Text
-                className="text-sm font-semibold mb-2"
-                style={{ color: colors.foreground }}
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[2] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
               >
                 Description *
               </Text>
               <TextInput
-                className="p-3 rounded-lg text-base"
+                style={{
+                  padding: Spacing[3],
+                  borderRadius: BorderRadius.md,
+                  fontSize: Typography.fontSize.base,
+                  backgroundColor: colors.background,
+                  color: colors.foreground,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  minHeight: 120,
+                  textAlignVertical: "top",
+                }}
                 placeholder="Detailed description of what happened..."
                 placeholderTextColor={colors.foregroundMuted}
                 value={formData.description}
                 onChangeText={(value) => handleChange("description", value)}
                 multiline
                 numberOfLines={5}
-                textAlignVertical="top"
-                style={{
-                  backgroundColor: colors.background,
-                  color: colors.foreground,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  minHeight: 120,
-                }}
               />
             </View>
           </Card>
 
           {/* Location */}
           <Card>
-            <View className="p-4">
-              <View className="flex-row items-center justify-between mb-2">
+            <View style={{ padding: Spacing[4] }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: Spacing[2],
+                }}
+              >
                 <Text
-                  className="text-sm font-semibold"
-                  style={{ color: colors.foreground }}
+                  style={[
+                    { color: colors.foreground },
+                    {
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    },
+                  ]}
                 >
                   Location
                 </Text>
-                <TouchableOpacity
-                  onPress={getCurrentLocation}
-                  disabled={fetchingLocation}
-                  className="flex-row items-center gap-1"
-                >
-                  {fetchingLocation ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="location"
-                        size={16}
-                        color={colors.primary}
-                      />
+                <View style={{ flexDirection: "row", gap: Spacing[2] }}>
+                  {currentSession?.venue && (
+                    <TouchableOpacity
+                      onPress={populateLocationFromSession}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: Spacing[1],
+                        paddingHorizontal: Spacing[2],
+                        paddingVertical: Spacing[1],
+                        borderRadius: BorderRadius.sm,
+                        backgroundColor: colors.info,
+                      }}
+                    >
+                      <Ionicons name="school" size={14} color="white" />
                       <Text
-                        className="text-sm font-medium"
-                        style={{ color: colors.primary }}
+                        style={{
+                          fontSize: Typography.fontSize.xs,
+                          fontWeight: Typography.fontWeight.medium,
+                          color: "white",
+                        }}
                       >
-                        Use Current
+                        Use Venue
                       </Text>
-                    </>
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={getCurrentLocation}
+                    disabled={fetchingLocation}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: Spacing[1],
+                      paddingHorizontal: Spacing[2],
+                      paddingVertical: Spacing[1],
+                      borderRadius: BorderRadius.sm,
+                      backgroundColor: colors.primary,
+                    }}
+                  >
+                    {fetchingLocation ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <>
+                        <Ionicons name="location" size={14} color="white" />
+                        <Text
+                          style={{
+                            fontSize: Typography.fontSize.xs,
+                            fontWeight: Typography.fontWeight.medium,
+                            color: "white",
+                          }}
+                        >
+                          Use Current
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
               <TextInput
-                className="p-3 rounded-lg text-base"
-                placeholder="Where did this occur?"
-                placeholderTextColor={colors.foregroundMuted}
-                value={formData.location}
-                onChangeText={(value) => handleChange("location", value)}
                 style={{
+                  padding: Spacing[3],
+                  borderRadius: BorderRadius.md,
+                  fontSize: Typography.fontSize.base,
                   backgroundColor: colors.background,
                   color: colors.foreground,
                   borderWidth: 1,
                   borderColor: colors.border,
                 }}
+                placeholder="Where did this occur?"
+                placeholderTextColor={colors.foregroundMuted}
+                value={formData.location}
+                onChangeText={(value) => handleChange("location", value)}
               />
             </View>
           </Card>
@@ -514,27 +738,53 @@ export default function ReportIncidentScreen() {
               onPress={() =>
                 handleChange("isConfidential", !formData.isConfidential)
               }
-              className="p-4 flex-row items-center justify-between"
+              style={{
+                padding: Spacing[4],
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
             >
-              <View className="flex-1 mr-3">
+              <View style={{ flex: 1, marginRight: Spacing[3] }}>
                 <Text
-                  className="text-sm font-semibold mb-1"
-                  style={{ color: colors.foreground }}
+                  style={[
+                    { color: colors.foreground, marginBottom: Spacing[1] },
+                    {
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    },
+                  ]}
                 >
                   Mark as Confidential
                 </Text>
                 <Text
-                  className="text-xs"
-                  style={{ color: colors.foregroundMuted }}
+                  style={[
+                    { color: colors.foregroundMuted },
+                    { fontSize: Typography.fontSize.xs },
+                  ]}
                 >
                   Restrict access to authorized personnel only
                 </Text>
               </View>
               <View
-                className={`w-12 h-7 rounded-full p-1 ${formData.isConfidential ? "bg-primary" : "bg-muted"}`}
+                style={{
+                  width: Spacing[12],
+                  height: Spacing[7],
+                  borderRadius: BorderRadius.full,
+                  padding: Spacing[1],
+                  backgroundColor: formData.isConfidential
+                    ? colors.primary
+                    : colors.muted,
+                }}
               >
                 <View
-                  className={`w-5 h-5 rounded-full bg-white ${formData.isConfidential ? "ml-auto" : ""}`}
+                  style={{
+                    width: Spacing[5],
+                    height: Spacing[5],
+                    borderRadius: BorderRadius.full,
+                    backgroundColor: "white",
+                    marginLeft: formData.isConfidential ? "auto" : 0,
+                  }}
                 />
               </View>
             </TouchableOpacity>
@@ -542,24 +792,41 @@ export default function ReportIncidentScreen() {
 
           {/* Attachments */}
           <Card>
-            <View className="p-4">
+            <View style={{ padding: Spacing[4] }}>
               <Text
-                className="text-sm font-semibold mb-3"
-                style={{ color: colors.foreground }}
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[3] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
               >
                 Attachments ({attachments.length}/5)
               </Text>
 
               {/* Attachment Actions */}
-              <View className="flex-row gap-2 mb-3">
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: Spacing[2],
+                  marginBottom: Spacing[3],
+                }}
+              >
                 <Button
                   variant="outline"
                   size="sm"
                   onPress={takePhoto}
                   disabled={attachments.length >= 5}
-                  className="flex-1"
+                  style={{ flex: 1 }}
                 >
-                  <View className="flex-row items-center gap-2">
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: Spacing[2],
+                    }}
+                  >
                     <Ionicons
                       name="camera-outline"
                       size={18}
@@ -573,9 +840,15 @@ export default function ReportIncidentScreen() {
                   size="sm"
                   onPress={pickImage}
                   disabled={attachments.length >= 5}
-                  className="flex-1"
+                  style={{ flex: 1 }}
                 >
-                  <View className="flex-row items-center gap-2">
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: Spacing[2],
+                    }}
+                  >
                     <Ionicons
                       name="images-outline"
                       size={18}
@@ -589,9 +862,15 @@ export default function ReportIncidentScreen() {
                   size="sm"
                   onPress={pickDocument}
                   disabled={attachments.length >= 5}
-                  className="flex-1"
+                  style={{ flex: 1 }}
                 >
-                  <View className="flex-row items-center gap-2">
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: Spacing[2],
+                    }}
+                  >
                     <Ionicons
                       name="document-outline"
                       size={18}
@@ -606,10 +885,24 @@ export default function ReportIncidentScreen() {
               {attachments.map((file, index) => (
                 <View
                   key={index}
-                  className="flex-row items-center justify-between p-3 mb-2 rounded-lg"
-                  style={{ backgroundColor: colors.muted }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: Spacing[3],
+                    marginBottom: Spacing[2],
+                    borderRadius: BorderRadius.md,
+                    backgroundColor: colors.muted,
+                  }}
                 >
-                  <View className="flex-row items-center gap-2 flex-1">
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: Spacing[2],
+                      flex: 1,
+                    }}
+                  >
                     <Ionicons
                       name={
                         file.type.startsWith("image/")
@@ -622,8 +915,10 @@ export default function ReportIncidentScreen() {
                       color={colors.foreground}
                     />
                     <Text
-                      className="text-sm flex-1"
-                      style={{ color: colors.foreground }}
+                      style={[
+                        { color: colors.foreground, flex: 1 },
+                        { fontSize: Typography.fontSize.sm },
+                      ]}
                       numberOfLines={1}
                     >
                       {file.name}
@@ -640,15 +935,19 @@ export default function ReportIncidentScreen() {
               ))}
 
               {attachments.length === 0 && (
-                <View className="py-8 items-center">
+                <View
+                  style={{ paddingVertical: Spacing[8], alignItems: "center" }}
+                >
                   <Ionicons
                     name="cloud-upload-outline"
                     size={40}
                     color={colors.foregroundMuted}
                   />
                   <Text
-                    className="text-sm mt-2"
-                    style={{ color: colors.foregroundMuted }}
+                    style={[
+                      { color: colors.foregroundMuted, marginTop: Spacing[2] },
+                      { fontSize: Typography.fontSize.sm },
+                    ]}
                   >
                     No attachments added
                   </Text>
@@ -664,7 +963,7 @@ export default function ReportIncidentScreen() {
               loading || !formData.title.trim() || !formData.description.trim()
             }
             loading={loading}
-            className="mt-2"
+            style={{ marginTop: Spacing[2] }}
           >
             {loading ? "Submitting..." : "Submit Incident Report"}
           </Button>

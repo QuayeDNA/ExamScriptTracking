@@ -13,6 +13,7 @@ import "../global.css";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useAuthStore } from "@/store/auth";
+import { useSessionStore } from "@/store/session";
 import { useSocket } from "@/hooks/useSocket";
 import { useNotificationNavigation } from "@/hooks/useNotificationNavigation";
 import {
@@ -70,7 +71,8 @@ function useProtectedRoute() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const initialize = useAuthStore((state) => state.initialize);
+  const initializeAuth = useAuthStore((state) => state.initialize);
+  const initializeSession = useSessionStore((state) => state.initialize);
   const notificationListener = useRef<Notifications.Subscription | undefined>(
     undefined
   );
@@ -93,7 +95,8 @@ export default function RootLayout() {
   useSocket();
 
   useEffect(() => {
-    initialize();
+    initializeAuth();
+    initializeSession();
 
     // Configure notification behavior
     configureNotifications();
