@@ -137,6 +137,10 @@ export const studentsApi = {
     return apiClient.get<QRCodeResponse>(`/students/${id}/qr-code`);
   },
 
+  getStudentQR: async (indexNumber: string): Promise<Student> => {
+    return apiClient.get<Student>(`/students/qr/${indexNumber}`);
+  },
+
   getPrograms: async (): Promise<{ programs: string[] }> => {
     return apiClient.get<{ programs: string[] }>("/students/programs");
   },

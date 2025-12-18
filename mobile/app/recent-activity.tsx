@@ -14,9 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useThemeColors } from "@/constants/design-system";
+import { useThemeColors, Spacing, Typography } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
-import { H1, Text } from "@/components/ui/typography";
+import { H2, H3, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,85 +125,103 @@ export default function RecentActivityScreen() {
       edges={["top"]}
     >
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+            activeOpacity={0.7}
+          >
             <Ionicons name="arrow-back" size={24} color={colors.foreground} />
           </TouchableOpacity>
-          <H1 style={[styles.headerTitle, { color: colors.foreground }]}>
+          <H2 style={[styles.headerTitle, { color: colors.foreground }]}>
             Recent Activity
-          </H1>
-          <View style={{ width: 24 }} />
+          </H2>
+          <View style={{ width: 40 }} />
         </View>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Summary */}
+        {/* Summary Stats */}
         {activityData?.summary && (
-          <Card elevation="sm" style={styles.summaryCard}>
-            <View style={styles.summaryContent}>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryNumber, { color: colors.primary }]}>
-                  {activityData.summary.totalActivities}
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: colors.foregroundMuted },
-                  ]}
-                >
-                  Total Activities
-                </Text>
+          <View style={styles.section}>
+            <Card elevation="sm" style={styles.summaryCard}>
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryItem}>
+                  <Text
+                    style={[styles.summaryNumber, { color: colors.primary }]}
+                  >
+                    {activityData.summary.totalActivities}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: colors.foregroundMuted },
+                    ]}
+                  >
+                    Total Activities
+                  </Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text
+                    style={[styles.summaryNumber, { color: colors.success }]}
+                  >
+                    {activityData.summary.auditLogs}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: colors.foregroundMuted },
+                    ]}
+                  >
+                    Audit Logs
+                  </Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text
+                    style={[styles.summaryNumber, { color: colors.warning }]}
+                  >
+                    {activityData.summary.incidents}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: colors.foregroundMuted },
+                    ]}
+                  >
+                    Incidents
+                  </Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={[styles.summaryNumber, { color: colors.info }]}>
+                    {activityData.summary.transfers}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryLabel,
+                      { color: colors.foregroundMuted },
+                    ]}
+                  >
+                    Transfers
+                  </Text>
+                </View>
               </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryNumber, { color: colors.success }]}>
-                  {activityData.summary.auditLogs}
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: colors.foregroundMuted },
-                  ]}
-                >
-                  Audit Logs
-                </Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryNumber, { color: colors.warning }]}>
-                  {activityData.summary.incidents}
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: colors.foregroundMuted },
-                  ]}
-                >
-                  Incidents
-                </Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryNumber, { color: colors.info }]}>
-                  {activityData.summary.transfers}
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryLabel,
-                    { color: colors.foregroundMuted },
-                  ]}
-                >
-                  Transfers
-                </Text>
-              </View>
-            </View>
-          </Card>
+            </Card>
+          </View>
         )}
 
         {/* Clear All Button */}
         {activityData?.activities && activityData.activities.length > 0 && (
-          <View style={styles.clearButtonContainer}>
+          <View style={styles.section}>
             <Button
               variant="destructive"
               onPress={handleClearAll}
@@ -230,66 +248,81 @@ export default function RecentActivityScreen() {
             </Text>
           </View>
         ) : activityData?.activities && activityData.activities.length > 0 ? (
-          <View style={styles.activityList}>
-            {activityData.activities.map((activity) => (
-              <TouchableOpacity
-                key={activity.id}
-                style={[styles.activityItem, { backgroundColor: colors.card }]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  // Navigate based on activity type
-                  if (activity.type === "incident") {
-                    const incidentId = activity.id.replace("incident-", "");
-                    router.push(`/incident-details?id=${incidentId}` as any);
-                  }
-                }}
-              >
-                <View style={styles.activityIcon}>
-                  <Ionicons
-                    name={getActivityIcon(activity.type)}
-                    size={20}
-                    color={getActivityColor(activity.status, colors)}
-                  />
-                </View>
-                <View style={styles.activityContent}>
-                  <Text
-                    style={[styles.activityTitle, { color: colors.foreground }]}
-                    numberOfLines={1}
+          <View style={styles.section}>
+            <H3 style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Recent Activities
+            </H3>
+            <View style={styles.activityList}>
+              {activityData.activities.map((activity) => (
+                <Card
+                  key={activity.id}
+                  elevation="sm"
+                  style={styles.activityCard}
+                >
+                  <TouchableOpacity
+                    style={styles.activityItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      // Navigate based on activity type
+                      if (activity.type === "incident") {
+                        const incidentId = activity.id.replace("incident-", "");
+                        router.push(
+                          `/incident-details?id=${incidentId}` as any
+                        );
+                      }
+                    }}
                   >
-                    {activity.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.activityDescription,
-                      { color: colors.foregroundMuted },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {activity.description}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.activityTime,
-                      { color: colors.foregroundMuted },
-                    ]}
-                  >
-                    {new Date(activity.timestamp).toLocaleDateString()} •{" "}
-                    {new Date(activity.timestamp).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.activityStatus}>
-                  <Badge
-                    variant={getStatusVariant(activity.status)}
-                    style={styles.statusBadge}
-                  >
-                    {activity.status}
-                  </Badge>
-                </View>
-              </TouchableOpacity>
-            ))}
+                    <View style={styles.activityIcon}>
+                      <Ionicons
+                        name={getActivityIcon(activity.type)}
+                        size={20}
+                        color={getActivityColor(activity.status, colors)}
+                      />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text
+                        style={[
+                          styles.activityTitle,
+                          { color: colors.foreground },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {activity.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activityDescription,
+                          { color: colors.foregroundMuted },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {activity.description}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activityTime,
+                          { color: colors.foregroundMuted },
+                        ]}
+                      >
+                        {new Date(activity.timestamp).toLocaleDateString()} •{" "}
+                        {new Date(activity.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.activityStatus}>
+                      <Badge
+                        variant={getStatusVariant(activity.status)}
+                        style={styles.statusBadge}
+                      >
+                        {activity.status}
+                      </Badge>
+                    </View>
+                  </TouchableOpacity>
+                </Card>
+              ))}
+            </View>
           </View>
         ) : (
           <View style={styles.emptyState}>
@@ -298,9 +331,9 @@ export default function RecentActivityScreen() {
               size={64}
               color={colors.foregroundMuted}
             />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+            <H2 style={[styles.emptyTitle, { color: colors.foreground }]}>
               No Recent Activity
-            </Text>
+            </H2>
             <Text
               style={[
                 styles.emptyDescription,
@@ -322,124 +355,131 @@ const styles = StyleSheet.create({
   },
   header: {
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e5e5",
+    // borderBottomColor is set dynamically in the component using colors.border
   },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[4],
+  },
+  backButton: {
+    padding: Spacing[2],
+    marginLeft: -Spacing[2],
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+    flex: 1,
+    textAlign: "center",
   },
   scrollView: {
     flex: 1,
   },
-  summaryCard: {
-    margin: 16,
-    marginBottom: 8,
+  scrollContent: {
+    paddingBottom: 32,
   },
-  summaryContent: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  summaryCard: {
     padding: 16,
   },
+  summaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing[4],
+  },
   summaryItem: {
+    flex: 1,
+    minWidth: Spacing[20],
     alignItems: "center",
   },
   summaryNumber: {
-    fontSize: 24,
-    fontWeight: "bold",
+    fontSize: Typography.fontSize["2xl"],
+    fontWeight: Typography.fontWeight.bold,
+    marginBottom: Spacing[1],
   },
   summaryLabel: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  clearButtonContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    fontSize: Typography.fontSize.xs,
+    textAlign: "center",
   },
   clearButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: Spacing[2],
   },
   clearButtonText: {
     color: "white",
-    fontWeight: "600",
+    fontWeight: Typography.fontWeight.semibold,
   },
   loadingState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 64,
+    paddingVertical: Spacing[16],
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: Spacing[4],
+    fontSize: Typography.fontSize.base,
   },
   activityList: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
+    gap: Spacing[3],
+  },
+  activityCard: {
+    margin: 0,
   },
   activityItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    padding: Spacing[4],
   },
   activityIcon: {
-    marginRight: 12,
-    marginTop: 2,
+    marginRight: Spacing[3],
+    marginTop: 2, // or use Spacing[1] if you want to keep spacing consistent
   },
   activityContent: {
     flex: 1,
+    gap: Spacing[1],
   },
   activityTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
+    fontSize: Typography.fontSize.base,
+    fontWeight: Typography.fontWeight.semibold,
   },
   activityDescription: {
-    fontSize: 14,
-    marginBottom: 4,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.sm,
+    lineHeight: Typography.lineHeight.normal * Typography.fontSize.sm,
   },
   activityTime: {
-    fontSize: 12,
+    fontSize: Typography.fontSize.xs,
   },
   activityStatus: {
-    marginLeft: 12,
+    marginLeft: Spacing[3],
   },
   statusBadge: {
-    minWidth: 70,
+    minWidth: Spacing[16],
   },
   emptyState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 64,
-    paddingHorizontal: 32,
+    paddingVertical: Spacing[16],
+    paddingHorizontal: Spacing[8],
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
+    fontSize: Typography.fontSize.xl,
+    fontWeight: Typography.fontWeight.semibold,
+    marginTop: Spacing[4],
+    marginBottom: Spacing[2],
+    textAlign: "center",
   },
   emptyDescription: {
-    fontSize: 16,
+    fontSize: Typography.fontSize.base,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: Typography.lineHeight.relaxed * Typography.fontSize.base,
   },
 });

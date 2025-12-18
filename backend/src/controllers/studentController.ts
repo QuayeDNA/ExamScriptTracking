@@ -583,3 +583,42 @@ export const getLevels = async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// Get student by index number (public route for QR lookup)
+export const getStudentByIndexNumber = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { indexNumber } = req.params;
+
+    if (!indexNumber) {
+      res.status(400).json({ error: "Index number is required" });
+      return;
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { indexNumber: indexNumber.trim() },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        program: true,
+        level: true,
+        qrCode: true,
+        createdAt: true,
+      },
+    });
+
+    if (!student) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+
+    res.json(student);
+  } catch (error) {
+    console.error("Get student by index number error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

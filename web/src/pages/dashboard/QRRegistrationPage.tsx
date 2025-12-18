@@ -36,7 +36,11 @@ export default function QRRegistrationPage() {
   const queryClient = useQueryClient();
 
   // Fetch registration sessions
-  const { data: sessions, isLoading: sessionsLoading } = useQuery({
+  const {
+    data: sessions,
+    isLoading: sessionsLoading,
+    error: sessionsError,
+  } = useQuery({
     queryKey: ["registration-sessions"],
     queryFn: () => registrationApi.getSessions(),
   });
@@ -225,7 +229,11 @@ export default function QRRegistrationPage() {
         <CardContent>
           {sessionsLoading ? (
             <div className="text-center py-4">Loading sessions...</div>
-          ) : sessions?.sessions.length ? (
+          ) : sessionsError ? (
+            <div className="text-center py-4 text-red-600">
+              Failed to load sessions: {sessionsError.message}
+            </div>
+          ) : sessions?.sessions && sessions.sessions.length > 0 ? (
             <div className="space-y-4">
               {sessions.sessions.map((session: RegistrationSession) => (
                 <div key={session.id} className="border rounded-lg p-4">

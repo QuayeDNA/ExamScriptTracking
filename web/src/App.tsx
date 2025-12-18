@@ -30,6 +30,7 @@ import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
+import StudentQRLookup from "@/pages/StudentQRLookup";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +74,9 @@ function App() {
                   path="/design-system-demo"
                   element={<DesignSystemDemo />}
                 />
+
+                {/* Student QR lookup (public) */}
+                <Route path="/student-qr" element={<StudentQRLookup />} />
 
                 {/* Error pages (standalone) */}
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />

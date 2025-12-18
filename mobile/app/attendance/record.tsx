@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { StudentLookupModal } from "@/components/StudentLookupModal";
+import { LocalStudent } from "@/utils/localStudentStorage";
 
 export default function AttendanceRecordScreen() {
   const colors = useThemeColors();
@@ -29,6 +31,7 @@ export default function AttendanceRecordScreen() {
   const [studentCount, setStudentCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [showStudentLookup, setShowStudentLookup] = useState(false);
 
   const cameraRef = useRef<CameraView | null>(null);
 
@@ -148,6 +151,39 @@ export default function AttendanceRecordScreen() {
         text1: "End recording",
         text2: error?.error || "Failed to end recording",
       });
+    }
+  };
+
+  const handleManualStudentEntry = async (student: LocalStudent) => {
+    if (!recordId) return;
+
+    try {
+      setScanned(true); // Show processing state
+
+      // Record the student attendance using their index number
+      await classAttendanceApi.recordStudentAttendance({
+        recordId,
+        studentId: student.indexNumber,
+      });
+
+      // Update local state
+      setLastStudent(student.name);
+      setStudentCount((prev) => prev + 1);
+
+      Toast.show({
+        type: "success",
+        text1: "Student Recorded",
+        text2: `${student.name} (${student.indexNumber})`,
+      });
+    } catch (error: any) {
+      console.error("Manual entry error:", error);
+      Toast.show({
+        type: "error",
+        text1: "Recording Failed",
+        text2: error.error || "Failed to record student",
+      });
+    } finally {
+      setTimeout(() => setScanned(false), 600);
     }
   };
 
@@ -291,19 +327,35 @@ export default function AttendanceRecordScreen() {
 
       {/* Actions */}
       <View style={styles.actions}>
-        <Button
-          variant="destructive"
-          onPress={handleEndRecording}
-          style={styles.endButton}
-        >
-          <Ionicons
-            name="stop-circle"
-            size={18}
-            color="#fff"
-            style={{ marginRight: 8 }}
-          />
-          <Text style={styles.endButtonText}>End Recording</Text>
-        </Button>
+        <View style={styles.actionButtons}>
+          <Button
+            variant="outline"
+            onPress={() => setShowStudentLookup(true)}
+            style={styles.manualButton}
+            disabled={scanned}
+          >
+            <Ionicons
+              name="person-add"
+              size={18}
+              color={colors.primary}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={{ color: colors.primary }}>Manual Entry</Text>
+          </Button>
+          <Button
+            variant="destructive"
+            onPress={handleEndRecording}
+            style={styles.endButton}
+          >
+            <Ionicons
+              name="stop-circle"
+              size={18}
+              color="#fff"
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.endButtonText}>End Recording</Text>
+          </Button>
+        </View>
       </View>
 
       {/* End Recording Dialog */}
@@ -322,6 +374,14 @@ export default function AttendanceRecordScreen() {
           label: "Cancel",
           onPress: () => setShowEndDialog(false),
         }}
+      />
+
+      {/* Student Lookup Modal */}
+      <StudentLookupModal
+        visible={showStudentLookup}
+        onClose={() => setShowStudentLookup(false)}
+        onStudentSelected={handleManualStudentEntry}
+        sessionId={record?.sessionId}
       />
     </SafeAreaView>
   );
@@ -456,7 +516,18 @@ const styles = StyleSheet.create({
   actions: {
     padding: 16,
   },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  manualButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   endButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

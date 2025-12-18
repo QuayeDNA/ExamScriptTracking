@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -280,13 +279,10 @@ export default function HomeScreen() {
               </View>
             ) : activityData?.activities &&
               activityData.activities.length > 0 ? (
-              <FlatList
-                style={styles.activityScrollView}
-                showsVerticalScrollIndicator={false}
-                data={activityData.activities.slice(0, 10)}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item: activity }) => (
+              <View style={styles.activityContainer}>
+                {activityData.activities.slice(0, 5).map((activity) => (
                   <TouchableOpacity
+                    key={activity.id}
                     style={styles.activityItem}
                     activeOpacity={0.7}
                     onPress={() => {
@@ -347,30 +343,24 @@ export default function HomeScreen() {
                       </Badge>
                     </View>
                   </TouchableOpacity>
-                )}
-                ListFooterComponent={
-                  activityData.activities.length > 10 ? (
-                    <TouchableOpacity
-                      style={styles.viewAllButton}
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        router.push("/recent-activity");
-                      }}
-                    >
-                      <Text
-                        style={[styles.viewAllText, { color: colors.primary }]}
-                      >
-                        View all activity ({activityData.activities.length})
-                      </Text>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                  ) : null
-                }
-              />
+                ))}
+                <TouchableOpacity
+                  style={styles.viewAllButton}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    router.push("/recent-activity");
+                  }}
+                >
+                  <Text style={[styles.viewAllText, { color: colors.primary }]}>
+                    View all activity ({activityData.activities.length})
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons
@@ -508,8 +498,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
   },
-  activityScrollView: {
-    maxHeight: 400, // Limit height to make it scrollable
+  activityContainer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
   },

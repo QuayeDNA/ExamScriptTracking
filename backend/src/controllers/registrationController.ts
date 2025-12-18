@@ -52,34 +52,28 @@ export const createRegistrationSession = async (
     });
 
     res.status(201).json({
-      success: true,
-      data: {
-        sessionId: session.id,
-        qrToken: session.qrToken,
-        expiresAt: session.expiresAt,
-        qrCodeData: {
-          type: "REGISTRATION",
-          token: session.qrToken,
-          expiresAt: session.expiresAt.toISOString(),
-        },
+      sessionId: session.id,
+      qrToken: session.qrToken,
+      expiresAt: session.expiresAt,
+      qrCodeData: {
+        type: "REGISTRATION",
+        token: session.qrToken,
+        expiresAt: session.expiresAt.toISOString(),
       },
-      message: "Registration session created successfully",
     });
   } catch (error) {
     console.error("Create registration session error:", error);
 
     if (error instanceof z.ZodError) {
       res.status(400).json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
+        error: "Validation error",
+        details: error.issues,
       });
       return;
     }
 
     res.status(500).json({
-      success: false,
-      message: "Failed to create registration session",
+      error: "Failed to create registration session",
     });
   }
 };
@@ -103,24 +97,21 @@ export const registerWithQR = async (
 
     if (!session) {
       res.status(400).json({
-        success: false,
-        message: "Invalid QR code",
+        error: "Invalid QR code",
       });
       return;
     }
 
     if (session.used) {
       res.status(400).json({
-        success: false,
-        message: "QR code has already been used",
+        error: "QR code has already been used",
       });
       return;
     }
 
     if (new Date() > session.expiresAt) {
       res.status(400).json({
-        success: false,
-        message: "QR code has expired",
+        error: "QR code has expired",
       });
       return;
     }
@@ -132,8 +123,7 @@ export const registerWithQR = async (
 
     if (existingUser) {
       res.status(400).json({
-        success: false,
-        message: "Phone number is already registered",
+        error: "Phone number is already registered",
       });
       return;
     }
@@ -247,16 +237,14 @@ export const registerWithQR = async (
 
     if (error instanceof z.ZodError) {
       res.status(400).json({
-        success: false,
-        message: "Validation error",
-        errors: error.issues,
+        error: "Validation error",
+        details: error.issues,
       });
       return;
     }
 
     res.status(500).json({
-      success: false,
-      message: "Failed to register account",
+      error: "Failed to register account",
     });
   }
 };
@@ -296,22 +284,16 @@ export const getRegistrationSessions = async (
     ]);
 
     res.json({
-      success: true,
-      data: {
-        sessions,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+      sessions,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
     console.error("Get registration sessions error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch registration sessions",
-    });
+    res.status(500).json({ error: "Failed to fetch registration sessions" });
   }
 };

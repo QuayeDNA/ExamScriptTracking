@@ -9,6 +9,7 @@ import {
   generateStudentQRCode,
   getPrograms,
   getLevels,
+  getStudentByIndexNumber,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -16,7 +17,15 @@ import { Role } from "@prisma/client";
 
 const router = Router();
 
-// All routes require authentication
+// Public route for QR lookup (no authentication required)
+/**
+ * @route   GET /api/students/qr/:indexNumber
+ * @desc    Get student data for QR lookup (public)
+ * @access  Public
+ */
+router.get("/qr/:indexNumber", getStudentByIndexNumber);
+
+// All other routes require authentication
 router.use(authenticate);
 
 /**

@@ -15,13 +15,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LogIn, AlertCircle, Download } from "lucide-react";
 
 export const LoginPage = () => {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const { mutate: login, isPending, error } = useLogin();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login({ email, password });
+    login({ identifier, password });
   };
 
   return (
@@ -53,16 +53,16 @@ export const LoginPage = () => {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="identifier">Email or Phone Number</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
+                id="identifier"
+                type="text"
+                placeholder="you@example.com or +233XXXXXXXXX"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 disabled={isPending}
-                autoComplete="email"
+                autoComplete="username"
               />
             </div>
 
