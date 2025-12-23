@@ -4,17 +4,26 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Starting database seed...");
+  console.log("🌱 Starting production database seed...");
+
+  // Get credentials from environment variables or use defaults
+  const superAdminEmail =
+    process.env.SUPER_ADMIN_EMAIL || "superadmin@examtrack.com";
+  const superAdminPassword =
+    process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin@123";
+  const classRepEmail =
+    process.env.CLASS_REP_EMAIL || "attendance@examtrack.com";
+  const classRepPassword = process.env.CLASS_REP_PASSWORD || "Attendance@123";
 
   // Create Super Admin
-  const hashedPassword = await bcrypt.hash("SuperAdmin@123", 10);
+  const hashedSuperPassword = await bcrypt.hash(superAdminPassword, 10);
 
   const superAdmin = await prisma.user.upsert({
-    where: { email: "superadmin@examtrack.com" },
+    where: { email: superAdminEmail },
     update: {},
     create: {
-      email: "superadmin@examtrack.com",
-      password: hashedPassword,
+      email: superAdminEmail,
+      password: hashedSuperPassword,
       role: Role.ADMIN,
       firstName: "Super",
       lastName: "Admin",
@@ -26,19 +35,19 @@ async function main() {
   });
 
   console.log("✅ Super Admin created:", superAdmin.email);
-  console.log("📧 Email: superadmin@examtrack.com");
-  console.log("🔑 Password: SuperAdmin@123");
+  console.log("📧 Email:", superAdminEmail);
+  console.log("🔑 Password:", superAdminPassword);
   console.log("⚠️  Please change this password after first login!");
 
   // Create shared CLASS_REP credentials for attendance
-  const classRepPassword = await bcrypt.hash("Attendance@123", 10);
+  const hashedClassRepPassword = await bcrypt.hash(classRepPassword, 10);
 
   const classRep = await prisma.user.upsert({
-    where: { email: "attendance@examtrack.com" },
+    where: { email: classRepEmail },
     update: {},
     create: {
-      email: "attendance@examtrack.com",
-      password: classRepPassword,
+      email: classRepEmail,
+      password: hashedClassRepPassword,
       role: Role.CLASS_REP,
       firstName: "Class",
       lastName: "Attendance",
@@ -50,68 +59,79 @@ async function main() {
   });
 
   console.log("\n✅ CLASS_REP credentials created:", classRep.email);
-  console.log("📧 Email: attendance@examtrack.com");
-  console.log("🔑 Password: Attendance@123");
+  console.log("📧 Email:", classRepEmail);
+  console.log("🔑 Password:", classRepPassword);
   console.log(
     "📱 Use these shared credentials on mobile devices for class attendance"
   );
 
-  // Create sample students for testing
-  console.log("\n🎓 Creating sample students...");
+  // Only create sample students in development
+  if (process.env.NODE_ENV !== "production") {
+    console.log("\n🎓 Creating sample students...");
 
-  const students = await Promise.all([
-    prisma.student.create({
-      data: {
-        indexNumber: "STU001",
-        firstName: "John",
-        lastName: "Doe",
-        program: "Computer Science",
-        level: 300,
-        qrCode: JSON.stringify({
-          id: "student-1",
+    const students = await Promise.all([
+      prisma.student.upsert({
+        where: { indexNumber: "STU001" },
+        update: {},
+        create: {
           indexNumber: "STU001",
-          name: "John Doe",
+          firstName: "John",
+          lastName: "Doe",
           program: "Computer Science",
           level: 300,
-        }),
-      },
-    }),
-    prisma.student.create({
-      data: {
-        indexNumber: "STU002",
-        firstName: "Jane",
-        lastName: "Smith",
-        program: "Information Technology",
-        level: 300,
-        qrCode: JSON.stringify({
-          id: "student-2",
+          qrCode: JSON.stringify({
+            id: "student-1",
+            indexNumber: "STU001",
+            name: "John Doe",
+            program: "Computer Science",
+            level: 300,
+          }),
+        },
+      }),
+      prisma.student.upsert({
+        where: { indexNumber: "STU002" },
+        update: {},
+        create: {
           indexNumber: "STU002",
-          name: "Jane Smith",
+          firstName: "Jane",
+          lastName: "Smith",
           program: "Information Technology",
           level: 300,
-        }),
-      },
-    }),
-    prisma.student.create({
-      data: {
-        indexNumber: "STU003",
-        firstName: "Bob",
-        lastName: "Johnson",
-        program: "Software Engineering",
-        level: 400,
-        qrCode: JSON.stringify({
-          id: "student-3",
+          qrCode: JSON.stringify({
+            id: "student-2",
+            indexNumber: "STU002",
+            name: "Jane Smith",
+            program: "Information Technology",
+            level: 300,
+          }),
+        },
+      }),
+      prisma.student.upsert({
+        where: { indexNumber: "STU003" },
+        update: {},
+        create: {
           indexNumber: "STU003",
-          name: "Bob Johnson",
+          firstName: "Bob",
+          lastName: "Johnson",
           program: "Software Engineering",
           level: 400,
-        }),
-      },
-    }),
-  ]);
+          qrCode: JSON.stringify({
+            id: "student-3",
+            indexNumber: "STU003",
+            name: "Bob Johnson",
+            program: "Software Engineering",
+            level: 400,
+          }),
+        },
+      }),
+    ]);
 
-  console.log(`✅ Created ${students.length} sample students`);
-  console.log("\n✨ Database seed completed!");
+    console.log(`✅ Created ${students.length} sample students`);
+  } else {
+    console.log("\n⏭️  Skipping sample students in production environment");
+  }
+
+  console.log("\n✨ Production database seed completed!");
 }
 
 main()

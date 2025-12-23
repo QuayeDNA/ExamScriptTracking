@@ -28,6 +28,10 @@ lerna-debug.log*
 scripts/
 **/scripts/
 
+# But keep production seeding scripts
+!backend/scripts/
+!backend/scripts/*
+
 # Internal documentation (remove from production)
 *_STATUS.md
 *_MANUAL.md
