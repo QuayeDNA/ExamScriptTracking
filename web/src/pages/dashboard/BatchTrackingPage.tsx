@@ -371,7 +371,7 @@ export default function BatchTrackingPage() {
                             <div className="flex items-center gap-1">
                               <Package className="h-4 w-4 text-muted-foreground" />
                               <span>
-                                {currentHandler.scriptsReceived || 0} scripts
+                                {currentHandler.examsReceived || 0} scripts
                                 received
                               </span>
                             </div>
@@ -420,8 +420,7 @@ export default function BatchTrackingPage() {
                             transfer.status === "DISCREPANCY_REPORTED";
                           const isResolved = transfer.status === "RESOLVED";
                           const scriptsMatch =
-                            transfer.scriptsExpected ===
-                            transfer.scriptsReceived;
+                            transfer.examsExpected === transfer.examsReceived;
 
                           return (
                             <div key={transfer.id} className="relative pl-14">
@@ -529,8 +528,7 @@ export default function BatchTrackingPage() {
                                             : "text-red-600"
                                         }
                                       >
-                                        Received:{" "}
-                                        {transfer.scriptsReceived || 0}
+                                        Received: {transfer.examsReceived || 0}
                                       </span>
                                     </div>
                                     {scriptsMatch &&

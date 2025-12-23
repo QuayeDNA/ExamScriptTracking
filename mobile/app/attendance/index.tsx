@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Pressable,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -240,6 +241,38 @@ export default function AttendanceDashboard() {
   const onRefresh = () => {
     setRefreshing(true);
     loadSessionAndRecords();
+  };
+
+  const handleDeleteRecord = async (recordId: string) => {
+    Alert.alert(
+      "Delete Recording",
+      "Are you sure you want to delete this recording? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await classAttendanceApi.deleteRecord(recordId);
+              Toast.show({
+                type: "success",
+                text1: "Recording deleted",
+                text2: "The recording has been successfully deleted",
+              });
+              // Refresh the records
+              loadSessionAndRecords();
+            } catch (error: any) {
+              Toast.show({
+                type: "error",
+                text1: "Delete failed",
+                text2: error?.error || "Failed to delete recording",
+              });
+            }
+          },
+        },
+      ]
+    );
   };
 
   const activeRecords = useMemo(
@@ -484,27 +517,44 @@ export default function AttendanceDashboard() {
                       <Badge>Active</Badge>
                     </View>
                     <Separator style={styles.recordSeparator} />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/attendance/record" as any,
-                          params: {
-                            recordId: record.id,
-                            sessionId: record.sessionId,
-                          },
-                        })
-                      }
-                    >
-                      <Ionicons
-                        name="play"
-                        size={14}
-                        color={colors.primary}
-                        style={{ marginRight: 4 }}
-                      />
-                      <Text>Resume</Text>
-                    </Button>
+                    <View style={styles.recordActions}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/attendance/record" as any,
+                            params: {
+                              recordId: record.id,
+                              sessionId: record.sessionId,
+                            },
+                          })
+                        }
+                        style={styles.resumeButton}
+                      >
+                        <Ionicons
+                          name="play"
+                          size={14}
+                          color={colors.primary}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text>Resume</Text>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onPress={() => handleDeleteRecord(record.id)}
+                        style={styles.deleteButton}
+                      >
+                        <Ionicons
+                          name="trash"
+                          size={14}
+                          color={colors.background}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={{ color: colors.background }}>Delete</Text>
+                      </Button>
+                    </View>
                   </CardContent>
                 </Card>
               ))
@@ -742,5 +792,26 @@ const styles = StyleSheet.create({
   },
   recordSeparator: {
     marginVertical: 12,
+  },
+  recordActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  resumeButton: {
+    flex: 1,
+    backgroundColor: "#007AFF",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  deleteButton: {
+    flex: 1,
+    backgroundColor: "#FF3B30",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: "center",
   },
 });

@@ -46,6 +46,8 @@ export interface AttendanceRecord {
     studentId: string;
     recordId: string;
     scanTime: string;
+    lecturerConfirmed: boolean;
+    confirmedAt?: string;
     student: {
       id: string;
       indexNumber: string;
@@ -122,5 +124,13 @@ export const classAttendanceApi = {
     return apiClient.get<{ record: AttendanceRecord }>(
       `/class-attendance/records/${recordId}`
     );
+  },
+
+  confirmAttendance: async (
+    attendanceId: string
+  ): Promise<{ message: string; attendance: any }> => {
+    return apiClient.post("/class-attendance/records/attendance/confirm", {
+      attendanceId,
+    });
   },
 };

@@ -17,12 +17,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { StudentLookupModal } from "@/components/StudentLookupModal";
 import { LocalStudent } from "@/utils/localStudentStorage";
+import { useSessionStore } from "@/store/session";
 
 export default function AttendanceRecordScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const { recordId } = useLocalSearchParams<{ recordId?: string }>();
   const socket = useSocket();
+  const { hasRecordedFirstAttendance, setFirstAttendanceRecorded } =
+    useSessionStore();
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [record, setRecord] = useState<ClassAttendanceRecord | null>(null);
@@ -32,6 +35,7 @@ export default function AttendanceRecordScreen() {
   const [loading, setLoading] = useState(true);
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [showStudentLookup, setShowStudentLookup] = useState(false);
+  const [pendingConfirmations, setPendingConfirmations] = useState<any[]>([]);
 
   const cameraRef = useRef<CameraView | null>(null);
 
@@ -59,6 +63,8 @@ export default function AttendanceRecordScreen() {
         if (data.recordId === recordId) {
           setLastStudent(data.studentName);
           setStudentCount(data.totalStudents);
+          // Refresh pending confirmations
+          loadRecord();
         }
       }
     );
@@ -75,6 +81,10 @@ export default function AttendanceRecordScreen() {
       const resp = await classAttendanceApi.getRecord(recordId);
       setRecord(resp.record);
       setStudentCount(resp.record.totalStudents || 0);
+      // Filter pending confirmations
+      const pending =
+        resp.record.students?.filter((s) => !s.lecturerConfirmed) || [];
+      setPendingConfirmations(pending);
     } catch (error: any) {
       Toast.show({
         type: "error",
@@ -116,6 +126,12 @@ export default function AttendanceRecordScreen() {
       });
       setLastStudent(studentName);
       setStudentCount((prev) => prev + 1);
+
+      // Mark first attendance as recorded if not already done
+      if (!hasRecordedFirstAttendance) {
+        setFirstAttendanceRecorded(true);
+      }
+
       Toast.show({
         type: "success",
         text1: "✓ Recorded",
@@ -176,11 +192,19 @@ export default function AttendanceRecordScreen() {
       setLastStudent(student.name);
       setStudentCount((prev) => prev + 1);
 
+      // Mark first attendance as recorded if not already done
+      if (!hasRecordedFirstAttendance) {
+        setFirstAttendanceRecorded(true);
+      }
+
       Toast.show({
         type: "success",
         text1: "Student Recorded",
         text2: `${student.name} (${student.indexNumber})`,
       });
+
+      // Refresh the record to update pending confirmations
+      loadRecord();
     } catch (error: any) {
       console.error("Manual entry error:", error);
       Toast.show({
@@ -190,6 +214,31 @@ export default function AttendanceRecordScreen() {
       });
     } finally {
       setTimeout(() => setScanned(false), 600);
+    }
+  };
+
+  const handleConfirmAttendance = async (
+    attendanceId: string,
+    studentName: string
+  ) => {
+    try {
+      await classAttendanceApi.confirmAttendance(attendanceId);
+      // Update local state
+      setPendingConfirmations((prev) =>
+        prev.filter((p) => p.id !== attendanceId)
+      );
+      setStudentCount((prev) => prev + 1); // Since it's now confirmed
+      Toast.show({
+        type: "success",
+        text1: "Confirmed",
+        text2: `${studentName} attendance confirmed`,
+      });
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Confirmation Failed",
+        text2: error.error || "Failed to confirm attendance",
+      });
     }
   };
 
@@ -330,6 +379,60 @@ export default function AttendanceRecordScreen() {
           )}
         </View>
       </View>
+
+      {/* Pending Confirmations */}
+      {pendingConfirmations.length > 0 && (
+        <View style={styles.pendingContainer}>
+          <Text style={[styles.pendingTitle, { color: colors.foreground }]}>
+            Pending Confirmations ({pendingConfirmations.length})
+          </Text>
+          <FlatList
+            data={pendingConfirmations}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View
+                style={[
+                  styles.pendingItem,
+                  { borderBottomColor: colors.border },
+                ]}
+              >
+                <View style={styles.pendingInfo}>
+                  <Text
+                    style={[styles.pendingName, { color: colors.foreground }]}
+                  >
+                    {item.student.firstName} {item.student.lastName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.pendingDetails,
+                      { color: colors.foregroundMuted },
+                    ]}
+                  >
+                    {item.student.indexNumber}
+                  </Text>
+                </View>
+                <Button
+                  size="sm"
+                  onPress={() =>
+                    handleConfirmAttendance(
+                      item.id,
+                      `${item.student.firstName} ${item.student.lastName}`
+                    )
+                  }
+                  style={styles.confirmButton}
+                >
+                  <Text
+                    style={{ color: colors.primaryForeground, fontSize: 12 }}
+                  >
+                    Confirm
+                  </Text>
+                </Button>
+              </View>
+            )}
+            style={styles.pendingList}
+          />
+        </View>
+      )}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -541,5 +644,39 @@ const styles = StyleSheet.create({
   endButtonText: {
     color: "#fff",
     fontWeight: "600",
+  },
+  pendingContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    maxHeight: 200,
+  },
+  pendingTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  pendingList: {
+    maxHeight: 160,
+  },
+  pendingItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  pendingInfo: {
+    flex: 1,
+  },
+  pendingName: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  pendingDetails: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  confirmButton: {
+    minWidth: 70,
   },
 });

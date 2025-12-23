@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 /**
  * Analytics Controller
  *
- * Provides data analytics and insights for the Exam Script Tracking System.
+ * Provides data analytics and insights for the Exam Logistics System (ELMS).
  * All endpoints require ADMIN role.
  */
 

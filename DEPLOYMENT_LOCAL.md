@@ -717,7 +717,7 @@ const path = require("path");
 // Create a new service object
 const svc = new Service({
   name: "ExamTrack Backend",
-  description: "ExamTrack Backend API Server for Exam Script Tracking",
+  description: "ELMS Backend API Server for Exam Logistics System",
   script: path.join(__dirname, "src", "server.ts"),
   nodeOptions: ["-r", "ts-node/register"],
   env: {
@@ -1886,7 +1886,7 @@ http://192.168.137.1/download.html
 - ✅ Login/Logout
 - ✅ Dashboard shows exam sessions
 - ✅ QR code scanning works
-- ✅ Script tracking records work
+- ✅ Exam Logistics System (ELMS) records work
 - ✅ Transfer initiation works
 - ✅ Class attendance recording works
 - ✅ Real-time updates (test with web dashboard open)

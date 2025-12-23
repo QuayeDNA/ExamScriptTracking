@@ -3,7 +3,7 @@
  * Form to create new incidents with camera and file attachment support
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ import {
 import { useSessionStore } from "@/store/session";
 import {
   searchIncidentTemplates,
+  getTemplatesForType,
   type IncidentTemplate,
 } from "@/constants/incident-templates";
 
@@ -59,7 +60,10 @@ interface AttachmentFile {
 
 export default function ReportIncidentScreen() {
   const colors = useThemeColors();
-  const { currentSession } = useSessionStore();
+  const { currentSession, hasRecordedFirstAttendance } = useSessionStore();
+
+  // Ref to track if a suggestion is being selected
+  const selectingSuggestionRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<{
@@ -84,6 +88,18 @@ export default function ReportIncidentScreen() {
     []
   );
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Auto-populate location when first attendance is recorded
+  useEffect(() => {
+    if (
+      hasRecordedFirstAttendance &&
+      currentSession?.venue &&
+      !formData.location
+    ) {
+      handleChange("location", currentSession.venue);
+    }
+  }, [hasRecordedFirstAttendance, currentSession?.venue, formData.location]);
 
   // Handle form field change
   const handleChange = (field: string, value: any) => {
@@ -141,9 +157,20 @@ export default function ReportIncidentScreen() {
     handleChange("title", text);
 
     if (text.trim().length > 0) {
-      const suggestions = searchIncidentTemplates(text, formData.type);
-      setTitleSuggestions(suggestions.slice(0, 5)); // Limit to 5 suggestions
-      setShowSuggestions(suggestions.length > 0);
+      // Search across all incident types for better UX, but prioritize the selected type
+      const allSuggestions = searchIncidentTemplates(text); // Search all types
+      const typeSuggestions = searchIncidentTemplates(text, formData.type); // Search selected type
+
+      // Combine results, prioritizing selected type first, then others
+      const combinedSuggestions = [
+        ...typeSuggestions,
+        ...allSuggestions.filter(
+          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+        ),
+      ];
+
+      setTitleSuggestions(combinedSuggestions.slice(0, 5)); // Limit to 5 suggestions
+      setShowSuggestions(combinedSuggestions.length > 0);
     } else {
       setTitleSuggestions([]);
       setShowSuggestions(false);
@@ -152,19 +179,58 @@ export default function ReportIncidentScreen() {
 
   // Select a template suggestion
   const selectTemplate = (template: IncidentTemplate) => {
-    handleChange("title", template.title);
-    handleChange("description", template.description);
-    handleChange("severity", template.severity);
+    selectingSuggestionRef.current = true;
+    
+    // Update form data with individual state updates to ensure they take effect
+    setFormData((prev) => {
+      const newState = { ...prev, title: template.title };
+      return newState;
+    });
+    setTimeout(() => {
+      setFormData((prev) => {
+        const newState = { ...prev, description: template.description };
+        return newState;
+      });
+    }, 10);
+    setTimeout(() => {
+      setFormData((prev) => {
+        const newState = { ...prev, severity: template.severity };
+        return newState;
+      });
+      // Force a re-render to ensure TextInputs update
+      setForceUpdate(prev => prev + 1);
+    }, 20);
+    
     setTitleSuggestions([]);
     setShowSuggestions(false);
+    // Reset the ref after a short delay
+    setTimeout(() => {
+      selectingSuggestionRef.current = false;
+    }, 100);
   };
 
   // Handle incident type change - update suggestions
   const handleTypeChange = (type: IncidentType) => {
     handleChange("type", type);
-    // Clear suggestions when type changes
-    setTitleSuggestions([]);
-    setShowSuggestions(false);
+    // Refresh suggestions if there's text in the title field
+    if (formData.title.trim().length > 0) {
+      const allSuggestions = searchIncidentTemplates(formData.title);
+      const typeSuggestions = searchIncidentTemplates(formData.title, type);
+      const combinedSuggestions = [
+        ...typeSuggestions,
+        ...allSuggestions.filter(
+          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+        ),
+      ];
+      setTitleSuggestions(combinedSuggestions.slice(0, 5));
+      setShowSuggestions(combinedSuggestions.length > 0);
+    } else {
+      // Show default suggestions for the new type
+      const typeTemplates = getTemplatesForType(type);
+      const defaultSuggestions = typeTemplates.slice(0, 3);
+      setTitleSuggestions(defaultSuggestions);
+      setShowSuggestions(defaultSuggestions.length > 0);
+    }
   };
 
   // Take photo with camera
@@ -484,21 +550,22 @@ export default function ReportIncidentScreen() {
           </Card>
 
           {/* Title with Smart Suggestions */}
-          <Card>
-            <View style={{ padding: Spacing[4] }}>
-              <Text
-                style={[
-                  { color: colors.foreground, marginBottom: Spacing[2] },
-                  {
-                    fontSize: Typography.fontSize.sm,
-                    fontWeight: Typography.fontWeight.semibold,
-                  },
-                ]}
-              >
-                Title *
-              </Text>
-              <View style={{ position: "relative" }}>
+          <View style={{ position: "relative" }}>
+            <Card>
+              <View style={{ padding: Spacing[4] }}>
+                <Text
+                  style={[
+                    { color: colors.foreground, marginBottom: Spacing[2] },
+                    {
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    },
+                  ]}
+                >
+                  Title *
+                </Text>
                 <TextInput
+                  key={`title-${forceUpdate}`}
                   style={{
                     padding: Spacing[3],
                     borderRadius: BorderRadius.md,
@@ -508,95 +575,139 @@ export default function ReportIncidentScreen() {
                     borderWidth: 1,
                     borderColor: colors.border,
                   }}
-                  placeholder="Brief description of the incident"
+                  placeholder="Start typing to see incident suggestions from all categories"
                   placeholderTextColor={colors.foregroundMuted}
                   value={formData.title}
                   onChangeText={handleTitleChange}
                   onFocus={() => {
-                    if (titleSuggestions.length > 0) {
-                      setShowSuggestions(true);
+                    // Show suggestions based on current title or show default suggestions for the incident type
+                    if (formData.title.trim().length > 0) {
+                      // Search across all types when user has typed something
+                      const allSuggestions = searchIncidentTemplates(
+                        formData.title
+                      );
+                      const typeSuggestions = searchIncidentTemplates(
+                        formData.title,
+                        formData.type
+                      );
+                      const combinedSuggestions = [
+                        ...typeSuggestions,
+                        ...allSuggestions.filter(
+                          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+                        ),
+                      ];
+                      setTitleSuggestions(combinedSuggestions.slice(0, 5));
+                      setShowSuggestions(combinedSuggestions.length > 0);
+                    } else {
+                      // Show top templates for the selected incident type when field is focused
+                      const typeTemplates = getTemplatesForType(formData.type);
+                      const defaultSuggestions = typeTemplates.slice(0, 3); // Show top 3 templates
+                      setTitleSuggestions(defaultSuggestions);
+                      setShowSuggestions(defaultSuggestions.length > 0);
                     }
                   }}
                   onBlur={() => {
-                    // Delay hiding suggestions to allow selection
-                    setTimeout(() => setShowSuggestions(false), 200);
+                    // Delay hiding suggestions to allow selection, but don't hide if selecting a suggestion
+                    setTimeout(() => {
+                      if (!selectingSuggestionRef.current) {
+                        setShowSuggestions(false);
+                      }
+                    }, 200);
                   }}
                 />
-
-                {/* Smart Suggestions */}
-                {showSuggestions && titleSuggestions.length > 0 && (
-                  <Card
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      right: 0,
-                      zIndex: 1000,
-                      marginTop: Spacing[1],
-                      maxHeight: 200,
-                    }}
-                  >
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                      {titleSuggestions.map((template) => (
-                        <TouchableOpacity
-                          key={template.id}
-                          onPress={() => selectTemplate(template)}
-                          style={{
-                            padding: Spacing[3],
-                            borderBottomWidth: 1,
-                            borderBottomColor: colors.border,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: Typography.fontSize.sm,
-                              fontWeight: Typography.fontWeight.medium,
-                              color: colors.foreground,
-                              marginBottom: Spacing[1],
-                            }}
-                            numberOfLines={1}
-                          >
-                            {template.title}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: Typography.fontSize.xs,
-                              color: colors.foregroundMuted,
-                            }}
-                            numberOfLines={2}
-                          >
-                            {template.description}
-                          </Text>
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              marginTop: Spacing[1],
-                            }}
-                          >
-                            <Badge
-                              variant={
-                                template.severity === "CRITICAL"
-                                  ? "error"
-                                  : template.severity === "HIGH"
-                                    ? "warning"
-                                    : template.severity === "MEDIUM"
-                                      ? "default"
-                                      : "secondary"
-                              }
-                              style={{ marginRight: Spacing[2] }}
-                            >
-                              {template.severity}
-                            </Badge>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </Card>
-                )}
               </View>
-            </View>
-          </Card>
+            </Card>
+
+            {/* Smart Suggestions - positioned outside the Card to avoid overflow:hidden clipping */}
+            {showSuggestions && titleSuggestions.length > 0 && (
+              <Card
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: Spacing[4],
+                  right: Spacing[4],
+                  zIndex: 9999,
+                  marginTop: Spacing[1],
+                  maxHeight: 200,
+                }}
+              >
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {titleSuggestions.map((template) => (
+                    <TouchableOpacity
+                      key={template.id}
+                      onPress={() => selectTemplate(template)}
+                      activeOpacity={0.7}
+                      style={{
+                        padding: Spacing[3],
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: Typography.fontSize.sm,
+                          fontWeight: Typography.fontWeight.medium,
+                          color: colors.foreground,
+                          marginBottom: Spacing[1],
+                        }}
+                        numberOfLines={1}
+                      >
+                        {template.title}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: Typography.fontSize.xs,
+                          color: colors.foregroundMuted,
+                        }}
+                        numberOfLines={2}
+                      >
+                        {template.description}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          marginTop: Spacing[1],
+                        }}
+                      >
+                        <Badge
+                          variant={
+                            template.severity === "CRITICAL"
+                              ? "error"
+                              : template.severity === "HIGH"
+                                ? "warning"
+                                : template.severity === "MEDIUM"
+                                  ? "default"
+                                  : "secondary"
+                          }
+                          style={{ marginRight: Spacing[2] }}
+                        >
+                          {template.severity}
+                        </Badge>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </Card>
+            )}
+          </View>
+
+          {/* Help text for smart suggestions */}
+          <View style={{ marginBottom: Spacing[2] }}>
+            <Text
+              style={{
+                fontSize: Typography.fontSize.xs,
+                color: colors.foregroundMuted,
+                textAlign: "center",
+              }}
+            >
+              💡 Start typing to see smart suggestions from all incident
+              categories
+            </Text>
+          </View>
 
           {/* Description */}
           <Card>
@@ -613,6 +724,7 @@ export default function ReportIncidentScreen() {
                 Description *
               </Text>
               <TextInput
+                key={`description-${forceUpdate}`}
                 style={{
                   padding: Spacing[3],
                   borderRadius: BorderRadius.md,

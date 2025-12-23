@@ -3,7 +3,7 @@ export default {
     db: {
       url:
         process.env.DATABASE_URL ||
-        "postgresql://postgres:password@localhost:5432/exam_tracking",
+        "postgresql://postgres:password@localhost:5432/elms",
     },
   },
 };

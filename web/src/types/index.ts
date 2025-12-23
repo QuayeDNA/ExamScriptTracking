@@ -296,8 +296,8 @@ export interface BatchTransfer {
   requestedAt: string;
   confirmedAt?: string;
   status: TransferStatus;
-  scriptsExpected: number;
-  scriptsReceived?: number;
+  examsExpected: number;
+  examsReceived?: number;
   discrepancyNote?: string;
   location?: string;
   fromHandler: User;
@@ -381,8 +381,8 @@ export interface DiscrepancyReport {
   courseName: string;
   fromHandlerName: string;
   toHandlerName: string;
-  scriptsExpected: number;
-  scriptsReceived: number;
+  examsExpected: number;
+  examsReceived: number;
   note: string;
   reportedAt: string;
   resolvedAt?: string;

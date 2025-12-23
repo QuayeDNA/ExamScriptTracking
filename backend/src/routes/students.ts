@@ -19,11 +19,11 @@ const router = Router();
 
 // Public route for QR lookup (no authentication required)
 /**
- * @route   GET /api/students/qr/:indexNumber
+ * @route   GET /api/students/qr
  * @desc    Get student data for QR lookup (public)
  * @access  Public
  */
-router.get("/qr/:indexNumber", getStudentByIndexNumber);
+router.get("/qr", getStudentByIndexNumber);
 
 // All other routes require authentication
 router.use(authenticate);

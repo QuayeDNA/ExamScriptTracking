@@ -42,7 +42,15 @@ const recordStudentAttendanceSchema = z.object({
     .optional(),
 });
 
+const confirmAttendanceSchema = z.object({
+  attendanceId: z.string().uuid("Invalid attendance ID"),
+});
+
 const endAttendanceRecordSchema = z.object({
+  recordId: z.string().uuid("Invalid record ID"),
+});
+
+const deleteAttendanceRecordSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
 });
 
@@ -341,29 +349,87 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
+      // Validate required fields
+      if (!validatedData.studentData.indexNumber || !firstName) {
+        return res
+          .status(400)
+          .json({ error: "Invalid student data: missing required fields" });
+      }
+
+      // Parse level safely
+      let level: number | null = null;
+      if (validatedData.studentData.level) {
+        const parsedLevel = parseInt(validatedData.studentData.level);
+        if (!isNaN(parsedLevel) && parsedLevel > 0) {
+          level = parsedLevel;
+        }
+      }
+
       try {
+        // Generate QR code data first
+        const tempQrData = JSON.stringify({
+          type: "STUDENT",
+          id: "", // Will be updated after creation
+          indexNumber: validatedData.studentData.indexNumber,
+          firstName,
+          lastName,
+          program: validatedData.studentData.program || "Unknown",
+          level: level || 100,
+          timestamp: new Date().toISOString(),
+        });
+
         student = await prisma.student.create({
           data: {
             indexNumber: validatedData.studentData.indexNumber,
             firstName,
             lastName,
-            program: validatedData.studentData.program || null,
-            level: validatedData.studentData.level
-              ? parseInt(validatedData.studentData.level)
-              : null,
+            program: validatedData.studentData.program || "Unknown",
+            level: level || 100,
+            qrCode: tempQrData, // Temporary, will regenerate with ID
           },
+        });
+
+        // Regenerate QR code with actual ID
+        const updatedQrData = JSON.stringify({
+          type: "STUDENT",
+          id: student.id,
+          indexNumber: student.indexNumber,
+          firstName: student.firstName,
+          lastName: student.lastName,
+          program: student.program,
+          level: student.level,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Update the student with the correct QR code
+        student = await prisma.student.update({
+          where: { id: student.id },
+          data: { qrCode: updatedQrData },
         });
       } catch (createError: any) {
-        // If creation fails (e.g., duplicate index number), try to find again
-        student = await prisma.student.findFirst({
-          where: {
-            OR: [{ id: studentIdentifier }, { indexNumber: studentIdentifier }],
-          },
-        });
-        if (!student) {
-          return res
-            .status(400)
-            .json({ error: "Failed to create or find student" });
+        console.error("Student creation failed:", createError);
+        // If creation fails due to duplicate index number, find the existing student
+        if (
+          createError.code === "P2002" &&
+          createError.meta?.target?.includes("indexNumber")
+        ) {
+          student = await prisma.student.findUnique({
+            where: { indexNumber: validatedData.studentData.indexNumber },
+          });
+          if (!student) {
+            console.error(
+              "Failed to find existing student with index number:",
+              validatedData.studentData.indexNumber
+            );
+            return res
+              .status(400)
+              .json({ error: "Failed to create or find student" });
+          }
+        } else {
+          // Other creation error
+          return res.status(400).json({
+            error: `Failed to create student: ${createError.message}`,
+          });
         }
       }
     }
@@ -392,6 +458,7 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
       data: {
         recordId: validatedData.recordId,
         studentId: student.id, // Use the found student's UUID
+        lecturerConfirmed: !validatedData.studentData, // Auto-confirm QR scans, manual entries need confirmation
       },
       include: {
         student: {
@@ -563,6 +630,13 @@ export const getAttendanceRecordById = async (req: Request, res: Response) => {
           },
         },
         students: {
+          select: {
+            id: true,
+            studentId: true,
+            scanTime: true,
+            lecturerConfirmed: true,
+            confirmedAt: true,
+          },
           include: {
             student: {
               select: {
@@ -707,5 +781,131 @@ export const getAutocompleteValues = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Get autocomplete values error:", error);
     res.status(500).json({ error: "Failed to get autocomplete values" });
+  }
+};
+
+/**
+ * Delete an attendance record (only if no students have been recorded)
+ */
+export const deleteAttendanceRecord = async (req: Request, res: Response) => {
+  try {
+    const { recordId } = deleteAttendanceRecordSchema.parse(req.params);
+
+    // Check if the record exists and get attendance count
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id: recordId },
+      include: {
+        _count: {
+          select: { students: true },
+        },
+      },
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
+    // Prevent deletion if students have been recorded
+    if (record._count.students > 0) {
+      return res.status(400).json({
+        error: `Cannot delete record with ${record._count.students} student attendance(s)`,
+      });
+    }
+
+    // Only allow deletion of records that are still in progress
+    if (record.status !== "IN_PROGRESS") {
+      return res.status(400).json({
+        error: "Can only delete records that are still in progress",
+      });
+    }
+
+    // Delete the record
+    await prisma.classAttendanceRecord.delete({
+      where: { id: recordId },
+    });
+
+    res.json({ message: "Attendance record deleted successfully" });
+  } catch (error) {
+    console.error("Delete attendance record error:", error);
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0].message });
+    }
+    res.status(500).json({ error: "Failed to delete attendance record" });
+  }
+};
+
+export const confirmAttendance = async (req: Request, res: Response) => {
+  try {
+    const validatedData = confirmAttendanceSchema.parse(req.body);
+
+    // Find the attendance record
+    const attendance = await prisma.classAttendance.findUnique({
+      where: { id: validatedData.attendanceId },
+      include: {
+        record: true,
+        student: {
+          select: {
+            id: true,
+            indexNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!attendance) {
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
+    // Check if record is still in progress
+    if (attendance.record.status !== "IN_PROGRESS") {
+      return res
+        .status(400)
+        .json({ error: "Cannot confirm attendance for completed session" });
+    }
+
+    // Update the attendance as confirmed
+    const updatedAttendance = await prisma.classAttendance.update({
+      where: { id: validatedData.attendanceId },
+      data: {
+        lecturerConfirmed: true,
+        confirmedAt: new Date(),
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            indexNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    // Emit socket event for confirmation
+    emitClassAttendanceScanned(io, {
+      recordId: attendance.recordId,
+      sessionId: attendance.record.sessionId,
+      studentId: updatedAttendance.student.id,
+      studentName: `${updatedAttendance.student.firstName} ${updatedAttendance.student.lastName}`,
+      indexNumber: updatedAttendance.student.indexNumber,
+      scanTime: updatedAttendance.scanTime.toISOString(),
+      totalStudents: attendance.record.totalStudents,
+      courseCode: attendance.record.courseCode || undefined,
+      courseName: attendance.record.courseName || undefined,
+    });
+
+    res.json({
+      message: "Attendance confirmed successfully",
+      attendance: updatedAttendance,
+    });
+  } catch (error) {
+    console.error("Confirm attendance error:", error);
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0].message });
+    }
+    res.status(500).json({ error: "Failed to confirm attendance" });
   }
 };

@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "Exam Script Tracking System - Backend API",
+  "description": "Exam Logistics System (ELMS) - Backend API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
@@ -18,7 +18,7 @@
   },
   "keywords": [
     "exam",
-    "tracking",
+    "logistics",
     "qr-code"
   ],
   "author": "",

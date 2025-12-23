@@ -8,8 +8,8 @@ export interface BatchTransfer {
   requestedAt: string;
   confirmedAt: string | null;
   status: TransferStatus;
-  scriptsExpected: number;
-  scriptsReceived: number | null;
+  examsExpected: number;
+  examsReceived: number | null;
   discrepancyNote: string | null;
   location: string | null;
   examSession: {
@@ -35,7 +35,7 @@ export interface BatchTransfer {
     role: string;
     email: string;
   };
-  resolutionNote : string;
+  resolutionNote: string;
 }
 
 export type TransferStatus =
@@ -109,7 +109,7 @@ export const createTransfer = async (data: {
 export const confirmTransfer = async (
   transferId: string,
   data: {
-    scriptsReceived: number;
+    examsReceived: number;
     discrepancyNote?: string;
   }
 ): Promise<{ message: string; transfer: BatchTransfer }> => {

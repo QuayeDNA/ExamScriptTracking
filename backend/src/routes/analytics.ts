@@ -9,7 +9,7 @@ const router = Router();
  * Analytics Routes
  *
  * All analytics endpoints require authentication and ADMIN role.
- * These endpoints provide data insights for the Exam Script Tracking System.
+ * These endpoints provide data insights for the Exam Logistics System (ELMS).
  */
 
 // GET /api/analytics/overview - System overview statistics

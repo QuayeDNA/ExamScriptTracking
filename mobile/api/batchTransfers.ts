@@ -9,8 +9,8 @@ export interface BatchTransfer {
   requestedAt: string;
   confirmedAt: string | null;
   status: TransferStatus;
-  scriptsExpected: number;
-  scriptsReceived: number | null;
+  examsExpected: number;
+  examsReceived: number | null;
   discrepancyNote: string | null;
   location: string | null;
   examSession: {
@@ -44,12 +44,12 @@ export type TransferStatus =
 export interface CreateTransferRequest {
   examSessionId: string;
   toHandlerId: string;
-  scriptsExpected: number;
+  examsExpected: number;
   location?: string;
 }
 
 export interface ConfirmTransferRequest {
-  scriptsReceived: number;
+  examsReceived: number;
   discrepancyNote?: string;
 }
 

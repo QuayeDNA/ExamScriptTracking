@@ -6,11 +6,13 @@ import {
   updateAttendanceSession,
   createAttendanceRecord,
   recordStudentAttendance,
+  confirmAttendance,
   endAttendanceRecord,
   getAttendanceRecords,
   getAttendanceRecord,
   getAttendanceRecordById,
   getAutocompleteValues,
+  deleteAttendanceRecord,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -43,11 +45,25 @@ router.post(
   recordStudentAttendance
 );
 
+// Confirm manual attendance entry
+router.post(
+  "/records/attendance/confirm",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  confirmAttendance
+);
+
 // End attendance record
 router.post(
   "/records/:recordId/end",
   authorize(Role.ADMIN, Role.CLASS_REP),
   endAttendanceRecord
+);
+
+// Delete attendance record (only if no students recorded)
+router.delete(
+  "/records/:recordId",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  deleteAttendanceRecord
 );
 
 // Get autocomplete values (lecturer names, course names, course codes)

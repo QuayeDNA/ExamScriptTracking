@@ -206,7 +206,7 @@ export default function CustodyScreen() {
       await batchTransfersApi.confirmTransfer(
         confirmingBatch.latestTransfer.id,
         {
-          scriptsReceived: confirmingBatch.latestTransfer.scriptsExpected,
+          examsReceived: confirmingBatch.latestTransfer.examsExpected,
         }
       );
 

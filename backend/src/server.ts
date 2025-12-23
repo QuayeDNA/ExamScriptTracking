@@ -20,6 +20,12 @@ import { initializeSocketServer } from "./socket/socketServer";
 // Load environment variables
 dotenv.config();
 
+// Set database URL based on environment
+if (process.env.NODE_ENV === "production") {
+  process.env.DATABASE_URL =
+    process.env.DATABASE_URL_PROD || process.env.DATABASE_URL;
+}
+
 const app: Express = express();
 const httpServer = createServer(app);
 const PORT = Number(process.env.PORT) || 3000;
@@ -465,13 +471,16 @@ app.get("/", (req: Request, res: Response) => {
 
 // Basic health check route
 app.get("/health", (req: Request, res: Response) => {
-  res.json({ status: "ok", message: "Exam Script Tracking API is running" });
+  res.json({
+    status: "ok",
+    message: "Exam Logistics System (ELMS) API is running",
+  });
 });
 
 // API routes placeholder
 app.get("/api", (req: Request, res: Response) => {
   res.json({
-    message: "Exam Script Tracking API",
+    message: "Exam Logistics System (ELMS) API",
     version: "1.0.0",
     endpoints: {
       health: "/health",

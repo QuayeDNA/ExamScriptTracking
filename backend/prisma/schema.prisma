@@ -195,7 +195,7 @@ enum AttendanceStatus {
   ABSENT
 }
 
-// Script Transfer Chain
+// Exam Transfer Chain
 model BatchTransfer {
   id              String         @id @default(uuid())
   examSessionId   String
@@ -204,8 +204,8 @@ model BatchTransfer {
   requestedAt     DateTime       @default(now())
   confirmedAt     DateTime?
   status          TransferStatus @default(PENDING)
-  scriptsExpected Int
-  scriptsReceived Int?
+  examsExpected Int @map("scriptsExpected")
+  examsReceived Int? @map("scriptsReceived")
   discrepancyNote String?
   location        String?
   
@@ -292,6 +292,8 @@ model ClassAttendance {
   studentId        String                  // From Student model
   scanTime         DateTime                @default(now())
   status           ClassAttendanceStatus   @default(PRESENT)
+  lecturerConfirmed Boolean               @default(true) // Auto-confirmed for QR scans, manual for manual entries
+  confirmedAt      DateTime?
 
   record           ClassAttendanceRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
   student          Student                 @relation(fields: [studentId], references: [id])
@@ -335,7 +337,7 @@ model RefreshToken {
 enum IncidentType {
   MALPRACTICE           // Cheating, unauthorized materials
   HEALTH_ISSUE          // Medical emergency, student unwell
-  SCRIPT_DAMAGE         // Water damage, torn papers
+  EXAM_DAMAGE         // Water damage, torn papers
   EQUIPMENT_FAILURE     // Scanner issues, printer problems
   DISRUPTION            // Fire alarm, power outage
   SECURITY_BREACH       // Unauthorized access

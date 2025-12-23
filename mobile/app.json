@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "ELMS Mobile",
+    "slug": "elms-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "elms-mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

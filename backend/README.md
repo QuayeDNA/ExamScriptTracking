@@ -1,4 +1,4 @@
-# Backend - Exam Script Tracking System
+# Backend - Exam Logistics System (ELMS)
 
 ## Description
 

@@ -706,10 +706,10 @@ export default function AnalyticsDashboardPage() {
                           <TableCell>{`${transfer.fromHandler.firstName} ${transfer.fromHandler.lastName}`}</TableCell>
                           <TableCell>{`${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`}</TableCell>
                           <TableCell className="text-right">
-                            {transfer.scriptsExpected}
+                            {transfer.examsExpected}
                           </TableCell>
                           <TableCell className="text-right">
-                            {transfer.scriptsReceived || "-"}
+                            {transfer.examsReceived || "-"}
                           </TableCell>
                           <TableCell>
                             <Badge

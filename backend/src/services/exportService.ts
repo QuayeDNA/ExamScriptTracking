@@ -355,7 +355,7 @@ export const generateHandlerPerformanceExcel = async (
     });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Exam Script Tracking System";
+    workbook.creator = "Exam Logistics System (ELMS)";
     workbook.created = new Date();
 
     // Summary Sheet
@@ -465,8 +465,8 @@ export const generateHandlerPerformanceExcel = async (
           ? new Date(transfer.confirmedAt).toLocaleString()
           : "-",
         status: transfer.status,
-        expected: transfer.scriptsExpected,
-        received: transfer.scriptsReceived || "-",
+        expected: transfer.examsExpected,
+        received: transfer.examsReceived || "-",
         discrepancy: transfer.discrepancyNote || "-",
       });
     }
@@ -574,9 +574,9 @@ export const generateDiscrepancyReportPDF = async (
         d.examSession.courseCode,
         `${d.fromHandler.firstName} ${d.fromHandler.lastName}`,
         `${d.toHandler.firstName} ${d.toHandler.lastName}`,
-        d.scriptsExpected.toString(),
-        (d.scriptsReceived || 0).toString(),
-        (d.scriptsExpected - (d.scriptsReceived || 0)).toString(),
+        d.examsExpected.toString(),
+        (d.examsReceived || 0).toString(),
+        (d.examsExpected - (d.examsReceived || 0)).toString(),
         d.status.replace("_", " "),
         d.discrepancyNote?.substring(0, 50) || "-",
       ]),
@@ -615,7 +615,7 @@ export const generateAnalyticsOverviewExcel = async (
         : {};
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Exam Script Tracking System";
+    workbook.creator = "Exam Logistics System (ELMS)";
     workbook.created = new Date();
 
     // Overview Sheet
@@ -855,11 +855,9 @@ export const generateIncidentReportPDF = async (
         doc.text(
           `  To: ${incident.transfer.toHandler.firstName} ${incident.transfer.toHandler.lastName}`
         );
-        doc.text(`  Scripts Expected: ${incident.transfer.scriptsExpected}`);
+        doc.text(`  Scripts Expected: ${incident.transfer.examsExpected}`);
         doc.text(
-          `  Scripts Received: ${
-            incident.transfer.scriptsReceived || "Pending"
-          }`
+          `  Scripts Received: ${incident.transfer.examsReceived || "Pending"}`
         );
         doc.text(`  Status: ${incident.transfer.status}`);
         doc.moveDown(0.5);

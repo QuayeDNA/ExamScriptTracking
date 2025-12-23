@@ -25,6 +25,8 @@ export interface ClassAttendanceRecord {
     id: string;
     studentId: string;
     scanTime: string;
+    lecturerConfirmed: boolean;
+    confirmedAt?: string;
     student: {
       id: string;
       indexNumber: string;
@@ -123,5 +125,17 @@ export const classAttendanceApi = {
     courseCodes: string[];
   }> => {
     return apiClient.get("/class-attendance/autocomplete");
+  },
+
+  deleteRecord: async (recordId: string): Promise<{ message: string }> => {
+    return apiClient.delete(`/class-attendance/records/${recordId}`);
+  },
+
+  confirmAttendance: async (
+    attendanceId: string
+  ): Promise<{ message: string; attendance: any }> => {
+    return apiClient.post("/class-attendance/records/attendance/confirm", {
+      attendanceId,
+    });
   },
 };

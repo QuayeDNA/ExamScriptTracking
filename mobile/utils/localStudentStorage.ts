@@ -147,7 +147,7 @@ export async function cleanupOldData(sessionId?: string): Promise<void> {
 }
 
 /**
- * Search students by partial index number or name
+ * Search students by partial index number or name (fuzzy search)
  */
 export async function searchStudents(
   query: string,
@@ -155,13 +155,45 @@ export async function searchStudents(
 ): Promise<LocalStudent[]> {
   try {
     const students = await getAllStudents(sessionId);
-    const lowerQuery = query.toLowerCase();
+    const lowerQuery = query.toLowerCase().trim();
 
-    return students.filter(
-      (student) =>
-        student.indexNumber.toLowerCase().includes(lowerQuery) ||
-        student.name.toLowerCase().includes(lowerQuery)
-    );
+    if (!lowerQuery) return [];
+
+    // Split query into words for better matching
+    const queryWords = lowerQuery.split(/\s+/);
+
+    return students
+      .filter((student) => {
+        const indexMatch = student.indexNumber
+          .toLowerCase()
+          .includes(lowerQuery);
+        const nameMatch = student.name.toLowerCase().includes(lowerQuery);
+
+        // Also check if all query words are in the name
+        const nameWords = student.name.toLowerCase().split(/\s+/);
+        const wordMatch = queryWords.every((word) =>
+          nameWords.some((nameWord) => nameWord.includes(word))
+        );
+
+        return indexMatch || nameMatch || wordMatch;
+      })
+      .sort((a, b) => {
+        // Sort by relevance: exact matches first, then partial
+        const aIndex = a.indexNumber.toLowerCase();
+        const bIndex = b.indexNumber.toLowerCase();
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+
+        const aExact = aIndex === lowerQuery || aName === lowerQuery;
+        const bExact = bIndex === lowerQuery || bName === lowerQuery;
+
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+
+        // Then by last used (most recent first)
+        return new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime();
+      })
+      .slice(0, 20); // Limit results
   } catch (error) {
     console.error("Failed to search students:", error);
     return [];

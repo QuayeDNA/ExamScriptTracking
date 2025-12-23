@@ -138,7 +138,9 @@ export const studentsApi = {
   },
 
   getStudentQR: async (indexNumber: string): Promise<Student> => {
-    return apiClient.get<Student>(`/students/qr/${indexNumber}`);
+    return apiClient.get<Student>(
+      `/students/qr?indexNumber=${encodeURIComponent(indexNumber)}`
+    );
   },
 
   getPrograms: async (): Promise<{ programs: string[] }> => {

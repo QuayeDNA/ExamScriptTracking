@@ -590,9 +590,9 @@ export const getStudentByIndexNumber = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { indexNumber } = req.params;
+    const { indexNumber } = req.query;
 
-    if (!indexNumber) {
+    if (!indexNumber || typeof indexNumber !== "string") {
       res.status(400).json({ error: "Index number is required" });
       return;
     }

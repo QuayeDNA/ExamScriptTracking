@@ -468,7 +468,7 @@ npx expo start --lan
 - Dashboard loads
 - QR scanning works
 - Real-time updates (test with web dashboard open)
-- Script tracking
+- Exam Logistics System (ELMS)
 - Class attendance
 
 ---

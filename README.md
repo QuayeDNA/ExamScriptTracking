@@ -1,4 +1,4 @@
-# Exam Script Tracking System - Project Specification
+# Exam Logistics System (ELMS) - Project Specification
 
 ## Executive Summary
 
@@ -41,6 +41,7 @@ The "handshake system" creates an unbreakable chain of custody where each transf
 ### Phase 1: Pre-Exam Setup
 
 1. **Admin** creates exam session in web dashboard:
+
    - Course code, name, date/time
    - Assigned lecturer
    - Venue
@@ -57,11 +58,13 @@ The "handshake system" creates an unbreakable chain of custody where each transf
 ### Phase 2: During Exam (Invigilator Actions)
 
 #### Step 1: Session Initialization
+
 - Invigilator scans batch QR code on mobile app
 - System creates active exam session
 - Status: "In Progress"
 
 #### Step 2: Student Entry
+
 - Student scans their ID QR code (contains: name, index number, program, level)
 - System records:
   - Entry timestamp
@@ -69,6 +72,7 @@ The "handshake system" creates an unbreakable chain of custody where each transf
   - Marks attendance as "Present"
 
 #### Step 3: Student Exit & Submission
+
 - Student scans ID QR again when submitting script
 - System records:
   - Exit timestamp
@@ -76,6 +80,7 @@ The "handshake system" creates an unbreakable chain of custody where each transf
   - Updates batch script count
 
 #### Step 4: Session Closure
+
 - Invigilator closes exam session
 - System generates batch manifest:
   - Total scripts expected vs submitted
@@ -185,7 +190,7 @@ model User {
   phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   handledBatches BatchTransfer[] @relation("Handler")
   receivedBatches BatchTransfer[] @relation("Receiver")
   createdExams   ExamSession[]
@@ -209,7 +214,7 @@ model Student {
   level       Int
   qrCode      String   @unique
   createdAt   DateTime @default(now())
-  
+
   attendances ExamAttendance[]
 }
 
@@ -229,7 +234,7 @@ model ExamSession {
   createdById  String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  
+
   createdBy   User @relation(fields: [createdById], references: [id])
   attendances ExamAttendance[]
   transfers   BatchTransfer[]
@@ -256,10 +261,10 @@ model ExamAttendance {
   submissionTime  DateTime?
   status          AttendanceStatus @default(PRESENT)
   discrepancyNote String?
-  
+
   student      Student      @relation(fields: [studentId], references: [id])
   examSession  ExamSession  @relation(fields: [examSessionId], references: [id])
-  
+
   @@unique([studentId, examSessionId])
 }
 
@@ -283,11 +288,11 @@ model BatchTransfer {
   scriptsReceived Int?
   discrepancyNote String?
   location        String?
-  
+
   examSession ExamSession @relation(fields: [examSessionId], references: [id])
   fromHandler User        @relation("Handler", fields: [fromHandlerId], references: [id])
   toHandler   User        @relation("Receiver", fields: [toHandlerId], references: [id])
-  
+
   @@index([examSessionId])
 }
 
@@ -308,7 +313,7 @@ model AuditLog {
   details   Json?
   ipAddress String?
   timestamp DateTime @default(now())
-  
+
   @@index([entityId])
   @@index([timestamp])
 }
@@ -321,28 +326,33 @@ model AuditLog {
 ### Web Dashboard (Admin)
 
 #### User Management
+
 - Create/edit handlers with role assignment
 - Deactivate users
 - View handler activity logs
 
 #### Exam Management
+
 - Create exam sessions
 - Generate batch QR codes (downloadable as PDF)
 - Pre-register expected students for verification
 
 #### Batch Tracking
+
 - Real-time dashboard showing all active batches
 - Filter by status, date, department, faculty
 - View complete custody chain for any batch
 - Timeline visualization of batch movement
 
 #### Reports & Analytics
+
 - Discrepancy reports (missing scripts, entry-only students)
 - Handler performance metrics
 - Exam completion rates
 - Export to PDF/Excel
 
 #### Alerts & Notifications
+
 - Batches stuck in transit >24 hours
 - Discrepancy reports requiring attention
 - Failed transfer attempts
@@ -350,27 +360,32 @@ model AuditLog {
 ### Mobile App (Handler)
 
 #### Session Management
+
 - Scan batch QR to start/resume session
 - View session details and manifest
 
 #### Student Scanning
+
 - Entry scan (shows student photo if available)
 - Exit/submission scan
 - Visual/audio confirmation feedback
 - Offline mode with sync when connection restored
 
 #### Batch Transfer
+
 - Initiate transfer with handler selection
 - Receive transfer requests with push notification
 - Confirm receipt after physical verification
 - Report discrepancies with photo evidence
 
 #### Batch Tracking
+
 - View all batches in current custody
 - Historical transfers made/received
 - Search by course code or batch ID
 
 #### Offline Capability
+
 - Queue scans and transfers when offline
 - Auto-sync when connection restored
 - Local storage of critical data
@@ -391,7 +406,7 @@ model AuditLog {
 
 1. **Blockchain-inspired Chain:** Each transfer references previous transfer hash (optional but impressive)
 2. **Immutable Records:** Historical data cannot be edited, only appended with explanatory notes
-3. **Discrepancy Protocol:** 
+3. **Discrepancy Protocol:**
    - Immediate flag when script count mismatch
    - Admin notification
    - Investigation mode locks batch
@@ -414,16 +429,19 @@ model AuditLog {
 ### Reporting
 
 #### Automated Reports:
+
 - Daily exam completion summary
 - Weekly discrepancy report
 - Monthly handler performance
 
 #### Custom Reports:
+
 - Date range selection
 - Filter by department/faculty/course
 - Export formats: PDF, Excel, CSV
 
 #### Analytics Dashboard:
+
 - Average exam processing time
 - Most common transfer points
 - Peak exam periods
@@ -434,6 +452,7 @@ model AuditLog {
 ## Implementation Phases
 
 ### Phase 1: MVP (8-10 weeks)
+
 - Core authentication & user management
 - Basic exam session creation
 - Student entry/exit scanning
@@ -442,6 +461,7 @@ model AuditLog {
 - Basic reporting
 
 ### Phase 2: Enhanced Transfer System (4-6 weeks)
+
 - Handshake transfer system
 - Transfer notifications
 - Discrepancy reporting
@@ -449,6 +469,7 @@ model AuditLog {
 - Offline mode for mobile
 
 ### Phase 3: Advanced Features (4-6 weeks)
+
 - Analytics dashboard
 - Advanced reporting
 - Automated alerts
@@ -456,6 +477,7 @@ model AuditLog {
 - QR code encryption
 
 ### Phase 4: Polish & Scale (2-4 weeks)
+
 - Performance optimization
 - Load testing
 - Security audit
@@ -466,14 +488,14 @@ model AuditLog {
 
 ## Potential Challenges & Solutions
 
-| Challenge | Solution |
-|-----------|----------|
-| **Network unreliability during exams** | Offline-first mobile app with queue-based sync |
-| **QR code damage on scripts** | Batch-level tracking + manual fallback with photo evidence |
-| **Handler resistance to new system** | Intuitive UX + training + show time savings |
-| **Concurrent transfers of same batch** | Optimistic locking in database + real-time conflict resolution |
-| **Scale for large institutions** | Database indexing, caching layer (Redis), pagination |
-| **Printer availability for QR codes** | Bulk QR generation, reusable batch containers with permanent QR |
+| Challenge                              | Solution                                                        |
+| -------------------------------------- | --------------------------------------------------------------- |
+| **Network unreliability during exams** | Offline-first mobile app with queue-based sync                  |
+| **QR code damage on scripts**          | Batch-level tracking + manual fallback with photo evidence      |
+| **Handler resistance to new system**   | Intuitive UX + training + show time savings                     |
+| **Concurrent transfers of same batch** | Optimistic locking in database + real-time conflict resolution  |
+| **Scale for large institutions**       | Database indexing, caching layer (Redis), pagination            |
+| **Printer availability for QR codes**  | Bulk QR generation, reusable batch containers with permanent QR |
 
 ---
 
@@ -569,6 +591,7 @@ SMTP_PASSWORD="your-password"
 ## API Documentation
 
 Once the backend is running, access Swagger documentation at:
+
 ```
 http://localhost:3000/api-docs
 ```
@@ -612,6 +635,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Support
 
 For issues and questions:
+
 - Create an issue on GitHub
 - Email: support@examtracking.com
 - Documentation: https://docs.examtracking.com

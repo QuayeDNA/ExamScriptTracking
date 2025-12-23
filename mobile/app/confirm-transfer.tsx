@@ -50,7 +50,7 @@ export default function ConfirmTransferScreen() {
             try {
               setSubmitting(true);
               await batchTransfersApi.confirmTransfer(transferId, {
-                scriptsReceived: transfer!.scriptsExpected,
+                examsReceived: transfer!.examsExpected,
               });
 
               Alert.alert(

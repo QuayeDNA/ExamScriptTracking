@@ -16,7 +16,7 @@ const prisma = new PrismaClient();
 const createTransferSchema = z.object({
   examSessionId: z.string().uuid("Invalid exam session ID"),
   toHandlerId: z.string().min(1, "Receiver handler ID is required"),
-  scriptsExpected: z
+  examsExpected: z
     .number()
     .int()
     .positive("Scripts expected must be a positive number"),
@@ -24,7 +24,7 @@ const createTransferSchema = z.object({
 });
 
 const confirmTransferSchema = z.object({
-  scriptsReceived: z
+  examsReceived: z
     .number()
     .int()
     .positive("Scripts received must be a positive number")
@@ -109,7 +109,7 @@ export const createTransfer = async (req: Request, res: Response) => {
         examSessionId: validatedData.examSessionId,
         fromHandlerId,
         toHandlerId: validatedData.toHandlerId,
-        scriptsExpected: validatedData.scriptsExpected,
+        examsExpected: validatedData.examsExpected,
         location: validatedData.location,
         status: "PENDING",
       },
@@ -157,7 +157,7 @@ export const createTransfer = async (req: Request, res: Response) => {
           fromHandlerName: `${fromHandler.firstName} ${fromHandler.lastName}`,
           toHandlerId: validatedData.toHandlerId,
           toHandlerName: `${toHandler.firstName} ${toHandler.lastName}`,
-          scriptsExpected: validatedData.scriptsExpected,
+          examsExpected: validatedData.examsExpected,
           location: validatedData.location,
           requestedAt: transfer.requestedAt,
         },
@@ -252,15 +252,15 @@ export const confirmTransfer = async (req: Request, res: Response) => {
     }
 
     // Simple handshake: auto-confirm without discrepancy checking
-    // If scriptsReceived not provided, use scriptsExpected (assumes all received)
+    // If examsReceived not provided, use examsExpected (assumes all received)
     const scriptsReceived =
-      validatedData.scriptsReceived ?? transfer.scriptsExpected;
+      validatedData.examsReceived ?? transfer.examsExpected;
 
     // Update transfer
     const updatedTransfer = await prisma.batchTransfer.update({
       where: { id },
       data: {
-        scriptsReceived,
+        examsReceived: scriptsReceived,
         discrepancyNote: validatedData.discrepancyNote,
         confirmedAt: new Date(),
         status: "CONFIRMED",
@@ -295,10 +295,10 @@ export const confirmTransfer = async (req: Request, res: Response) => {
     });
 
     // AUTO-INCIDENT CREATION: Check for script count mismatch
-    if (scriptsReceived !== transfer.scriptsExpected) {
-      const difference = Math.abs(scriptsReceived - transfer.scriptsExpected);
+    if (scriptsReceived !== transfer.examsExpected) {
+      const difference = Math.abs(scriptsReceived - transfer.examsExpected);
       const severity =
-        scriptsReceived < transfer.scriptsExpected ? "HIGH" : "MEDIUM";
+        scriptsReceived < transfer.examsExpected ? "HIGH" : "MEDIUM";
 
       try {
         await incidentService.autoCreateIncident({
@@ -310,9 +310,9 @@ export const confirmTransfer = async (req: Request, res: Response) => {
           } ${transfer.fromHandler.lastName} to ${
             transfer.toHandler.firstName
           } ${transfer.toHandler.lastName}.\n\nExpected: ${
-            transfer.scriptsExpected
+            transfer.examsExpected
           } scripts\nReceived: ${scriptsReceived} scripts\nDifference: ${difference} script(s) ${
-            scriptsReceived < transfer.scriptsExpected ? "missing" : "extra"
+            scriptsReceived < transfer.examsExpected ? "missing" : "extra"
           }\n\n${
             validatedData.discrepancyNote
               ? `Note: ${validatedData.discrepancyNote}`
@@ -348,8 +348,8 @@ export const confirmTransfer = async (req: Request, res: Response) => {
           fromHandlerName: `${transfer.fromHandler.firstName} ${transfer.fromHandler.lastName}`,
           toHandlerId: transfer.toHandlerId,
           toHandlerName: `${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`,
-          scriptsExpected: transfer.scriptsExpected,
-          scriptsReceived,
+          examsExpected: transfer.examsExpected,
+          examsReceived: scriptsReceived,
           confirmedAt: updatedTransfer.confirmedAt,
         },
       },
@@ -461,7 +461,7 @@ export const rejectTransfer = async (req: Request, res: Response) => {
           fromHandlerName: `${transfer.fromHandler.firstName} ${transfer.fromHandler.lastName}`,
           toHandlerId: transfer.toHandlerId,
           toHandlerName: `${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`,
-          scriptsExpected: transfer.scriptsExpected,
+          examsExpected: transfer.examsExpected,
           reason,
         },
       },

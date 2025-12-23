@@ -513,7 +513,7 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
       });
 
       if (existingTransfers === 0) {
-        // Get the count of present students (attendances) for scriptsExpected
+        // Get the count of present students (attendances) for examsExpected
         // This represents all students who attended the exam
         const submittedCount = await prisma.examAttendance.count({
           where: {
@@ -529,8 +529,8 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
             fromHandlerId: req.user!.userId,
             toHandlerId: req.user!.userId, // Self-transfer to establish custody
             status: "CONFIRMED",
-            scriptsExpected: submittedCount,
-            scriptsReceived: submittedCount,
+            examsExpected: submittedCount,
+            examsReceived: submittedCount,
             requestedAt: new Date(),
             confirmedAt: new Date(),
             discrepancyNote: "Initial custody established upon submission",
@@ -855,8 +855,8 @@ export const endExamSession = async (req: Request, res: Response) => {
           fromHandlerId: req.user!.userId,
           toHandlerId: req.user!.userId, // Self-transfer to establish custody
           status: "CONFIRMED",
-          scriptsExpected: submittedCount,
-          scriptsReceived: submittedCount,
+          examsExpected: submittedCount,
+          examsReceived: submittedCount,
           requestedAt: new Date(),
           confirmedAt: new Date(),
           discrepancyNote: "Initial custody established upon session end",

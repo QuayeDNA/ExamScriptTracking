@@ -52,6 +52,8 @@ export function StudentLookupModal({
   });
   const [isSearching, setIsSearching] = useState(false);
 
+  const [recentStudents, setRecentStudents] = useState<LocalStudent[]>([]);
+
   useEffect(() => {
     if (visible) {
       // Reset state when modal opens
@@ -64,8 +66,25 @@ export function StudentLookupModal({
         program: "",
         level: "",
       });
+      // Load recent students
+      loadRecentStudents();
     }
   }, [visible]);
+
+  const loadRecentStudents = async () => {
+    try {
+      const allStudents = await getAllStudents(sessionId);
+      const recent = allStudents
+        .sort(
+          (a, b) =>
+            new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime()
+        )
+        .slice(0, 5);
+      setRecentStudents(recent);
+    } catch (error) {
+      console.error("Failed to load recent students:", error);
+    }
+  };
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
@@ -201,7 +220,7 @@ export function StudentLookupModal({
               autoCapitalize="none"
             />
 
-            {searchResults.length > 0 && (
+            {searchResults.length > 0 ? (
               <View style={styles.resultsContainer}>
                 <Text
                   style={[
@@ -219,7 +238,24 @@ export function StudentLookupModal({
                   style={styles.resultsList}
                 />
               </View>
-            )}
+            ) : searchQuery.trim() === "" && recentStudents.length > 0 ? (
+              <View style={styles.resultsContainer}>
+                <Text
+                  style={[
+                    styles.resultsTitle,
+                    { color: colors.foregroundMuted },
+                  ]}
+                >
+                  Recent Students
+                </Text>
+                <FlatList
+                  data={recentStudents}
+                  keyExtractor={(item) => item.indexNumber}
+                  renderItem={renderStudentItem}
+                  style={styles.resultsList}
+                />
+              </View>
+            ) : null}
 
             <View style={styles.actions}>
               <Button

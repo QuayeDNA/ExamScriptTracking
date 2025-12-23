@@ -31,7 +31,7 @@ try {
 
     Write-Host ""
     Write-Host "✅ Build submitted!" -ForegroundColor Green
-    Write-Host "Monitor the build at: https://expo.dev/accounts/[your-account]/projects/ExamScriptTracking/builds" -ForegroundColor Cyan
+    Write-Host "Monitor the build at: https://expo.dev/accounts/[your-account]/projects/elms/builds" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Once the build completes:" -ForegroundColor Yellow
     Write-Host "  1. Download the APK from the Expo dashboard" -ForegroundColor White
