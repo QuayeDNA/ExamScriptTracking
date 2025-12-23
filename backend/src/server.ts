@@ -35,10 +35,14 @@ export const io = initializeSocketServer(httpServer);
 
 // Middleware
 // Allow CORS from multiple origins for web and mobile development
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
+  : [];
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8081", // Expo dev server
-  process.env.CORS_ORIGIN,
+  ...corsOrigins,
 ].filter(Boolean);
 
 app.use(
@@ -55,6 +59,8 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log(`CORS blocked origin: ${origin}`);
+        console.log(`Allowed origins:`, allowedOrigins);
         callback(new Error("Not allowed by CORS"));
       }
     },
