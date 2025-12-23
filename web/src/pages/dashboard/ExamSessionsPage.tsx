@@ -326,7 +326,7 @@ export default function ExamSessionsPage() {
   };
 
   const openDeleteModal = (session: ExamSession) => {
-    if (session._count?.attendances > 0) {
+    if (session._count?.attendances && session._count.attendances > 0) {
       toast.error(
         `Cannot delete exam session with ${session._count.attendances} attendance record(s)`
       );
@@ -571,11 +571,15 @@ export default function ExamSessionsPage() {
                                 variant="ghost"
                                 size="icon"
                                 title={
-                                  session._count?.attendances > 0
+                                  session._count?.attendances &&
+                                  session._count.attendances > 0
                                     ? `Cannot delete: ${session._count.attendances} attendance record(s) exist`
                                     : "Delete"
                                 }
-                                disabled={session._count?.attendances > 0}
+                                disabled={Boolean(
+                                  session._count?.attendances &&
+                                    session._count.attendances > 0
+                                )}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>

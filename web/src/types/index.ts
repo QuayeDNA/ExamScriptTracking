@@ -252,6 +252,9 @@ export interface ExamSession {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  _count?: {
+    attendances: number;
+  };
 }
 
 // Attendance Types
