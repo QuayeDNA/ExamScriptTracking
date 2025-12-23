@@ -180,7 +180,7 @@ export default function ReportIncidentScreen() {
   // Select a template suggestion
   const selectTemplate = (template: IncidentTemplate) => {
     selectingSuggestionRef.current = true;
-    
+
     // Update form data with individual state updates to ensure they take effect
     setFormData((prev) => {
       const newState = { ...prev, title: template.title };
@@ -198,9 +198,9 @@ export default function ReportIncidentScreen() {
         return newState;
       });
       // Force a re-render to ensure TextInputs update
-      setForceUpdate(prev => prev + 1);
+      setForceUpdate((prev) => prev + 1);
     }, 20);
-    
+
     setTitleSuggestions([]);
     setShowSuggestions(false);
     // Reset the ref after a short delay
