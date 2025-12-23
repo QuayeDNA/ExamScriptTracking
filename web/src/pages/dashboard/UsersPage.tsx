@@ -50,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Download,
@@ -82,7 +83,7 @@ interface UserActionState {
 export const UsersPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<Role | "">("");
+  const [activeTab, setActiveTab] = useState<string>("all");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | "">("");
   const [searchFilter, setSearchFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
@@ -93,8 +94,25 @@ export const UsersPage = () => {
     useState<TemporaryCredentials | null>(null);
   const [bulkResults, setBulkResults] = useState<BulkResults | null>(null);
 
+  // Handle tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+  };
+
+  // Get role filter based on active tab
+  const getTabRoleFilter = (): Role | "" => {
+    if (activeTab === "all") return "";
+    if (activeTab === "admin") return "ADMIN";
+    if (activeTab === "invigilator") return "INVIGILATOR";
+    if (activeTab === "lecturer") return "LECTURER";
+    if (activeTab === "department-head") return "DEPARTMENT_HEAD";
+    if (activeTab === "faculty-officer") return "FACULTY_OFFICER";
+    if (activeTab === "class-rep") return "CLASS_REP";
+    return "";
+  };
+
   const filters = {
-    ...(roleFilter && { role: roleFilter }),
+    ...(getTabRoleFilter() && { role: getTabRoleFilter() as Role }),
     ...(isActiveFilter !== "" && { isActive: isActiveFilter }),
     ...(searchFilter && { search: searchFilter }),
   };
@@ -261,7 +279,7 @@ export const UsersPage = () => {
 
   const handleExportUsers = () => {
     const exportFilters = {
-      ...(roleFilter && { role: roleFilter }),
+      ...(getTabRoleFilter() && { role: getTabRoleFilter() }),
       ...(isActiveFilter !== "" && { isActive: isActiveFilter }),
       ...(searchFilter && { search: searchFilter }),
       ...(dateFromFilter && { dateFrom: dateFromFilter }),
@@ -304,7 +322,6 @@ export const UsersPage = () => {
   };
 
   const clearAllFilters = () => {
-    setRoleFilter("");
     setIsActiveFilter("");
     setSearchFilter("");
     setDateFromFilter("");
@@ -312,11 +329,7 @@ export const UsersPage = () => {
   };
 
   const hasActiveFilters =
-    roleFilter ||
-    isActiveFilter !== "" ||
-    searchFilter ||
-    dateFromFilter ||
-    dateToFilter;
+    isActiveFilter !== "" || searchFilter || dateFromFilter || dateToFilter;
 
   return (
     <div className="space-y-6">
@@ -368,7 +381,7 @@ export const UsersPage = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="search">Search</Label>
                 <Input
@@ -378,29 +391,6 @@ export const UsersPage = () => {
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Search by name or email..."
                 />
-              </div>
-
-              <div>
-                <Label htmlFor="role-filter">Role</Label>
-                <Select
-                  value={roleFilter || undefined}
-                  onValueChange={(value) => setRoleFilter(value as Role | "")}
-                >
-                  <SelectTrigger id="role-filter">
-                    <SelectValue placeholder="All Roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="INVIGILATOR">Invigilator</SelectItem>
-                    <SelectItem value="LECTURER">Lecturer</SelectItem>
-                    <SelectItem value="DEPARTMENT_HEAD">
-                      Department Head
-                    </SelectItem>
-                    <SelectItem value="FACULTY_OFFICER">
-                      Faculty Officer
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div>
@@ -455,6 +445,25 @@ export const UsersPage = () => {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+       {/* User Type Tabs */}
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs value={activeTab} onValueChange={handleTabChange}>
+            <TabsList className="grid w-full grid-cols-7">
+              <TabsTrigger value="all">All Users</TabsTrigger>
+              <TabsTrigger value="admin">Admins</TabsTrigger>
+              <TabsTrigger value="invigilator">Invigilators</TabsTrigger>
+              <TabsTrigger value="lecturer">Lecturers</TabsTrigger>
+              <TabsTrigger value="department-head">Dept Heads</TabsTrigger>
+              <TabsTrigger value="faculty-officer">
+                Faculty Officers
+              </TabsTrigger>
+              <TabsTrigger value="class-rep">Class Reps</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardContent>
       </Card>
 
