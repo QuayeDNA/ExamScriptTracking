@@ -650,6 +650,37 @@ For issues and questions:
 
 ---
 
+## Web Accessibility
+
+### Mobile App on Web
+
+The React Native mobile app is fully accessible via web browsers using Expo's React Native Web integration. Users can access mobile functionality without downloading the app:
+
+- **Access URL:** `/mobile` (when deployed with web app)
+- **Features Available:**
+  - QR code scanning (camera access required)
+  - Class attendance recording
+  - Incident reporting
+  - Batch custody transfers
+  - Real-time notifications
+
+### Building for Web
+
+```bash
+# Build mobile app for web deployment
+./build-mobile-web.sh
+
+# Or manually:
+cd mobile
+npx expo export --platform web --output-dir ../web/public/mobile
+```
+
+### Deployment
+
+The mobile web app is automatically included when deploying the main web application to Vercel, Render, or other hosting platforms.
+
+---
+
 ## Next Steps
 
 1. Validate with key stakeholders (registrar, exams office, lecturers)
