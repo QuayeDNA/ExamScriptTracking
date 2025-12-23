@@ -23,6 +23,19 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Scripts and automation files (security)
+*.ps1
+scripts/
+**/scripts/
+
+# Internal documentation (remove from production)
+*_STATUS.md
+*_MANUAL.md
+DEPLOYMENT_*.md
+DESIGN_SYSTEM*.md
+QUICK_START*.md
+**/README.md
+
 # OS
 .DS_Store
 Thumbs.db
