@@ -25,6 +25,23 @@ export interface UpdateAttendanceSessionData {
   isActive?: boolean;
 }
 
+export interface AttendanceStudent {
+  id: string;
+  studentId: string;
+  recordId: string;
+  scanTime: string;
+  lecturerConfirmed: boolean;
+  confirmedAt?: string;
+  student: {
+    id: string;
+    indexNumber: string;
+    firstName: string;
+    lastName: string;
+    program?: string | null;
+    level?: number | null;
+  };
+}
+
 export interface AttendanceRecord {
   id: string;
   sessionId: string;
@@ -41,22 +58,7 @@ export interface AttendanceRecord {
     deviceId: string;
     deviceName: string | null;
   };
-  students?: Array<{
-    id: string;
-    studentId: string;
-    recordId: string;
-    scanTime: string;
-    lecturerConfirmed: boolean;
-    confirmedAt?: string;
-    student: {
-      id: string;
-      indexNumber: string;
-      firstName: string;
-      lastName: string;
-      program?: string | null;
-      level?: number | null;
-    };
-  }>;
+  students?: AttendanceStudent[];
 }
 
 export interface AttendanceRecordsResponse {
@@ -128,7 +130,7 @@ export const classAttendanceApi = {
 
   confirmAttendance: async (
     attendanceId: string
-  ): Promise<{ message: string; attendance: any }> => {
+  ): Promise<{ message: string; attendance: AttendanceStudent }> => {
     return apiClient.post("/class-attendance/records/attendance/confirm", {
       attendanceId,
     });

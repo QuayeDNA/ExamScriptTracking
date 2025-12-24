@@ -24,8 +24,6 @@ import {
   Activity,
   AlertCircle,
   CheckCircle,
-  Users,
-  FileText,
   AlertTriangle,
 } from "lucide-react";
 import { authApi } from "@/api/auth";
@@ -292,48 +290,6 @@ export const MobileProfilePage = () => {
             </Card>
           </div>
         </ScrollArea>
-
-        {/* Bottom Navigation */}
-        <div className="border-t bg-white px-4 py-2">
-          <div className="flex justify-around">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile")}
-            >
-              <Users className="w-5 h-5" />
-              <span className="text-xs">Home</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/custody")}
-            >
-              <FileText className="w-5 h-5" />
-              <span className="text-xs">Custody</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/incidents")}
-            >
-              <AlertTriangle className="w-5 h-5" />
-              <span className="text-xs">Incidents</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1 text-blue-600"
-              onClick={() => navigate("/mobile/profile")}
-            >
-              <User className="w-5 h-5" />
-              <span className="text-xs">Profile</span>
-            </Button>
-          </div>
-        </div>
 
         {/* Logout Confirmation Dialog */}
         <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>

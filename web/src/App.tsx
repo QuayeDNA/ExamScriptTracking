@@ -17,12 +17,16 @@ import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
+import { MobileLayout } from "@/layouts/MobileLayout";
 import { UsersPage } from "@/pages/dashboard/UsersPage";
 import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
 import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import {
+  ProtectedRoute,
+  MobileProtectedRoute,
+} from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
@@ -43,6 +47,9 @@ import { MobileStudentAttendancePage } from "@/pages/mobile/MobileStudentAttenda
 import { MobileRecentActivityPage } from "@/pages/mobile/MobileRecentActivityPage";
 import { MobileInitiateTransferPage } from "@/pages/mobile/MobileInitiateTransferPage";
 import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferPage";
+import { MobileLoginPage } from "@/pages/mobile/MobileLoginPage";
+import { MobileQRRegistrationPage } from "@/pages/mobile/MobileQRRegistrationPage";
+import { MobileChangePasswordPage } from "@/pages/mobile/MobileChangePasswordPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -109,48 +116,67 @@ function App() {
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
                 {/* Mobile routes - replicate mobile app functionality */}
-                <Route element={<ProtectedRoute />}>
-                  <Route path="/mobile" element={<DashboardLayout />}>
-                    {/* Mobile Home/Dashboard */}
-                    <Route index element={<MobileHomePage />} />
+                <Route element={<MobileLayout />}>
+                  {/* Mobile Auth Routes */}
+                  <Route path="/mobile/login" element={<MobileLoginPage />} />
+                  <Route
+                    path="/mobile/qr-registration"
+                    element={<MobileQRRegistrationPage />}
+                  />
+                  <Route
+                    path="/mobile/change-password"
+                    element={<MobileChangePasswordPage />}
+                  />
 
-                    {/* Mobile Tabs */}
-                    <Route path="custody" element={<MobileCustodyPage />} />
-                    <Route path="incidents" element={<MobileIncidentsPage />} />
-                    <Route path="scanner" element={<MobileScannerPage />} />
-                    <Route path="profile" element={<MobileProfilePage />} />
-
-                    {/* Mobile Individual Screens */}
+                  {/* Mobile Dashboard Routes */}
+                  <Route element={<MobileProtectedRoute />}>
+                    <Route path="/mobile" element={<MobileHomePage />} />
                     <Route
-                      path="attendance"
+                      path="/mobile/custody"
+                      element={<MobileCustodyPage />}
+                    />
+                    <Route
+                      path="/mobile/incidents"
+                      element={<MobileIncidentsPage />}
+                    />
+                    <Route
+                      path="/mobile/scanner"
+                      element={<MobileScannerPage />}
+                    />
+                    <Route
+                      path="/mobile/profile"
+                      element={<MobileProfilePage />}
+                    />
+                    <Route
+                      path="/mobile/attendance"
                       element={<MobileAttendancePage />}
                     />
                     <Route
-                      path="batch-details/:batchId"
+                      path="/mobile/batch-details/:batchId"
                       element={<MobileBatchDetailsPage />}
                     />
                     <Route
-                      path="report-incident"
+                      path="/mobile/report-incident"
                       element={<MobileReportIncidentPage />}
                     />
                     <Route
-                      path="incident-details/:id"
+                      path="/mobile/incident-details/:id"
                       element={<MobileIncidentDetailsPage />}
                     />
                     <Route
-                      path="student-attendance"
+                      path="/mobile/student-attendance"
                       element={<MobileStudentAttendancePage />}
                     />
                     <Route
-                      path="recent-activity"
+                      path="/mobile/recent-activity"
                       element={<MobileRecentActivityPage />}
                     />
                     <Route
-                      path="initiate-transfer"
+                      path="/mobile/initiate-transfer"
                       element={<MobileInitiateTransferPage />}
                     />
                     <Route
-                      path="confirm-transfer/:transferId"
+                      path="/mobile/confirm-transfer/:transferId"
                       element={<MobileConfirmTransferPage />}
                     />
                   </Route>

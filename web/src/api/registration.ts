@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import type { Role } from "@/types";
 
 export interface CreateSessionRequest {
   expiresInMinutes: number;
@@ -39,6 +40,33 @@ export interface GetSessionsResponse {
   };
 }
 
+export interface RegisterWithQRRequest {
+  qrToken: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  password: string;
+  department: string;
+}
+
+export interface RegisterWithQRResponse {
+  message: string;
+  token: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    department: string;
+    role: Role;
+    isSuperAdmin: boolean;
+    isActive: boolean;
+    passwordChanged: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export const registrationApi = {
   createSession: async (
     expiresInMinutes: number
@@ -54,6 +82,15 @@ export const registrationApi = {
   getSessions: async (page = 1, limit = 20): Promise<GetSessionsResponse> => {
     return apiClient.get<GetSessionsResponse>(
       `/registration/sessions?page=${page}&limit=${limit}`
+    );
+  },
+
+  register: async (
+    data: RegisterWithQRRequest
+  ): Promise<RegisterWithQRResponse> => {
+    return apiClient.post<RegisterWithQRResponse>(
+      "/registration/register",
+      data
     );
   },
 };

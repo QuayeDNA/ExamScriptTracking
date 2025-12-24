@@ -1,0 +1,423 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import QrScanner from "qr-scanner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, Camera, RotateCcw } from "lucide-react";
+import { useRegisterWithQR } from "@/hooks/useAuth";
+
+interface QRData {
+  type: "REGISTRATION";
+  token: string;
+  expiresAt: string;
+}
+
+export const MobileQRRegistrationPage = () => {
+  const navigate = useNavigate();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [scanned, setScanned] = useState(false);
+  const [qrData, setQrData] = useState<QRData | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    password: "",
+    department: "",
+  });
+  const [scanError, setScanError] = useState("");
+  const [scanner, setScanner] = useState<QrScanner | null>(null);
+
+  const { mutate: registerWithQR, isPending, error } = useRegisterWithQR();
+
+  const handleScan = (data: string) => {
+    setScanned(true);
+    setScanError(""); // Clear any previous errors
+    try {
+      const parsedData: QRData = JSON.parse(data);
+
+      if (parsedData.type !== "REGISTRATION") {
+        setScanError("This QR code is not for registration.");
+        setScanned(false);
+        return;
+      }
+
+      // Check if expired
+      if (new Date() > new Date(parsedData.expiresAt)) {
+        setScanError("This QR code has expired.");
+        setScanned(false);
+        return;
+      }
+
+      setQrData(parsedData);
+      setShowForm(true);
+    } catch {
+      setScanError("Unable to read QR code data.");
+      setScanned(false);
+    }
+  };
+
+  useEffect(() => {
+    const initScanner = async () => {
+      try {
+        const hasCamera = await QrScanner.hasCamera();
+        setHasPermission(hasCamera);
+
+        if (hasCamera && videoRef.current) {
+          const qrScanner = new QrScanner(
+            videoRef.current,
+            (result) => handleScan(result.data),
+            {
+              highlightScanRegion: true,
+              highlightCodeOutline: true,
+            }
+          );
+          setScanner(qrScanner);
+        }
+      } catch (error) {
+        console.error("Error initializing scanner:", error);
+        setHasPermission(false);
+      }
+    };
+
+    initScanner();
+
+    return () => {
+      if (scanner) {
+        scanner.destroy();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (scanner && !scanned) {
+      scanner.start();
+    } else if (scanner && scanned) {
+      scanner.stop();
+    }
+  }, [scanner, scanned]);
+
+  const handleRegister = () => {
+    if (!qrData) return;
+
+    // Validation
+    if (
+      !formData.firstName ||
+      !formData.lastName ||
+      !formData.phone ||
+      !formData.password ||
+      !formData.department
+    ) {
+      return;
+    }
+
+    if (!/^(\+233|0)[0-9]{9}$/.test(formData.phone)) {
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      return;
+    }
+
+    registerWithQR(
+      {
+        qrToken: qrData.token,
+        ...formData,
+      },
+      {
+        onSuccess: () => {
+          navigate("/mobile");
+        },
+      }
+    );
+  };
+
+  const resetScanner = () => {
+    setScanned(false);
+    setQrData(null);
+    setShowForm(false);
+    setFormData({
+      firstName: "",
+      lastName: "",
+      phone: "",
+      password: "",
+      department: "",
+    });
+    setScanError("");
+  };
+
+  if (hasPermission === null) {
+    return (
+      <>
+        <div className="w-full max-w-md">
+          <Card className="w-full bg-card">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+              <p className="text-muted-foreground">
+                Requesting camera permission...
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  if (hasPermission === false) {
+    return (
+      <>
+        <div className="w-full max-w-md">
+          <Card className="w-full max-w-md bg-card">
+            <CardHeader>
+              <CardTitle className="text-center text-foreground">
+                QR Registration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-center">
+              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+              <p className="text-destructive mb-4">
+                Camera permission is required to scan QR codes.
+              </p>
+              <p className="text-muted-foreground mb-6">
+                Please enable camera access in your browser settings and try
+                again.
+              </p>
+              <Button
+                onClick={() => navigate("/mobile/login")}
+                variant="outline"
+              >
+                Go Back
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  if (showForm) {
+    return (
+      <>
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-full mb-4">
+              <Camera className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground mb-2">
+              Complete Registration
+            </h1>
+            <p className="text-muted-foreground">Enter your details</p>
+          </div>
+
+          <Card className="shadow-xl border-0">
+            <CardContent className="p-6">
+              {error && (
+                <Alert variant="destructive" className="mb-6">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {error instanceof Error
+                      ? error.message
+                      : "Registration failed. Please try again."}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName" className="text-foreground">
+                    First Name
+                  </Label>
+                  <Input
+                    id="firstName"
+                    placeholder="Enter your first name"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        firstName: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lastName" className="text-foreground">
+                    Last Name
+                  </Label>
+                  <Input
+                    id="lastName"
+                    placeholder="Enter your last name"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        lastName: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-foreground">
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="0241234567 or +233241234567"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        phone: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="department" className="text-foreground">
+                    Department
+                  </Label>
+                  <Input
+                    id="department"
+                    placeholder="e.g., Computer Science"
+                    value={formData.department}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        department: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-foreground">
+                    Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Create a password (min 8 characters)"
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        password: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleRegister}
+                  className="w-full"
+                  disabled={isPending}
+                >
+                  {isPending ? "Registering..." : "Complete Registration"}
+                </Button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={resetScanner}
+                    className="text-sm text-primary hover:text-primary/80 underline"
+                    disabled={isPending}
+                  >
+                    Scan Different QR Code
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-full mb-4">
+            <Camera className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            QR Registration
+          </h1>
+          <p className="text-muted-foreground">Scan the registration QR code</p>
+        </div>
+
+        <Card className="shadow-xl border-0 bg-card">
+          <CardContent className="p-6">
+            <p className="text-muted-foreground text-center mb-6">
+              Point your camera at the registration QR code provided by your
+              administrator.
+            </p>
+
+            {scanError && (
+              <Alert variant="destructive" className="mb-6">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{scanError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="relative mb-6">
+              <div className="aspect-square bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  className="w-full h-full object-cover"
+                  playsInline
+                  muted
+                />
+              </div>
+              {scanned && (
+                <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg">
+                  <p className="text-white text-lg font-bold">
+                    QR Code Detected!
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {scanned && (
+              <Button
+                onClick={resetScanner}
+                variant="outline"
+                className="w-full mb-4"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Scan Again
+              </Button>
+            )}
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => navigate("/mobile/login")}
+                className="text-sm text-primary hover:text-primary/80 underline"
+              >
+                Back to Login
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+};

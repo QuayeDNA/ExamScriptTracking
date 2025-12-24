@@ -49,9 +49,9 @@ export const MobileConfirmTransferPage = () => {
       toast.success("Transfer confirmed successfully");
       navigate("/mobile");
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       toast.error("Failed to confirm transfer", {
-        description: error.error || "An error occurred",
+        description: (error as { error?: string }).error || "An error occurred",
       });
     },
   });
@@ -68,9 +68,9 @@ export const MobileConfirmTransferPage = () => {
       toast.success("Transfer rejected");
       navigate("/mobile");
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       toast.error("Failed to reject transfer", {
-        description: error.error || "An error occurred",
+        description: (error as { error?: string }).error || "An error occurred",
       });
     },
   });

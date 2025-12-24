@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,9 +21,6 @@ import {
   RotateCcw,
   CheckCircle,
   XCircle,
-  AlertCircle,
-  Users,
-  FileText,
 } from "lucide-react";
 import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 import { toast } from "sonner";
@@ -49,7 +45,6 @@ const attendanceApi = {
 };
 
 export const MobileScannerPage = () => {
-  const navigate = useNavigate();
   const [scanMode, setScanMode] = useState<"ENTRY" | "EXIT">("ENTRY");
   const [activeExamSession, setActiveExamSession] =
     useState<ExamSession | null>(null);
@@ -362,48 +357,6 @@ export const MobileScannerPage = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Bottom Navigation */}
-        <div className="border-t bg-white px-4 py-2">
-          <div className="flex justify-around">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile")}
-            >
-              <Users className="w-5 h-5" />
-              <span className="text-xs">Home</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/custody")}
-            >
-              <FileText className="w-5 h-5" />
-              <span className="text-xs">Custody</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/incidents")}
-            >
-              <AlertCircle className="w-5 h-5" />
-              <span className="text-xs">Incidents</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1 text-blue-600"
-              onClick={() => navigate("/mobile/scanner")}
-            >
-              <QrCode className="w-5 h-5" />
-              <span className="text-xs">Scanner</span>
-            </Button>
-          </div>
         </div>
 
         {/* Scan Result Dialog */}

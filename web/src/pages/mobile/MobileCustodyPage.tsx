@@ -22,14 +22,19 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  Users,
   Calendar,
   MapPin,
 } from "lucide-react";
-import { examSessionsApi } from "@/api/examSessions";
+import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 import { format } from "date-fns";
 
 type FilterType = "ALL" | "IN_CUSTODY" | "PENDING" | "TRANSFERRED";
+
+interface Transfer {
+  id: string;
+  status: string;
+  // Add other properties as needed based on your API
+}
 
 interface BatchWithCustody {
   id: string;
@@ -44,7 +49,7 @@ interface BatchWithCustody {
     | "PENDING_RECEIPT"
     | "TRANSFER_INITIATED"
     | "TRANSFERRED";
-  latestTransfer?: any;
+  latestTransfer?: Transfer;
   pendingTransferCount?: number;
 }
 
@@ -65,7 +70,7 @@ export const MobileCustodyPage = () => {
       const sessions = await examSessionsApi.getExamSessions({});
 
       // Transform to match mobile app format
-      return sessions.examSessions.map((session: any) => ({
+      return sessions.examSessions.map((session: ExamSession) => ({
         id: session.id,
         batchQrCode: session.batchQrCode,
         courseCode: session.courseCode,
@@ -73,8 +78,8 @@ export const MobileCustodyPage = () => {
         venue: session.venue,
         examDate: session.examDate,
         status: session.status,
-        custodyStatus: "IN_CUSTODY", // Simplified for now
-        latestTransfer: null,
+        custodyStatus: "IN_CUSTODY" as const, // Simplified for now
+        latestTransfer: undefined,
         pendingTransferCount: 0,
       })) as BatchWithCustody[];
     },
@@ -270,48 +275,6 @@ export const MobileCustodyPage = () => {
             )}
           </div>
         </ScrollArea>
-
-        {/* Bottom Navigation */}
-        <div className="border-t bg-white px-4 py-2">
-          <div className="flex justify-around">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile")}
-            >
-              <Users className="w-5 h-5" />
-              <span className="text-xs">Home</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1 text-blue-600"
-              onClick={() => navigate("/mobile/custody")}
-            >
-              <FileText className="w-5 h-5" />
-              <span className="text-xs">Custody</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/incidents")}
-            >
-              <AlertCircle className="w-5 h-5" />
-              <span className="text-xs">Incidents</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex flex-col items-center space-y-1"
-              onClick={() => navigate("/mobile/profile")}
-            >
-              <Users className="w-5 h-5" />
-              <span className="text-xs">Profile</span>
-            </Button>
-          </div>
-        </div>
       </div>
     </div>
   );

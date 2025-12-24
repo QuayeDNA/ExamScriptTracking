@@ -33,10 +33,8 @@ export const LoginPage = () => {
               <LogIn className="h-6 w-6 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">
-            Exam Script Tracking
-          </CardTitle>
-          <CardDescription>Sign in to your account to continue</CardDescription>
+          <CardTitle className="text-2xl font-bold">ELMS</CardTitle>
+          <CardDescription>Exam Logistics Management System</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -104,11 +102,9 @@ export const LoginPage = () => {
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
         {/* Mobile Web App Button */}
         <a
-          href="/mobile/index.html"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/mobile/login"
           className="bg-green-600 text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-colors"
-          title="Open Mobile Web App"
+          title="Open Mobile Web Features"
         >
           <Smartphone className="h-6 w-6" />
         </a>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authApi } from "@/api/auth";
+import { registrationApi } from "@/api/registration";
 import { useAuthStore } from "@/store/auth";
 import type {
   LoginCredentials,
@@ -8,7 +9,7 @@ import type {
 } from "@/types";
 import { useNavigate } from "react-router-dom";
 
-export const useLogin = () => {
+export const useLogin = (isMobile = false) => {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
 
@@ -19,9 +20,11 @@ export const useLogin = () => {
 
       // Check if user needs to change password
       if (!data.user.passwordChanged) {
-        navigate("/change-password-required");
+        navigate(
+          isMobile ? "/mobile/change-password" : "/change-password-required"
+        );
       } else {
-        navigate("/dashboard");
+        navigate(isMobile ? "/mobile" : "/dashboard");
       }
     },
   });
@@ -87,6 +90,26 @@ export const useFirstTimePasswordChange = () => {
         );
       }
       navigate("/dashboard");
+    },
+  });
+};
+
+export const useRegisterWithQR = () => {
+  const { setAuth } = useAuthStore();
+  const navigate = useNavigate();
+
+  return useMutation({
+    mutationFn: (data: {
+      qrToken: string;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      password: string;
+      department: string;
+    }) => registrationApi.register(data),
+    onSuccess: (data) => {
+      setAuth(data.user, data.token, data.refreshToken);
+      navigate("/mobile");
     },
   });
 };
