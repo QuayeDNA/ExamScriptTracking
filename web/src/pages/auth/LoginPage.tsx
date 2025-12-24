@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Download } from "lucide-react";
+import { LogIn, AlertCircle, Download, Smartphone } from "lucide-react";
 
 export const LoginPage = () => {
   const [identifier, setIdentifier] = useState("");
@@ -100,15 +100,29 @@ export const LoginPage = () => {
         </CardContent>
       </Card>
 
-      {/* Floating Action Button for APK Download */}
-      <a
-        href="/ExamTrack.apk"
-        download="ExamTrack.apk"
-        className="fixed bottom-6 right-6 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
-        title="Download Mobile App"
-      >
-        <Download className="h-6 w-6" />
-      </a>
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+        {/* Mobile Web App Button */}
+        <a
+          href="/index.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-green-600 text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-colors"
+          title="Open Mobile Web App"
+        >
+          <Smartphone className="h-6 w-6" />
+        </a>
+
+        {/* APK Download Button */}
+        <a
+          href="/ExamTrack.apk"
+          download="ExamTrack.apk"
+          className="bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+          title="Download Mobile App"
+        >
+          <Download className="h-6 w-6" />
+        </a>
+      </div>
     </>
   );
 };

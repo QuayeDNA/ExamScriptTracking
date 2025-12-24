@@ -63,7 +63,6 @@ import {
   Trash2,
   X,
   AlertCircle,
-  Smartphone,
 } from "lucide-react";
 
 interface TemporaryCredentials {
@@ -369,13 +368,6 @@ export const UsersPage = () => {
               <Button onClick={() => setShowCreateModal(true)}>
                 <UserPlus className="w-4 h-4 mr-2" />
                 Create User
-              </Button>
-              <Button
-                onClick={() => window.open("/mobile", "_blank")}
-                variant="outline"
-              >
-                <Smartphone className="w-4 h-4 mr-2" />
-                Mobile App
               </Button>
             </div>
           </div>

@@ -656,7 +656,8 @@ For issues and questions:
 
 The React Native mobile app is fully accessible via web browsers using Expo's React Native Web integration. Users can access mobile functionality without downloading the app:
 
-- **Access URL:** `/mobile` (when deployed with web app)
+- **Access URL:** `/mobile/index.html` (when deployed with web app)
+- **Login Page:** Green smartphone button on login page
 - **Features Available:**
   - QR code scanning (camera access required)
   - Class attendance recording
@@ -666,13 +667,38 @@ The React Native mobile app is fully accessible via web browsers using Expo's Re
 
 ### Building for Web
 
-```bash
-# Build mobile app for web deployment
-./build-mobile-web.sh
+#### Automated Build (Recommended)
 
-# Or manually:
+```bash
+# Build both web and mobile web apps
+./build-all.sh
+
+# Or build mobile web only
+./build-mobile-web.sh
+```
+
+#### Manual Build
+
+```bash
+# Build web app
+cd web && npm run build
+
+# Build mobile web app
 cd mobile
 npx expo export --platform web --output-dir ../web/public/mobile
+
+# Fix asset paths for subdirectory serving
+powershell -Command "(Get-Content ../web/public/mobile/index.html) -replace './_expo/', '/mobile/_expo/' -replace './favicon.ico', '/mobile/favicon.ico' | Set-Content ../web/public/mobile/index.html"
+```
+
+### Pre-push Automation
+
+A git pre-push hook automatically builds all platforms before pushing:
+
+```bash
+# The hook runs automatically on 'git push'
+# Builds: web app + mobile web app
+# Aborts push if builds fail
 ```
 
 ### Deployment
