@@ -104,7 +104,7 @@ export const LoginPage = () => {
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
         {/* Mobile Web App Button */}
         <a
-          href="/index.html"
+          href="/mobile/index.html"
           target="_blank"
           rel="noopener noreferrer"
           className="bg-green-600 text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-colors"

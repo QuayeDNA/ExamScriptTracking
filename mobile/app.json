@@ -25,7 +25,8 @@
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "baseUrl": "/mobile"
     },
     "plugins": [
       "expo-router",
@@ -59,7 +60,9 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "baseUrl": "/mobile"
+      },
       "eas": {
         "projectId": "6cfbd9d5-8270-4c9a-9d4a-decbf78edfba"
       }

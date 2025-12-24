@@ -20,5 +20,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    fs: {
+      // Allow serving files from the mobile directory
+      allow: ["../"],
+    },
   },
 });
