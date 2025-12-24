@@ -1,4 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -11,19 +17,10 @@ import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
-import DashboardStatsPage from "@/pages/dashboard/DashboardStatsPage";
 import { UsersPage } from "@/pages/dashboard/UsersPage";
 import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
-import StudentsPage from "@/pages/dashboard/StudentsPage";
-import ExamSessionsPage from "@/pages/dashboard/ExamSessionsPage";
-import BatchDetailsPage from "@/pages/dashboard/BatchDetailsPage";
-import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
-import SettingsPage from "@/pages/dashboard/SettingsPage";
 import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
-import IncidentsPage from "@/pages/dashboard/IncidentsPage";
-import IncidentDetailsPage from "@/pages/dashboard/IncidentDetailsPage";
-import CreateIncidentPage from "@/pages/dashboard/CreateIncidentPage";
 import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
@@ -31,6 +28,21 @@ import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
+
+// Mobile pages
+import { MobileHomePage } from "@/pages/mobile/MobileHomePage";
+import { MobileCustodyPage } from "@/pages/mobile/MobileCustodyPage";
+import { MobileIncidentsPage } from "@/pages/mobile/MobileIncidentsPage";
+import { MobileScannerPage } from "@/pages/mobile/MobileScannerPage";
+import { MobileProfilePage } from "@/pages/mobile/MobileProfilePage";
+import { MobileAttendancePage } from "@/pages/mobile/MobileAttendancePage";
+import { MobileBatchDetailsPage } from "@/pages/mobile/MobileBatchDetailsPage";
+import { MobileReportIncidentPage } from "@/pages/mobile/MobileReportIncidentPage";
+import { MobileIncidentDetailsPage } from "@/pages/mobile/MobileIncidentDetailsPage";
+import { MobileStudentAttendancePage } from "@/pages/mobile/MobileStudentAttendancePage";
+import { MobileRecentActivityPage } from "@/pages/mobile/MobileRecentActivityPage";
+import { MobileInitiateTransferPage } from "@/pages/mobile/MobileInitiateTransferPage";
+import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +56,21 @@ const queryClient = new QueryClient({
 function App() {
   // Initialize socket connection
   useSocket();
+
+  const ConditionalNotFound = () => {
+    const location = useLocation();
+
+    // Don't show 404 for static files or mobile app routes
+    if (
+      location.pathname.startsWith("/_") ||
+      location.pathname.startsWith("/mobile/")
+    ) {
+      return null; // Let the server handle static files
+    }
+
+    return <NotFoundPage />;
+  };
+
   return (
     <MobileDetectionWrapper>
       <ThemeProvider defaultTheme="system" storageKey="exam-script-theme">
@@ -81,33 +108,51 @@ function App() {
                 {/* Error pages (standalone) */}
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-                {/* Protected dashboard routes */}
+                {/* Mobile routes - replicate mobile app functionality */}
                 <Route element={<ProtectedRoute />}>
-                  <Route path="/dashboard" element={<DashboardLayout />}>
-                    <Route index element={<DashboardStatsPage />} />
-                    <Route path="students" element={<StudentsPage />} />
+                  <Route path="/mobile" element={<DashboardLayout />}>
+                    {/* Mobile Home/Dashboard */}
+                    <Route index element={<MobileHomePage />} />
+
+                    {/* Mobile Tabs */}
+                    <Route path="custody" element={<MobileCustodyPage />} />
+                    <Route path="incidents" element={<MobileIncidentsPage />} />
+                    <Route path="scanner" element={<MobileScannerPage />} />
+                    <Route path="profile" element={<MobileProfilePage />} />
+
+                    {/* Mobile Individual Screens */}
                     <Route
-                      path="exam-sessions"
-                      element={<ExamSessionsPage />}
+                      path="attendance"
+                      element={<MobileAttendancePage />}
                     />
                     <Route
-                      path="exam-sessions/:id"
-                      element={<BatchDetailsPage />}
+                      path="batch-details/:batchId"
+                      element={<MobileBatchDetailsPage />}
                     />
                     <Route
-                      path="batch-tracking"
-                      element={<BatchTrackingPage />}
-                    />
-                    <Route path="incidents" element={<IncidentsPage />} />
-                    <Route
-                      path="incidents/:id"
-                      element={<IncidentDetailsPage />}
+                      path="report-incident"
+                      element={<MobileReportIncidentPage />}
                     />
                     <Route
-                      path="incidents/create"
-                      element={<CreateIncidentPage />}
+                      path="incident-details/:id"
+                      element={<MobileIncidentDetailsPage />}
                     />
-                    <Route path="settings" element={<SettingsPage />} />
+                    <Route
+                      path="student-attendance"
+                      element={<MobileStudentAttendancePage />}
+                    />
+                    <Route
+                      path="recent-activity"
+                      element={<MobileRecentActivityPage />}
+                    />
+                    <Route
+                      path="initiate-transfer"
+                      element={<MobileInitiateTransferPage />}
+                    />
+                    <Route
+                      path="confirm-transfer/:transferId"
+                      element={<MobileConfirmTransferPage />}
+                    />
                   </Route>
                 </Route>
 
@@ -136,7 +181,7 @@ function App() {
                   path="/"
                   element={<Navigate to="/dashboard" replace />}
                 />
-                <Route path="*" element={<NotFoundPage />} />
+                <Route path="*" element={<ConditionalNotFound />} />
               </Routes>
             </BrowserRouter>
           </ErrorBoundary>

@@ -3,7 +3,7 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
@@ -24,9 +24,19 @@ import {
 function useProtectedRoute() {
   const segments = useSegments();
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isLoading, user } = useAuthStore();
   const isAttendanceUser = user?.role === "CLASS_REP";
   const firstSegment = segments[0] as string | undefined;
+
+  // Handle base path for mobile app served from subdirectory
+  useEffect(() => {
+    if (pathname === "/mobile/index.html") {
+      // Redirect to the root route when loaded from index.html
+      router.replace("/");
+      return;
+    }
+  }, [pathname, router]);
 
   useEffect(() => {
     if (isLoading) return;
