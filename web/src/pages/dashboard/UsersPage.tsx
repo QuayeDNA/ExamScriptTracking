@@ -371,7 +371,7 @@ export const UsersPage = () => {
                 Create User
               </Button>
               <Button
-                onClick={() => window.open('/mobile', '_blank')}
+                onClick={() => window.open("/mobile", "_blank")}
                 variant="outline"
               >
                 <Smartphone className="w-4 h-4 mr-2" />
@@ -456,7 +456,7 @@ export const UsersPage = () => {
         </CardContent>
       </Card>
 
-       {/* User Type Tabs */}
+      {/* User Type Tabs */}
       <Card>
         <CardContent className="pt-6">
           <Tabs value={activeTab} onValueChange={handleTabChange}>
