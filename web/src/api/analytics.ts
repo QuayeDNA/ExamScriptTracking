@@ -8,6 +8,26 @@ import type {
   AnalyticsExportRequest,
 } from "@/types";
 
+export interface UserActivity {
+  id: string;
+  type: "audit" | "incident" | "transfer" | "attendance";
+  title: string;
+  description: string;
+  timestamp: string;
+  status: string;
+}
+
+export interface UserActivityResponse {
+  activities: UserActivity[];
+  summary: {
+    totalActivities: number;
+    auditLogs: number;
+    incidents: number;
+    transfers: number;
+    attendance: number;
+  };
+}
+
 export const analyticsApi = {
   /**
    * Get analytics overview with trends
@@ -199,5 +219,22 @@ export const analyticsApi = {
     }
 
     return response.blob();
+  },
+
+  /**
+   * Get user activity for the current user
+   */
+  getUserActivity: async (): Promise<UserActivityResponse> => {
+    return apiClient.get<UserActivityResponse>("/analytics/user-activity");
+  },
+
+  /**
+   * Clear user activity for the current user
+   */
+  clearUserActivity: async (): Promise<{
+    message: string;
+    deletedCount: number;
+  }> => {
+    return apiClient.delete("/analytics/user-activity");
   },
 };

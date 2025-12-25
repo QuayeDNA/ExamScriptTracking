@@ -9,6 +9,7 @@ import {
   FileText,
   AlertCircle,
   User,
+  Scan,
 } from "lucide-react";
 
 export function MobileLayout() {
@@ -84,6 +85,13 @@ export function MobileLayout() {
       icon: Home,
       path: "/mobile",
       active: location.pathname === "/mobile",
+    },
+    {
+      id: "scanner",
+      label: "Scanner",
+      icon: Scan,
+      path: "/mobile/scanner",
+      active: location.pathname === "/mobile/scanner",
     },
     {
       id: "custody",

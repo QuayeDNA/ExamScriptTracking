@@ -14,7 +14,8 @@ import {
   Activity,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import type { UserActivity } from "@/types/mobile";
+import { useQuery } from "@tanstack/react-query";
+import { analyticsApi, type UserActivity } from "@/api/analytics";
 
 const getActivityIcon = (type: UserActivity["type"]) => {
   switch (type) {
@@ -30,25 +31,6 @@ const getActivityIcon = (type: UserActivity["type"]) => {
       return <Activity className="w-4 h-4" />;
   }
 };
-// Mock activities for now - replace with real API when available
-const mockActivities: UserActivity[] = [
-  {
-    id: "1",
-    type: "attendance",
-    title: "Attendance Recorded",
-    description: "Recorded attendance for Computer Science 101",
-    timestamp: new Date().toISOString(),
-    status: "completed",
-  },
-  {
-    id: "2",
-    type: "transfer",
-    title: "Batch Transferred",
-    description: "Transferred exam scripts to Dr. Johnson",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    status: "completed",
-  },
-];
 const getActivityColor = (status: string) => {
   switch (status.toLowerCase()) {
     case "completed":
@@ -72,10 +54,15 @@ export const MobileHomePage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isClassRep = user?.role === "CLASS_REP";
-  const isLoading = false; // Mock loading state
 
-  // Use mock activities for now - replace with real API when available
-  const activities = mockActivities;
+  // Fetch real user activities
+  const { data: activityData, isLoading: activitiesLoading } = useQuery({
+    queryKey: ["user-activity"],
+    queryFn: analyticsApi.getUserActivity,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  const activities = activityData?.activities || [];
 
   // Quick actions based on user role
   const quickActions = [
@@ -181,7 +168,7 @@ export const MobileHomePage = () => {
               </Button>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {activitiesLoading ? (
                 <div className="space-y-3">
                   {[...Array(3)].map((_, i) => (
                     <div key={i} className="animate-pulse">
@@ -202,8 +189,13 @@ export const MobileHomePage = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground truncate">
-                          {activity.description}
+                          {activity.title}
                         </p>
+                        {activity.description && (
+                          <p className="text-xs text-muted-foreground truncate mt-1">
+                            {activity.description}
+                          </p>
+                        )}
                         <div className="flex items-center space-x-2 mt-1">
                           <Badge
                             variant="outline"
