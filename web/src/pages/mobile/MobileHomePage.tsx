@@ -128,6 +128,36 @@ export const MobileHomePage = () => {
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6 pb-6">
+
+           {/* Stats Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Today's Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-primary">
+                    {activities?.length || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Activities
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {activities?.filter(
+                      (a) =>
+                        a.type.includes("RECORDED") ||
+                        a.type.includes("COMPLETED")
+                    ).length || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Completed</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -223,35 +253,6 @@ export const MobileHomePage = () => {
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Stats Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Today's Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary">
-                    {activities?.length || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Activities
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {activities?.filter(
-                      (a) =>
-                        a.type.includes("RECORDED") ||
-                        a.type.includes("COMPLETED")
-                    ).length || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Completed</div>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>

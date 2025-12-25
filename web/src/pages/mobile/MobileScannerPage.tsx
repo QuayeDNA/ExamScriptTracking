@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ export const MobileScannerPage = () => {
     useState<ExamSession | null>(null);
   const [scanResult, setScanResult] = useState<{
     success: boolean;
-    data?: any;
+    data?: unknown;
     error?: string;
     message?: string;
   } | null>(null);
@@ -98,27 +98,120 @@ export const MobileScannerPage = () => {
     if (!video) return;
 
     const handleLoadedMetadata = () => {
-      console.log("Video metadata loaded");
+      console.log(
+        "Video metadata loaded, video dimensions:",
+        video.videoWidth,
+        "x",
+        video.videoHeight
+      );
     };
 
     const handleCanPlay = () => {
-      console.log("Video can play");
+      console.log("Video can play, readyState:", video.readyState);
+    };
+
+    const handlePlaying = () => {
+      console.log("Video is now playing");
+      setCameraActive(true);
     };
 
     const handleError = (e: Event) => {
       console.error("Video error:", e);
+      setCameraActive(false);
+    };
+
+    const handleLoadStart = () => {
+      console.log("Video load started");
     };
 
     video.addEventListener("loadedmetadata", handleLoadedMetadata);
     video.addEventListener("canplay", handleCanPlay);
+    video.addEventListener("playing", handlePlaying);
     video.addEventListener("error", handleError);
+    video.addEventListener("loadstart", handleLoadStart);
 
     return () => {
       video.removeEventListener("loadedmetadata", handleLoadedMetadata);
       video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("error", handleError);
+      video.removeEventListener("loadstart", handleLoadStart);
     };
   }, []);
+
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      setCameraPermission("granted");
+      return stream;
+    } catch (error) {
+      console.error("Camera permission denied:", error);
+      setCameraPermission("denied");
+      throw error;
+    }
+  };
+
+  const startCamera = useCallback(async () => {
+    try {
+      // Don't check permission state here - let getUserMedia handle prompting
+      const stream = await requestCameraPermission();
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        console.log("Stream assigned to video element");
+
+        // Ensure video plays
+        try {
+          await videoRef.current.play();
+          console.log("Video started playing");
+          setCameraActive(true);
+          setIsScanning(true);
+          toast.success("Camera started - point at QR code to scan");
+        } catch (playError) {
+          console.warn("Could not autoplay video:", playError);
+          // Try to play again after a short delay
+          setTimeout(async () => {
+            try {
+              await videoRef.current?.play();
+              console.log("Video started playing after delay");
+              setCameraActive(true);
+              setIsScanning(true);
+            } catch (retryError) {
+              console.error(
+                "Failed to play video even after retry:",
+                retryError
+              );
+              setCameraActive(false);
+              setIsScanning(false);
+            }
+          }, 100);
+        }
+      } else {
+        console.error("Video element not found");
+        setCameraActive(false);
+        setIsScanning(false);
+      }
+    } catch (error) {
+      console.error("Failed to start camera:", error);
+      toast.error("Failed to start camera");
+      setCameraActive(false);
+      setIsScanning(false);
+    }
+  }, []);
+
+  // Auto-start camera when permission is granted and video element is ready
+  useEffect(() => {
+    if (cameraPermission === "granted" && !cameraActive && videoRef.current) {
+      console.log(
+        "Permission granted and video element ready, starting camera"
+      );
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      startCamera();
+    }
+  }, [cameraPermission, cameraActive, startCamera]);
 
   const recordAttendanceMutation = useMutation({
     mutationFn: async ({
@@ -177,46 +270,6 @@ export const MobileScannerPage = () => {
     });
   };
 
-  const requestCameraPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      setCameraPermission("granted");
-      return stream;
-    } catch (error) {
-      console.error("Camera permission denied:", error);
-      setCameraPermission("denied");
-      throw error;
-    }
-  };
-
-  const startCamera = async () => {
-    try {
-      // Don't check permission state here - let getUserMedia handle prompting
-      const stream = await requestCameraPermission();
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        // Ensure video plays
-        try {
-          await videoRef.current.play();
-        } catch (playError) {
-          console.warn("Could not autoplay video:", playError);
-        }
-        setCameraActive(true);
-        setIsScanning(true);
-        toast.success("Camera started - point at QR code to scan");
-      }
-    } catch (error) {
-      console.error("Failed to start camera:", error);
-      toast.error("Failed to start camera");
-      setCameraActive(false);
-      setIsScanning(false);
-    }
-  };
-
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -249,8 +302,7 @@ export const MobileScannerPage = () => {
       const newFlashState = !flashEnabled;
       try {
         await videoTrack.applyConstraints({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          advanced: [{ torch: newFlashState } as any],
+          advanced: [{ torch: newFlashState } as MediaTrackConstraints],
         });
         setFlashEnabled(newFlashState);
         toast.info(newFlashState ? "Flash turned on" : "Flash turned off");
@@ -317,30 +369,24 @@ export const MobileScannerPage = () => {
                         : "border-2 border-border"
                     }`}
                   >
-                    {cameraActive ? (
-                      <>
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className="w-full h-full object-cover rounded-lg"
-                          style={{ transform: "scaleX(-1)" }} // Mirror the video for selfie-like experience
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="w-48 h-48 border-2 border-white rounded-lg opacity-50">
-                            <div className="w-full h-full border-2 border-transparent border-t-white animate-spin"></div>
-                          </div>
-                        </div>
-                        {isScanning && (
-                          <div className="absolute bottom-2 left-2 right-2">
-                            <p className="text-white text-sm bg-black/50 rounded px-2 py-1">
-                              Scanning for QR codes...
-                            </p>
-                          </div>
-                        )}
-                      </>
-                    ) : (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover rounded-lg ${
+                        cameraActive ? "block" : "hidden"
+                      }`}
+                      style={{ transform: "scaleX(-1)" }} // Mirror the video for selfie-like experience
+                      onLoadedMetadata={() =>
+                        console.log("Video loaded metadata")
+                      }
+                      onCanPlay={() => console.log("Video can play")}
+                      onPlaying={() => console.log("Video playing")}
+                      onError={(e) => console.error("Video error:", e)}
+                    />
+
+                    {!cameraActive && (
                       <div className="text-center text-muted-foreground">
                         <CameraOff className="w-12 h-12 mx-auto mb-2" />
                         <p className="text-sm">Camera Inactive</p>
@@ -352,7 +398,24 @@ export const MobileScannerPage = () => {
                             Camera permission denied
                           </p>
                         )}
+                        {cameraPermission === "granted" && (
+                          <p className="text-xs text-green-500 mt-1">
+                            Tap camera button to start
+                          </p>
+                        )}
                       </div>
+                    )}
+
+                    {cameraActive && (
+                      <>
+                        {isScanning && (
+                          <div className="absolute bottom-2 left-2 right-2">
+                            <p className="text-white text-sm bg-black/50 rounded px-2 py-1">
+                              Scanning for QR codes...
+                            </p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeft,
   Clock,
-  CheckCircle,
   AlertTriangle,
   Package,
   Users,
@@ -17,38 +16,31 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { analyticsApi } from "@/api/analytics";
 
 interface ActivityItem {
   id: string;
-  type: string;
+  type: "audit" | "incident" | "transfer" | "attendance";
   title: string;
   description: string;
   timestamp: string;
-  user?: string;
-  metadata?: {
-    venue?: string;
-    studentCount?: number;
-    batchId?: string;
-    incidentType?: string;
-  };
+  status: string;
 }
 
-const ACTIVITY_ICONS: Record<string, React.ComponentType<any>> = {
-  INCIDENT_REPORTED: AlertTriangle,
-  INCIDENT_RESOLVED: CheckCircle,
-  BATCH_TRANSFERRED: Package,
-  ATTENDANCE_RECORDED: Users,
-  EXAM_SESSION_STARTED: FileText,
-  EXAM_SESSION_COMPLETED: CheckCircle,
+import type { LucideIcon } from "lucide-react";
+
+const ACTIVITY_ICONS: Record<string, LucideIcon> = {
+  audit: FileText,
+  incident: AlertTriangle,
+  transfer: Package,
+  attendance: Users,
 };
 
 const ACTIVITY_COLORS: Record<string, string> = {
-  INCIDENT_REPORTED: "text-red-600",
-  INCIDENT_RESOLVED: "text-green-600",
-  BATCH_TRANSFERRED: "text-blue-600",
-  ATTENDANCE_RECORDED: "text-purple-600",
-  EXAM_SESSION_STARTED: "text-orange-600",
-  EXAM_SESSION_COMPLETED: "text-green-600",
+  audit: "text-primary",
+  incident: "text-destructive",
+  transfer: "text-warning",
+  attendance: "text-success",
 };
 
 export const MobileRecentActivityPage = () => {
@@ -56,47 +48,20 @@ export const MobileRecentActivityPage = () => {
   const [activeTab, setActiveTab] = useState("all");
 
   const {
-    data: activities,
+    data: activitiesData,
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ["recent-activity"],
-    queryFn: () =>
-      Promise.resolve([
-        {
-          id: "1",
-          type: "INCIDENT_REPORTED",
-          title: "Incident Reported",
-          description: "Missing exam script reported in Room 101",
-          timestamp: new Date().toISOString(),
-          user: "John Doe",
-          metadata: { venue: "Room 101" },
-        },
-        {
-          id: "2",
-          type: "ATTENDANCE_RECORDED",
-          title: "Attendance Recorded",
-          description: "Class attendance recorded for Mathematics 201",
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          user: "Jane Smith",
-          metadata: { studentCount: 45 },
-        },
-        {
-          id: "3",
-          type: "BATCH_TRANSFERRED",
-          title: "Batch Transferred",
-          description: "Exam scripts transferred between invigilators",
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          user: "Bob Johnson",
-          metadata: { batchId: "BATCH-001" },
-        },
-      ]),
+    queryKey: ["user-activity"],
+    queryFn: () => analyticsApi.getUserActivity(),
   });
+
+  const activities = activitiesData?.activities || [];
 
   const filteredActivities =
     activities?.filter((activity) => {
       if (activeTab === "all") return true;
-      return activity.type.toLowerCase().includes(activeTab);
+      return activity.type === activeTab;
     }) || [];
 
   const groupedActivities = filteredActivities.reduce((groups, activity) => {
@@ -110,35 +75,37 @@ export const MobileRecentActivityPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-md mx-auto bg-white min-h-screen">
+    <div className="min-h-screen">
+      <div className="max-w-md mx-auto min-h-screen">
         {/* Header */}
-        <div className="bg-blue-600 text-white p-4">
+        <div className="bg-primary text-primary-foreground p-4">
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate("/mobile")}
-              className="text-white hover:bg-blue-500"
+              className="text-primary-foreground hover:bg-primary/80"
             >
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex-1 text-center">
               <h1 className="text-lg font-bold">Recent Activity</h1>
-              <p className="text-blue-100 text-sm">Latest system activities</p>
+              <p className="text-primary-foreground/80 text-sm">
+                Latest system activities
+              </p>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => refetch()}
-              className="text-white hover:bg-blue-500"
+              className="text-primary-foreground hover:bg-primary/80"
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -147,10 +114,11 @@ export const MobileRecentActivityPage = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="px-4 pt-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="audit">Audit</TabsTrigger>
               <TabsTrigger value="incident">Incidents</TabsTrigger>
-              <TabsTrigger value="batch">Batches</TabsTrigger>
+              <TabsTrigger value="transfer">Transfers</TabsTrigger>
               <TabsTrigger value="attendance">Attendance</TabsTrigger>
             </TabsList>
           </div>
@@ -165,8 +133,8 @@ export const MobileRecentActivityPage = () => {
                       .map(([date, dayActivities]) => (
                         <div key={date}>
                           <div className="flex items-center space-x-2 mb-3">
-                            <Clock className="w-4 h-4 text-gray-500" />
-                            <h3 className="font-medium text-gray-700">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <h3 className="font-medium text-foreground">
                               {format(new Date(date), "EEEE, MMMM d")}
                             </h3>
                           </div>
@@ -183,17 +151,17 @@ export const MobileRecentActivityPage = () => {
                                 <Card key={activity.id} className="p-4">
                                   <div className="flex items-start space-x-3">
                                     <div
-                                      className={`p-2 rounded-full bg-gray-100 ${iconColor}`}
+                                      className={`p-2 rounded-full bg-muted ${iconColor}`}
                                     >
                                       <IconComponent className="w-4 h-4" />
                                     </div>
 
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center justify-between mb-1">
-                                        <p className="text-sm font-medium text-gray-900">
+                                        <p className="text-sm font-medium text-foreground">
                                           {activity.title}
                                         </p>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-muted-foreground">
                                           {formatDistanceToNow(
                                             new Date(activity.timestamp),
                                             { addSuffix: true }
@@ -201,7 +169,7 @@ export const MobileRecentActivityPage = () => {
                                         </span>
                                       </div>
 
-                                      <p className="text-sm text-gray-600 mb-2">
+                                      <p className="text-sm text-muted-foreground mb-2">
                                         {activity.description}
                                       </p>
 
@@ -211,46 +179,16 @@ export const MobileRecentActivityPage = () => {
                                             variant="outline"
                                             className="text-xs"
                                           >
-                                            {activity.type.replace(/_/g, " ")}
+                                            {activity.type}
                                           </Badge>
-                                          {activity.user && (
-                                            <span className="text-xs text-gray-500">
-                                              by {activity.user}
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {activity.metadata?.venue && (
                                           <Badge
                                             variant="secondary"
                                             className="text-xs"
                                           >
-                                            {activity.metadata.venue}
+                                            {activity.status}
                                           </Badge>
-                                        )}
-                                      </div>
-
-                                      {activity.metadata && (
-                                        <div className="mt-2 text-xs text-gray-500">
-                                          {activity.metadata.batchId && (
-                                            <div>
-                                              Batch: {activity.metadata.batchId}
-                                            </div>
-                                          )}
-                                          {activity.metadata.studentCount && (
-                                            <div>
-                                              Students:{" "}
-                                              {activity.metadata.studentCount}
-                                            </div>
-                                          )}
-                                          {activity.metadata.incidentType && (
-                                            <div>
-                                              Type:{" "}
-                                              {activity.metadata.incidentType}
-                                            </div>
-                                          )}
                                         </div>
-                                      )}
+                                      </div>
                                     </div>
                                   </div>
                                 </Card>
@@ -262,11 +200,11 @@ export const MobileRecentActivityPage = () => {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
                       No recent activity
                     </h3>
-                    <p className="text-gray-600">
+                    <p className="text-muted-foreground">
                       {activeTab === "all"
                         ? "There hasn't been any recent activity in the system."
                         : `No ${activeTab} activity found.`}

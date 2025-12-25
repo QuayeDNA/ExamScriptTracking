@@ -1,8 +1,38 @@
 # Exam Script Tracking System - User Manual
 
-**Version:** 1.1.0  
-**Last Updated:** December 15, 2025  
+**Version:** 1.2.0
+**Last Updated:** December 25, 2025
 **Status:** Production Ready
+
+---
+
+## Recent Updates (v1.2.0)
+
+### 🎨 **Enhanced Student Management**
+
+- **Card View Mode:** New visual card layout for students with prominent QR codes
+- **QR Code Optimization:** High-contrast QR codes specifically designed for bottle cap printing
+- **View Mode Toggle:** Switch between table and card views for different use cases
+- **Theme Integration:** All student cards follow the design system with automatic light/dark theme support
+
+### 🎨 **Design System Implementation**
+
+- **Complete Theme Support:** All components now use semantic design tokens
+- **Academic Color Palette:** Primary blue theme optimized for educational environments
+- **Automatic Theme Switching:** Seamless light/dark mode transitions
+- **Accessibility Improvements:** Enhanced contrast ratios and screen reader compatibility
+
+### 📱 **Mobile Web App Improvements**
+
+- **Unified Mobile Experience:** Single web app serves both desktop and mobile users
+- **Responsive Design:** Optimized layouts for all screen sizes
+- **Touch-Friendly Interface:** Improved button sizes and spacing for mobile devices
+
+### 🔧 **Technical Enhancements**
+
+- **Build Optimization:** Removed redundant mobile build files
+- **Performance Improvements:** Faster loading and better caching
+- **Code Quality:** Updated to follow latest design system standards
 
 ---
 
@@ -11,13 +41,14 @@
 1. [System Overview](#system-overview)
 2. [Getting Started](#getting-started)
 3. [Web Dashboard Guide (Admin)](#web-dashboard-guide-admin)
-4. [Mobile App Guide (Handlers)](#mobile-app-guide-handlers)
-5. [Incident Management](#incident-management)
-6. [Workflows & Processes](#workflows--processes)
-7. [Class Attendance System](#class-attendance-system)
-8. [Troubleshooting](#troubleshooting)
-9. [Best Practices](#best-practices)
-10. [Glossary](#glossary)
+4. [Mobile Access Guide](#mobile-access-guide)
+5. [Student Management Features](#student-management-features)
+6. [Incident Management](#incident-management)
+7. [Workflows & Processes](#workflows--processes)
+8. [Class Attendance System](#class-attendance-system)
+9. [Troubleshooting](#troubleshooting)
+10. [Best Practices](#best-practices)
+11. [Glossary](#glossary)
 
 ---
 
@@ -66,6 +97,15 @@ The Exam Script Tracking System is a comprehensive solution for tracking examina
 - ✅ Real-time notifications
 - ✅ Admin oversight and status management
 
+#### Design System & Theme Support
+
+- ✅ **Comprehensive Design Tokens:** 176+ design tokens covering colors, spacing, typography
+- ✅ **Theme-Aware Components:** All UI components automatically adapt to light/dark themes
+- ✅ **Academic Color Palette:** Primary blue palette designed for educational institutions
+- ✅ **Semantic Color Mapping:** Consistent use of primary, secondary, destructive, and status colors
+- ✅ **Responsive Design:** Optimized for desktop, tablet, and mobile devices
+- ✅ **Accessibility:** High contrast ratios and screen reader support
+
 ### User Roles
 
 | Role                | Access Level | Primary Functions                                                        |
@@ -89,12 +129,14 @@ The Exam Script Tracking System is a comprehensive solution for tracking examina
 - **Internet:** Stable broadband connection
 - **Screen:** Minimum 1280x720 resolution (1920x1080 recommended)
 
-#### Mobile App
+#### Mobile Access
 
-- **iOS:** iOS 13.0 or later
-- **Android:** Android 6.0 (API 23) or later
-- **Permissions:** Camera, Storage, Notifications
+- **Unified Web App:** Single responsive application for all devices
+- **Browser Support:** Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
+- **Mobile Browsers:** iOS Safari 14+, Chrome Mobile 90+
+- **Permissions:** Camera access for QR scanning, location for incident reporting
 - **Internet:** Wi-Fi or 4G/5G mobile data
+- **PWA Support:** Installable as a Progressive Web App on mobile devices
 
 ### First-Time Setup
 
@@ -116,13 +158,14 @@ Your system administrator will provide:
 3. Click **Login**
 4. You'll be prompted to change your password
 
-**Mobile App:**
+**Mobile Access:**
 
-1. Download the app from TestFlight (iOS) or Play Store (Android)
-2. Open the app
+1. Open your mobile browser (Safari, Chrome, etc.)
+2. Navigate to the dashboard URL (e.g., `https://examtrack.yourdomain.com`)
 3. Enter your email and temporary password
 4. Tap **Login**
 5. Complete the password change process
+6. **Optional:** Add to home screen for app-like experience
 
 #### 3. Change Your Password
 
@@ -230,15 +273,56 @@ Upon login, you'll see the main dashboard with key statistics:
 
 ### Student Management
 
-**Access:** Admin only  
+**Access:** Admin only
 **Path:** Dashboard → Students
+
+#### View Modes
+
+The Students page now offers two viewing modes for optimal student management:
+
+**Table View (Default):**
+
+- Traditional tabular format
+- Bulk operations support
+- Compact information display
+- Best for data management tasks
+
+**Card View:**
+
+- Visual student cards with photos
+- Prominent QR codes for printing
+- Enhanced for bottle cap QR printing
+- Perfect for physical ID management
+
+**Switching Views:**
+
+1. Use the view toggle buttons in the header
+2. **List icon** (≡) for table view
+3. **Grid icon** (⊞) for card view
+
+#### Card View Features
+
+**Student Cards Include:**
+
+- **Profile Section:** Placeholder image with primary color gradient background
+- **Student Information:** Name, index number, program, and level
+- **QR Code Section:** Large, high-contrast QR codes optimized for printing
+- **Action Buttons:** Edit, delete, and large QR view options
+
+**QR Code Optimization:**
+
+- **Size:** 120x120 pixels for clear printing
+- **Error Correction:** High level (H) for reliability
+- **Contrast:** Automatic theme-aware colors (black on white background)
+- **Bottle Cap Ready:** Designed for small surface printing
 
 #### View All Students
 
 1. Click **Students** in the sidebar
-2. See list with:
+2. Choose your preferred view mode (table or cards)
+3. See students with:
    - Index Number
-   - Name
+   - Name (First & Last)
    - Program
    - Level
    - QR Code status
@@ -248,7 +332,8 @@ Upon login, you'll see the main dashboard with key statistics:
 1. Click **Add Student** button
 2. Fill in the form:
    - **Index Number:** Unique student ID (e.g., "STU001")
-   - **Name:** Full name
+   - **First Name:** Student's first name
+   - **Last Name:** Student's last name
    - **Programme:** Study program (e.g., "Computer Science")
    - **Level:** Academic level (e.g., "300")
    - **Contact:** Phone/email (optional)
@@ -261,9 +346,9 @@ Upon login, you'll see the main dashboard with key statistics:
 2. Download the CSV template
 3. Fill in student data:
    ```csv
-   indexNumber,name,programme,level,contact
-   STU001,John Doe,Computer Science,300,john@example.com
-   STU002,Jane Smith,Information Technology,300,jane@example.com
+   indexNumber,firstName,lastName,programme,level,contact
+   STU001,John,Doe,Computer Science,300,john@example.com
+   STU002,Jane,Smith,Information Technology,300,jane@example.com
    ```
 4. Upload the completed CSV file
 5. Review the preview
@@ -274,13 +359,14 @@ Upon login, you'll see the main dashboard with key statistics:
 
 - Header row is required
 - Index numbers must be unique
-- Name and programme are required
+- First name and last name are required
+- Programme is required
 - Level should be numeric (100, 200, 300, 400)
 - Contact is optional
 
 #### View Student Details
 
-1. Click on a student
+1. Click on a student (in table view) or card (in card view)
 2. View full profile:
    - Personal information
    - QR code (downloadable)
@@ -289,10 +375,24 @@ Upon login, you'll see the main dashboard with key statistics:
 
 #### Download Student QR Code
 
-1. Click on a student
-2. Click **Download QR Code**
-3. PNG file downloads to your computer
-4. Print or display as needed
+**From Table View:**
+
+1. Click the QR icon next to a student
+2. Choose "View QR Code" for modal display
+3. Or access full profile for download
+
+**From Card View:**
+
+1. Click "View Large QR" button on any card
+2. Modal displays high-resolution QR code
+3. Download option available in modal
+
+**Printing Tips:**
+
+- QR codes are optimized for bottle cap printing
+- Use high-contrast settings on your printer
+- Test print on similar material first
+- Ensure QR code is at least 1cm x 1cm when printed
 
 ---
 
@@ -735,27 +835,29 @@ Use the controls at the top:
 
 ---
 
-## Mobile App Guide (Handlers)
+## Mobile Access Guide
 
-The mobile app is designed for on-the-ground handlers who manage exam scripts and attendance recording.
+The system provides unified mobile access through responsive web technology, allowing handlers to manage exam scripts and attendance recording from any mobile device with a modern browser.
 
-### App Navigation
+### Mobile Navigation
 
-#### Tab Bar (Bottom)
+### Mobile Navigation
 
-**Home Tab** 🏠
+#### Navigation Menu
 
-- Dashboard overview
-- Recent activity
-- Quick actions
+**Dashboard** 🏠
 
-**Custody Tab** 📦
+- Overview of current activities
+- Recent transfers and incidents
+- Quick action buttons
 
-- Your current batches
+**Custody** 📦
+
+- Your current script batches
 - Transfer management
 - Custody history
 
-**Incidents Tab** 🚨
+**Incidents** 🚨
 
 - Incident reporting and tracking
 - Real-time incident list
@@ -778,12 +880,15 @@ The mobile app is designed for on-the-ground handlers who manage exam scripts an
 
 ### Login & Authentication
 
+### Login & Authentication
+
 #### First Login
 
-1. Open the app
-2. Enter your email and password
-3. Tap **Login**
-4. If first-time, you'll be prompted to change password
+1. Open your mobile browser
+2. Navigate to the system URL
+3. Enter your email and password
+4. Tap **Login**
+5. If first-time, you'll be prompted to change password
 
 #### Change Password
 
@@ -795,11 +900,12 @@ The mobile app is designed for on-the-ground handlers who manage exam scripts an
 
 #### Biometric Authentication (Optional)
 
-If your device supports Face ID or Fingerprint:
+If your browser supports WebAuthn (modern browsers):
 
-1. Enable in device settings
-2. App will prompt for biometric on subsequent logins
-3. Faster and more secure access
+1. Enable biometric authentication in browser settings
+2. System will prompt for biometric login on subsequent visits
+3. App will prompt for biometric on subsequent logins
+4. Faster and more secure access
 
 ---
 

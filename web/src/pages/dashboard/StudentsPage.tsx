@@ -16,7 +16,11 @@ import {
   Trash2,
   FileDown,
   AlertTriangle,
+  Grid3X3,
+  List,
+  User,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useAuthStore } from "@/store/auth";
 import {
   Card,
@@ -64,6 +68,7 @@ export default function StudentsPage() {
   const [levelFilter, setLevelFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -377,6 +382,26 @@ export default function StudentsPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              {/* View Mode Toggle */}
+              <div className="flex border rounded-md">
+                <Button
+                  onClick={() => setViewMode("table")}
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-r-none"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={() => setViewMode("cards")}
+                  variant={viewMode === "cards" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-l-none"
+                >
+                  <Grid3X3 className="h-4 w-4" />
+                </Button>
+              </div>
+
               <Button onClick={handleExportCSV} variant="outline">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export CSV
@@ -486,14 +511,14 @@ export default function StudentsPage() {
         </CardContent>
       </Card>
 
-      {/* Table */}
+      {/* Students Display */}
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">
               Loading students...
             </div>
-          ) : (
+          ) : viewMode === "table" ? (
             <>
               <Table>
                 <TableHeader>
@@ -584,6 +609,140 @@ export default function StudentsPage() {
                   </div>
                 </div>
               )}
+            </>
+          ) : (
+            <>
+              {/* Card View */}
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {studentsData?.students.map((student) => (
+                    <Card
+                      key={student.id}
+                      className="overflow-hidden border-border bg-card"
+                    >
+                      <CardContent className="p-0">
+                        {/* Placeholder Image Section */}
+                        <div className="h-32 bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border">
+                          <User className="h-16 w-16 text-primary" />
+                        </div>
+
+                        {/* Student Info */}
+                        <div className="p-4 space-y-2 bg-card">
+                          <div className="text-center">
+                            <h3 className="font-semibold text-lg text-foreground">
+                              {student.firstName} {student.lastName}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {student.indexNumber}
+                            </p>
+                          </div>
+
+                          <div className="space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Program:
+                              </span>
+                              <span className="font-medium text-foreground">
+                                {student.program}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Level:
+                              </span>
+                              <span className="font-medium text-foreground">
+                                {student.level}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* QR Code Section */}
+                        <div className="p-4 border-t border-border bg-muted/30">
+                          <div className="flex flex-col items-center space-y-2">
+                            <div className="bg-background p-3 rounded-md border-2 border-border shadow-sm">
+                              <QRCodeSVG
+                                value={student.indexNumber}
+                                size={120}
+                                level="H"
+                                includeMargin={true}
+                                fgColor="var(--foreground)"
+                                bgColor="var(--background)"
+                              />
+                            </div>
+                            <Button
+                              onClick={() => handleShowQRCode(student)}
+                              variant="outline"
+                              size="sm"
+                              className="w-full border-border hover:bg-accent hover:text-accent-foreground"
+                            >
+                              <QrCode className="h-4 w-4 mr-2" />
+                              View Large QR
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        {isAdmin && (
+                          <div className="p-4 border-t border-border bg-muted/30">
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => openEditModal(student)}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 border-border hover:bg-accent hover:text-accent-foreground"
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit
+                              </Button>
+                              <Button
+                                onClick={() => openDeleteModal(student)}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 border-border hover:bg-destructive hover:text-destructive-foreground"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Pagination for Card View */}
+                {studentsData && studentsData.pagination.pages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {(page - 1) * limit + 1} to{" "}
+                      {Math.min(page * limit, studentsData.pagination.total)} of{" "}
+                      {studentsData.pagination.total} students
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setPage(page - 1)}
+                        disabled={page === 1}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Previous
+                      </Button>
+                      <span className="px-4 py-2 text-sm">
+                        Page {page} of {studentsData.pagination.pages}
+                      </span>
+                      <Button
+                        onClick={() => setPage(page + 1)}
+                        disabled={page === studentsData.pagination.pages}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </CardContent>

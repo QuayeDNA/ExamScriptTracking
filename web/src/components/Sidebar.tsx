@@ -101,7 +101,10 @@ export function Sidebar({ className }: { className?: string }) {
 
   const isActive = (href: string) => {
     if (href === "/dashboard") {
-      return location.pathname === "/dashboard";
+      return (
+        location.pathname === "/dashboard" ||
+        location.pathname === "/dashboard/"
+      );
     }
     return location.pathname.startsWith(href);
   };

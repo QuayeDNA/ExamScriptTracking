@@ -23,6 +23,12 @@ import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
 import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
+import DashboardStatsPage from "@/pages/dashboard/DashboardStatsPage";
+import StudentsPage from "@/pages/dashboard/StudentsPage";
+import ExamSessionsPage from "@/pages/dashboard/ExamSessionsPage";
+import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
+import IncidentsPage from "@/pages/dashboard/IncidentsPage";
+import SettingsPage from "@/pages/dashboard/SettingsPage";
 import {
   ProtectedRoute,
   MobileProtectedRoute,
@@ -60,23 +66,20 @@ const queryClient = new QueryClient({
   },
 });
 
+function ConditionalNotFound() {
+  const location = useLocation();
+
+  // Don't show 404 for static files
+  if (location.pathname.startsWith("/_")) {
+    return null;
+  }
+
+  return <NotFoundPage />;
+}
+
 function App() {
   // Initialize socket connection
   useSocket();
-
-  const ConditionalNotFound = () => {
-    const location = useLocation();
-
-    // Don't show 404 for static files or mobile app routes
-    if (
-      location.pathname.startsWith("/_") ||
-      location.pathname.startsWith("/mobile/")
-    ) {
-      return null; // Let the server handle static files
-    }
-
-    return <NotFoundPage />;
-  };
 
   return (
     <MobileDetectionWrapper>
@@ -86,7 +89,15 @@ function App() {
           <ErrorBoundary>
             <BrowserRouter>
               <Routes>
-                {/* Auth routes with AuthLayout */}
+                {/* Public routes */}
+                <Route
+                  path="/design-system-demo"
+                  element={<DesignSystemDemo />}
+                />
+                <Route path="/student-qr" element={<StudentQRLookup />} />
+                <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+                {/* Desktop Auth routes - shared AuthLayout */}
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<LoginPage />} />
                   <Route
@@ -103,88 +114,34 @@ function App() {
                   />
                 </Route>
 
-                {/* Design system demo (standalone) */}
-                <Route
-                  path="/design-system-demo"
-                  element={<DesignSystemDemo />}
-                />
-
-                {/* Student QR lookup (public) */}
-                <Route path="/student-qr" element={<StudentQRLookup />} />
-
-                {/* Error pages (standalone) */}
-                <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-                {/* Mobile routes - replicate mobile app functionality */}
-                <Route element={<MobileLayout />}>
-                  {/* Mobile Auth Routes */}
-                  <Route path="/mobile/login" element={<MobileLoginPage />} />
+                {/* Mobile Auth routes - shared AuthLayout */}
+                <Route path="/mobile" element={<AuthLayout />}>
+                  <Route path="login" element={<MobileLoginPage />} />
                   <Route
-                    path="/mobile/qr-registration"
+                    path="qr-registration"
                     element={<MobileQRRegistrationPage />}
                   />
                   <Route
-                    path="/mobile/change-password"
+                    path="change-password"
                     element={<MobileChangePasswordPage />}
                   />
-
-                  {/* Mobile Dashboard Routes */}
-                  <Route element={<MobileProtectedRoute />}>
-                    <Route path="/mobile" element={<MobileHomePage />} />
-                    <Route
-                      path="/mobile/custody"
-                      element={<MobileCustodyPage />}
-                    />
-                    <Route
-                      path="/mobile/incidents"
-                      element={<MobileIncidentsPage />}
-                    />
-                    <Route
-                      path="/mobile/scanner"
-                      element={<MobileScannerPage />}
-                    />
-                    <Route
-                      path="/mobile/profile"
-                      element={<MobileProfilePage />}
-                    />
-                    <Route
-                      path="/mobile/attendance"
-                      element={<MobileAttendancePage />}
-                    />
-                    <Route
-                      path="/mobile/batch-details/:batchId"
-                      element={<MobileBatchDetailsPage />}
-                    />
-                    <Route
-                      path="/mobile/report-incident"
-                      element={<MobileReportIncidentPage />}
-                    />
-                    <Route
-                      path="/mobile/incident-details/:id"
-                      element={<MobileIncidentDetailsPage />}
-                    />
-                    <Route
-                      path="/mobile/student-attendance"
-                      element={<MobileStudentAttendancePage />}
-                    />
-                    <Route
-                      path="/mobile/recent-activity"
-                      element={<MobileRecentActivityPage />}
-                    />
-                    <Route
-                      path="/mobile/initiate-transfer"
-                      element={<MobileInitiateTransferPage />}
-                    />
-                    <Route
-                      path="/mobile/confirm-transfer/:transferId"
-                      element={<MobileConfirmTransferPage />}
-                    />
-                  </Route>
                 </Route>
 
-                {/* Admin-only routes */}
+                {/* Desktop Protected routes - DashboardLayout */}
                 <Route element={<ProtectedRoute allowedRoles={[Role.ADMIN]} />}>
                   <Route path="/dashboard" element={<DashboardLayout />}>
+                    <Route index element={<DashboardStatsPage />} />
+                    <Route path="students" element={<StudentsPage />} />
+                    <Route
+                      path="exam-sessions"
+                      element={<ExamSessionsPage />}
+                    />
+                    <Route
+                      path="batch-tracking"
+                      element={<BatchTrackingPage />}
+                    />
+                    <Route path="incidents" element={<IncidentsPage />} />
+                    <Route path="settings" element={<SettingsPage />} />
                     <Route path="users" element={<UsersPage />} />
                     <Route
                       path="class-attendance"
@@ -202,7 +159,50 @@ function App() {
                   </Route>
                 </Route>
 
-                {/* Default and 404 routes */}
+                {/* Mobile Protected routes - MobileLayout */}
+                <Route element={<MobileProtectedRoute />}>
+                  <Route path="/mobile" element={<MobileLayout />}>
+                    <Route index element={<MobileHomePage />} />
+                    <Route path="custody" element={<MobileCustodyPage />} />
+                    <Route path="incidents" element={<MobileIncidentsPage />} />
+                    <Route path="scanner" element={<MobileScannerPage />} />
+                    <Route path="profile" element={<MobileProfilePage />} />
+                    <Route
+                      path="attendance"
+                      element={<MobileAttendancePage />}
+                    />
+                    <Route
+                      path="batch-details/:batchId"
+                      element={<MobileBatchDetailsPage />}
+                    />
+                    <Route
+                      path="report-incident"
+                      element={<MobileReportIncidentPage />}
+                    />
+                    <Route
+                      path="incident-details/:id"
+                      element={<MobileIncidentDetailsPage />}
+                    />
+                    <Route
+                      path="student-attendance"
+                      element={<MobileStudentAttendancePage />}
+                    />
+                    <Route
+                      path="recent-activity"
+                      element={<MobileRecentActivityPage />}
+                    />
+                    <Route
+                      path="initiate-transfer"
+                      element={<MobileInitiateTransferPage />}
+                    />
+                    <Route
+                      path="confirm-transfer/:transferId"
+                      element={<MobileConfirmTransferPage />}
+                    />
+                  </Route>
+                </Route>
+
+                {/* Default redirects */}
                 <Route
                   path="/"
                   element={<Navigate to="/dashboard" replace />}
