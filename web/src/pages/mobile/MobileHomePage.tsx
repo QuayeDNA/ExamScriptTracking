@@ -124,144 +124,146 @@ export const MobileHomePage = () => {
   ].filter((action) => action.show);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-md mx-auto bg-white min-h-screen">
-        {/* Header */}
-        <div className="bg-blue-600 text-white p-6">
-          <h1 className="text-2xl font-bold">ELMS Mobile</h1>
-          <p className="text-blue-100 mt-1">Welcome back, {user?.name}</p>
-          <Badge variant="secondary" className="mt-2 bg-blue-500 text-white">
-            {user?.role?.replace("_", " ")}
-          </Badge>
-        </div>
+    <div className="bg-background">
+      {/* Header */}
+      <div className="bg-primary text-primary-foreground p-6">
+        <h1 className="text-2xl font-bold">ELMS Mobile</h1>
+        <p className="text-primary-foreground/80 mt-1">
+          Welcome back, {user?.name}
+        </p>
+        <Badge
+          variant="secondary"
+          className="mt-2 bg-primary-foreground/10 text-primary-foreground"
+        >
+          {user?.role?.replace("_", " ")}
+        </Badge>
+      </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-4 space-y-6">
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3">
-                  {quickActions.map((action, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      className="h-auto p-4 flex flex-col items-center space-y-2"
-                      onClick={action.onClick}
-                    >
-                      {action.icon}
-                      <div className="text-center">
-                        <div className="font-medium text-sm">
-                          {action.title}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {action.description}
-                        </div>
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6 pb-6">
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {quickActions.map((action, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    className="h-auto p-4 flex flex-col items-center space-y-2"
+                    onClick={action.onClick}
+                  >
+                    {action.icon}
+                    <div className="text-center">
+                      <div className="font-medium text-sm">{action.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {action.description}
                       </div>
-                    </Button>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">Recent Activity</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/mobile/recent-activity")}
+              >
+                View All
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="animate-pulse">
+                      <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-muted rounded w-1/2"></div>
+                    </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Activity */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Recent Activity</CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate("/mobile/recent-activity")}
-                >
-                  View All
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="animate-pulse">
-                        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              ) : activities?.length > 0 ? (
+                <div className="space-y-3">
+                  {activities.slice(0, 5).map((activity: UserActivity) => (
+                    <div
+                      key={activity.id}
+                      className="flex items-start space-x-3"
+                    >
+                      <div className="shrink-0 mt-1">
+                        {getActivityIcon(activity.type)}
                       </div>
-                    ))}
-                  </div>
-                ) : activities?.length > 0 ? (
-                  <div className="space-y-3">
-                    {activities.slice(0, 5).map((activity: UserActivity) => (
-                      <div
-                        key={activity.id}
-                        className="flex items-start space-x-3"
-                      >
-                        <div className="shrink-0 mt-1">
-                          {getActivityIcon(activity.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {activity.description}
-                          </p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${getActivityColor(
-                                activity.status
-                              )}`}
-                            >
-                              {activity.status}
-                            </Badge>
-                            <span className="text-xs text-gray-500">
-                              {formatDistanceToNow(
-                                new Date(activity.timestamp),
-                                {
-                                  addSuffix: true,
-                                }
-                              )}
-                            </span>
-                          </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {activity.description}
+                        </p>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${getActivityColor(
+                              activity.status
+                            )}`}
+                          >
+                            {activity.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(activity.timestamp), {
+                              addSuffix: true,
+                            })}
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Activity className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">No recent activity</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    No recent activity
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Stats Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Today's Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {activities?.length || 0}
-                    </div>
-                    <div className="text-sm text-gray-600">Activities</div>
+          {/* Stats Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Today's Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-primary">
+                    {activities?.length || 0}
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {activities?.filter(
-                        (a) =>
-                          a.type.includes("RECORDED") ||
-                          a.type.includes("COMPLETED")
-                      ).length || 0}
-                    </div>
-                    <div className="text-sm text-gray-600">Completed</div>
+                  <div className="text-sm text-muted-foreground">
+                    Activities
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </ScrollArea>
-      </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {activities?.filter(
+                      (a) =>
+                        a.type.includes("RECORDED") ||
+                        a.type.includes("COMPLETED")
+                    ).length || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Completed</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

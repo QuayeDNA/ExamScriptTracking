@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ import {
 
 export function MobileLayout() {
   const [isDesktop, setIsDesktop] = useState(false);
-  const [showMessage, setShowMessage] = useState(false);
+  const [timerCompleted, setTimerCompleted] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -31,15 +32,11 @@ export function MobileLayout() {
         "windows phone",
       ];
 
-      // Check user agent
       const isMobileDevice = mobileKeywords.some((keyword) =>
         userAgent.includes(keyword)
       );
 
-      // Check screen width (desktop breakpoint)
       const isLargeScreen = window.innerWidth >= 768;
-
-      // Check touch capability (desktop usually has less touch points)
       const hasLimitedTouch = navigator.maxTouchPoints <= 1;
 
       setIsDesktop(!isMobileDevice && isLargeScreen && hasLimitedTouch);
@@ -52,20 +49,25 @@ export function MobileLayout() {
   }, []);
 
   useEffect(() => {
-    // Clear any existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
 
-    if (isDesktop) {
-      // Show message after a brief delay to avoid flash on mobile
+    // Reset states when switching to mobile
+    if (!isDesktop) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTimerCompleted(false);
+      setDismissed(false);
+      return;
+    }
+
+    // Start timer when on desktop and not dismissed
+    if (isDesktop && !dismissed) {
       timeoutRef.current = setTimeout(() => {
-        setShowMessage(true);
-        timeoutRef.current = null;
+        setTimerCompleted(true);
       }, 500);
     }
-    // Note: Hiding is handled by useLayoutEffect below
 
     return () => {
       if (timeoutRef.current) {
@@ -73,17 +75,8 @@ export function MobileLayout() {
         timeoutRef.current = null;
       }
     };
-  }, [isDesktop]);
+  }, [isDesktop, dismissed]);
 
-  // Handle immediate hiding when not desktop
-  useLayoutEffect(() => {
-    if (!isDesktop) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowMessage(false);
-    }
-  }, [isDesktop]);
-
-  // Define navigation tabs
   const tabs = [
     {
       id: "home",
@@ -115,6 +108,8 @@ export function MobileLayout() {
     },
   ];
 
+  const showMessage = isDesktop && timerCompleted && !dismissed;
+
   if (showMessage) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -138,7 +133,7 @@ export function MobileLayout() {
             <div className="pt-4">
               <Button
                 variant="outline"
-                onClick={() => setShowMessage(false)}
+                onClick={() => setDismissed(true)}
                 className="w-full"
               >
                 Continue Anyway
@@ -151,14 +146,14 @@ export function MobileLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Main Content - scrollable with padding for bottom nav */}
+      <div className="flex-1 overflow-y-auto pb-16">
         <Outlet />
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      {/* Bottom Navigation - fixed to bottom */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-card">
         <div className="flex items-center justify-around px-2 py-2 safe-area-bottom">
           {tabs.map((tab) => {
             const Icon = tab.icon;
