@@ -34,6 +34,20 @@ export const MobileQRRegistrationPage = () => {
 
   const { mutate: registerWithQR, isPending, error } = useRegisterWithQR();
 
+  const requestCameraPermission = async () => {
+    setHasPermission(null); // Reset to show loading state
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      setHasPermission(true);
+    } catch (error) {
+      console.error("Camera permission request failed:", error);
+      setHasPermission(false);
+    }
+  };
+
   const handleScan = (data: string) => {
     setScanned(true);
     setScanError(""); // Clear any previous errors
@@ -42,6 +56,13 @@ export const MobileQRRegistrationPage = () => {
 
       if (parsedData.type !== "REGISTRATION") {
         setScanError("This QR code is not for registration.");
+        setScanned(false);
+        return;
+      }
+
+      // Check if department is provided
+      if (!parsedData.department) {
+        setScanError("This QR code is not configured with a department.");
         setScanned(false);
         return;
       }
@@ -55,32 +76,73 @@ export const MobileQRRegistrationPage = () => {
 
       setQrData(parsedData);
       setShowForm(true);
-    } catch {
+    } catch (error) {
+      console.error("QR scan error:", error);
       setScanError("Unable to read QR code data.");
       setScanned(false);
     }
   };
 
   useEffect(() => {
+    const checkCameraPermission = async () => {
+      try {
+        // First check if camera is available
+        const hasCamera = await QrScanner.hasCamera();
+        if (!hasCamera) {
+          setHasPermission(false);
+          return;
+        }
+
+        // Request camera permission
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+
+        // Stop the stream immediately after getting permission
+        stream.getTracks().forEach((track) => track.stop());
+
+        setHasPermission(true);
+      } catch (error) {
+        console.error("Camera permission error:", error);
+        setHasPermission(false);
+      }
+    };
+
     const initScanner = async () => {
       try {
-        const hasCamera = await QrScanner.hasCamera();
-        setHasPermission(hasCamera);
+        // Wait for permission check first
+        if (hasPermission === null) {
+          await checkCameraPermission();
+          return; // Exit and let the useEffect re-run when hasPermission changes
+        }
 
-        if (hasCamera && videoRef.current) {
+        if (hasPermission && videoRef.current) {
           const qrScanner = new QrScanner(
             videoRef.current,
             (result) => handleScan(result.data),
             {
               highlightScanRegion: true,
               highlightCodeOutline: true,
+              returnDetailedScanResult: true,
             }
           );
+
           setScanner(qrScanner);
+
+          // Set up error handling - wrap start in try-catch
+          try {
+            await qrScanner.start();
+          } catch (error) {
+            console.warn("QR scanner start error:", error);
+            setScanError(
+              "Failed to start camera. Please check camera permissions."
+            );
+          }
         }
       } catch (error) {
         console.error("Error initializing scanner:", error);
         setHasPermission(false);
+        setScanError("Failed to initialize camera. Please check permissions.");
       }
     };
 
@@ -89,53 +151,78 @@ export const MobileQRRegistrationPage = () => {
     return () => {
       if (scanner) {
         scanner.destroy();
+        setScanner(null);
       }
     };
-  }, []);
+  }, [hasPermission]);
 
+  // Cleanup on unmount
   useEffect(() => {
-    if (scanner && !scanned) {
-      scanner.start();
-    } else if (scanner && scanned) {
-      scanner.stop();
-    }
-  }, [scanner, scanned]);
+    return () => {
+      if (scanner) {
+        scanner.destroy();
+        setScanner(null);
+      }
+    };
+  }, [scanner]);
 
   const handleRegister = () => {
-    if (!qrData) return;
+    if (!qrData) {
+      setScanError("No QR code data available. Please scan a QR code first.");
+      return;
+    }
 
     // Validation
     if (
-      !formData.firstName ||
-      !formData.lastName ||
-      !formData.phone ||
-      !formData.password
+      !formData.firstName.trim() ||
+      !formData.lastName.trim() ||
+      !formData.phone.trim() ||
+      !formData.password.trim()
     ) {
+      setScanError("All fields are required.");
       return;
     }
 
     if (!/^(\+233|0)[0-9]{9}$/.test(formData.phone)) {
+      setScanError(
+        "Please enter a valid Ghana phone number (0241234567 or +233241234567)."
+      );
       return;
     }
 
     if (formData.password.length < 8) {
+      setScanError("Password must be at least 8 characters long.");
       return;
     }
+
+    // Clear any previous errors
+    setScanError("");
 
     registerWithQR(
       {
         qrToken: qrData.token,
-        ...formData,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        phone: formData.phone.trim(),
+        password: formData.password,
       },
       {
         onSuccess: () => {
-          navigate("/mobile");
+          // Navigation is handled in the hook
+        },
+        onError: (error) => {
+          console.error("Registration error:", error);
+          setScanError(
+            error instanceof Error
+              ? error.message
+              : "Registration failed. Please try again."
+          );
         },
       }
     );
   };
 
-  const resetScanner = () => {
+  const resetScanner = async () => {
     setScanned(false);
     setQrData(null);
     setShowForm(false);
@@ -146,6 +233,16 @@ export const MobileQRRegistrationPage = () => {
       password: "",
     });
     setScanError("");
+
+    // Restart scanner if it exists
+    if (scanner) {
+      try {
+        await scanner.start();
+      } catch (error) {
+        console.error("Error restarting scanner:", error);
+        setScanError("Failed to restart camera. Please refresh the page.");
+      }
+    }
   };
 
   if (hasPermission === null) {
@@ -184,12 +281,17 @@ export const MobileQRRegistrationPage = () => {
                 Please enable camera access in your browser settings and try
                 again.
               </p>
-              <Button
-                onClick={() => navigate("/mobile/login")}
-                variant="outline"
-              >
-                Go Back
-              </Button>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={requestCameraPermission} variant="default">
+                  Try Again
+                </Button>
+                <Button
+                  onClick={() => navigate("/mobile/login")}
+                  variant="outline"
+                >
+                  Go Back
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -224,10 +326,18 @@ export const MobileQRRegistrationPage = () => {
                 </Alert>
               )}
 
+              {scanError && (
+                <Alert variant="destructive" className="mb-6">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{scanError}</AlertDescription>
+                </Alert>
+              )}
+
               {qrData && (
                 <Alert>
                   <AlertDescription>
-                    You will be registered to the <strong>{qrData.department}</strong> department.
+                    You will be registered to the{" "}
+                    <strong>{qrData.department}</strong> department.
                   </AlertDescription>
                 </Alert>
               )}
@@ -314,7 +424,7 @@ export const MobileQRRegistrationPage = () => {
                 <Button
                   onClick={handleRegister}
                   className="w-full"
-                  disabled={isPending}
+                  disabled={isPending || !qrData}
                 >
                   {isPending ? "Registering..." : "Complete Registration"}
                 </Button>
