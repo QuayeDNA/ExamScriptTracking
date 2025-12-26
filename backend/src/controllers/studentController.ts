@@ -9,6 +9,28 @@ import { storageService } from "../services/storageService";
 
 const prisma = new PrismaClient();
 
+// Utility function to construct full URLs for uploaded files
+const getFileUrl = (relativePath: string): string => {
+  if (!relativePath) return "";
+
+  // If it's already a full URL (e.g., from Cloudinary), return as-is
+  if (
+    relativePath.startsWith("http://") ||
+    relativePath.startsWith("https://")
+  ) {
+    return relativePath;
+  }
+
+  // Remove leading slash if present and construct full URL
+  const cleanPath = relativePath.startsWith("/")
+    ? relativePath.substring(1)
+    : relativePath;
+
+  const API_URL =
+    process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
+  return `${API_URL}/${cleanPath}`;
+};
+
 // Configure multer for profile picture uploads
 const getStorageConfig = () => {
   const provider = process.env.STORAGE_PROVIDER || "local";
@@ -882,6 +904,90 @@ export const lookupStudentForIncident = async (
     }
   } catch (error) {
     console.error("Lookup student for incident error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Export students to PDF with images and QR codes
+export const exportStudentsPDF = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    console.log("Export PDF request received:", req.query);
+    const { program, level } = req.query;
+
+    // Build where clause for filtering
+    const where: any = {};
+    if (program && typeof program === "string") {
+      where.program = program;
+    }
+    if (level && typeof level === "string") {
+      where.level = parseInt(level);
+    }
+
+    // Fetch students with filters
+    const students = await prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        program: true,
+        level: true,
+        qrCode: true,
+        profilePicture: true,
+        createdAt: true,
+      },
+      orderBy: [
+        { program: "asc" },
+        { level: "asc" },
+        { lastName: "asc" },
+        { firstName: "asc" },
+      ],
+    });
+
+    console.log(`Found ${students.length} students for export`);
+
+    if (students.length === 0) {
+      res
+        .status(404)
+        .json({ error: "No students found matching the criteria" });
+      return;
+    }
+
+    // Prepare export data
+    const exportData = {
+      students: students.map((student) => ({
+        ...student,
+        profilePicture: getFileUrl(student.profilePicture),
+        createdAt: student.createdAt.toISOString(),
+      })),
+      title: "Student Directory",
+      subtitle: `Total Students: ${students.length}`,
+      program: program as string,
+      level: level ? parseInt(level as string) : undefined,
+    };
+
+    // Generate PDF
+    console.log("Starting PDF generation...");
+    const { exportStudentData } = await import("../utils/exportUtils");
+    const pdfBuffer = await exportStudentData(exportData);
+    console.log(`PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+
+    // Set response headers
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=students_${program || "all"}_${level || "all"}_${
+        new Date().toISOString().split("T")[0]
+      }.pdf`
+    );
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Export students PDF error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

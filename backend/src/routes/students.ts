@@ -11,6 +11,7 @@ import {
   getLevels,
   getStudentByIndexNumber,
   lookupStudentForIncident,
+  exportStudentsPDF,
   uploadStudentPicture,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
@@ -109,5 +110,12 @@ router.get("/lookup", lookupStudentForIncident);
  * @access  Private (Admin only)
  */
 router.post("/bulk", authorize(Role.ADMIN), bulkCreateStudents);
+
+/**
+ * @route   GET /api/students/export/pdf
+ * @desc    Export students to PDF with images and QR codes
+ * @access  Private (Admin only)
+ */
+router.get("/export/pdf", authorize(Role.ADMIN), exportStudentsPDF);
 
 export default router;

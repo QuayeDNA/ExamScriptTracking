@@ -9,12 +9,32 @@ import {
   TableRow,
   WidthType,
 } from "docx";
+import * as QRCode from "qrcode";
+import axios from "axios";
 
 export interface ExportData {
   headers: string[];
   rows: (string | number | Date)[][];
   title?: string;
   subtitle?: string;
+}
+
+export interface StudentExportData {
+  students: Array<{
+    id: string;
+    indexNumber: string;
+    firstName: string;
+    lastName: string;
+    program: string;
+    level: number;
+    profilePicture: string;
+    qrCode: string;
+    createdAt: string;
+  }>;
+  title?: string;
+  subtitle?: string;
+  program?: string;
+  level?: number;
 }
 
 export interface ExportOptions {
@@ -181,6 +201,180 @@ export class PDFExporter extends BaseExporter {
 }
 
 /**
+ * Student PDF Exporter with images and QR codes
+ */
+export class StudentPDFExporter {
+  private data: StudentExportData;
+
+  constructor(data: StudentExportData) {
+    this.data = data;
+  }
+
+  async generate(): Promise<Buffer> {
+    console.log(
+      `Starting PDF generation for ${this.data.students.length} students`
+    );
+    return new Promise(async (resolve) => {
+      const doc = new PDFDocument({
+        size: "A4",
+        layout: "portrait",
+        margin: 50,
+      });
+
+      const buffers: Buffer[] = [];
+
+      doc.on("data", (chunk) => buffers.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(buffers)));
+
+      // Add title
+      if (this.data.title) {
+        doc
+          .fontSize(24)
+          .font("Helvetica-Bold")
+          .text(this.data.title, { align: "center" });
+        doc.moveDown(0.5);
+      }
+
+      // Add subtitle
+      if (this.data.subtitle) {
+        doc
+          .fontSize(14)
+          .font("Helvetica")
+          .text(this.data.subtitle, { align: "center" });
+        doc.moveDown(1);
+      }
+
+      // Add filter info
+      if (this.data.program || this.data.level) {
+        const filterText = [];
+        if (this.data.program) filterText.push(`Program: ${this.data.program}`);
+        if (this.data.level) filterText.push(`Level: ${this.data.level}`);
+        doc
+          .fontSize(10)
+          .text(`Filtered by: ${filterText.join(", ")}`, { align: "center" });
+        doc.moveDown(0.5);
+      }
+
+      // Add generation date
+      doc
+        .fontSize(10)
+        .text(`Generated: ${new Date().toLocaleString()}`, { align: "right" });
+      doc.moveDown(1);
+
+      // Process students in groups of 3 per page
+      const studentsPerPage = 3;
+      let currentY = doc.y;
+
+      for (let i = 0; i < this.data.students.length; i++) {
+        const student = this.data.students[i];
+
+        // Check if we need a new page
+        if (i > 0 && i % studentsPerPage === 0) {
+          doc.addPage();
+          currentY = 50;
+        }
+
+        // Calculate positions for this student row
+        const rowHeight = 120;
+        const imageSize = 80;
+        const qrSize = 80;
+        const margin = 20;
+
+        // Left: Profile Image
+        const imageX = 50;
+        const imageY = currentY;
+
+        try {
+          // Load and add profile image
+          console.log(
+            `Fetching image for ${student.firstName} ${student.lastName}: ${student.profilePicture}`
+          );
+          const imageResponse = await axios.get(student.profilePicture, {
+            responseType: "arraybuffer",
+            timeout: 5000,
+          });
+          const imageBuffer = Buffer.from(imageResponse.data);
+
+          doc.image(imageBuffer, imageX, imageY, {
+            width: imageSize,
+            height: imageSize,
+            fit: [imageSize, imageSize],
+          });
+          console.log(
+            `Successfully added image for ${student.firstName} ${student.lastName}`
+          );
+        } catch (error) {
+          console.log(
+            `Failed to load image for ${student.firstName} ${student.lastName}:`,
+            error instanceof Error ? error.message : String(error)
+          );
+          // Fallback: draw a placeholder
+          doc.rect(imageX, imageY, imageSize, imageSize).stroke();
+          doc.fontSize(8).text("No Image", imageX + 5, imageY + 30);
+        }
+
+        // Middle: Student Info
+        const infoX = imageX + imageSize + margin;
+        const infoWidth = doc.page.width - infoX - qrSize - margin * 2;
+
+        doc.font("Helvetica-Bold").fontSize(12);
+        doc.text(`${student.firstName} ${student.lastName}`, infoX, imageY);
+
+        doc.font("Helvetica").fontSize(10);
+        doc.text(`Index: ${student.indexNumber}`, infoX, doc.y + 5);
+        doc.text(`Program: ${student.program}`, infoX, doc.y + 5);
+        doc.text(`Level: ${student.level}`, infoX, doc.y + 5);
+
+        // Right: QR Code
+        const qrX = doc.page.width - qrSize - 50;
+        const qrY = currentY;
+
+        try {
+          // Generate QR code as buffer
+          console.log(
+            `Generating QR code for ${student.firstName} ${student.lastName}`
+          );
+          const qrBuffer = await QRCode.toBuffer(student.qrCode, {
+            width: qrSize,
+            margin: 1,
+          });
+
+          doc.image(qrBuffer, qrX, qrY, {
+            width: qrSize,
+            height: qrSize,
+          });
+          console.log(
+            `Successfully added QR code for ${student.firstName} ${student.lastName}`
+          );
+        } catch (error) {
+          console.log(
+            `Failed to generate QR code for ${student.firstName} ${student.lastName}:`,
+            error instanceof Error ? error.message : String(error)
+          );
+          // Fallback: draw a placeholder
+          doc.rect(qrX, qrY, qrSize, qrSize).stroke();
+          doc.fontSize(8).text("QR Error", qrX + 5, qrY + 30);
+        }
+
+        // Move to next row
+        currentY += rowHeight + margin;
+
+        // Add some spacing between students
+        if (
+          (i + 1) % studentsPerPage !== 0 &&
+          i < this.data.students.length - 1
+        ) {
+          doc.moveDown(0.5);
+        }
+      }
+
+      console.log(`Finalizing PDF document`);
+      doc.end();
+    });
+  }
+}
+
+/**
  * DOCX Exporter
  */
 export class DOCXExporter extends BaseExporter {
@@ -286,5 +480,15 @@ export async function exportData(
   options: ExportOptions = {}
 ): Promise<Buffer> {
   const exporter = createExporter(format, data, options);
+  return await exporter.generate();
+}
+
+/**
+ * Utility function to export student data with images and QR codes
+ */
+export async function exportStudentData(
+  data: StudentExportData
+): Promise<Buffer> {
+  const exporter = new StudentPDFExporter(data);
   return await exporter.generate();
 }

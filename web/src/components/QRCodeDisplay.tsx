@@ -16,7 +16,7 @@ export function QRCodeDisplay({
       <div className="bg-background p-4 rounded-lg border-2 border-border shadow-sm">
         <QRCodeSVG
           value={data}
-          size={280}
+          size={size}
           level="M"
           includeMargin={true}
           fgColor="var(--foreground)"

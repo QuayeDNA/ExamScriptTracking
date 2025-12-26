@@ -312,6 +312,30 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Export students to PDF with images and QR codes
+  const handleExportPDF = async () => {
+    try {
+      const blob = await studentsApi.exportStudentsPDF({
+        program: programFilter || undefined,
+        level: levelFilter || undefined,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `students_${programFilter || "all"}_${
+        levelFilter || "all"
+      }_${new Date().toISOString().split("T")[0]}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      toast.success("PDF exported successfully");
+    } catch (error) {
+      console.error("Export PDF error:", error);
+      toast.error("Failed to export PDF");
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       indexNumber: "",
@@ -457,6 +481,10 @@ export default function StudentsPage() {
               <Button onClick={handleExportCSV} variant="outline">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export CSV
+              </Button>
+              <Button onClick={handleExportPDF} variant="outline">
+                <FileDown className="h-4 w-4 mr-2" />
+                Export PDF
               </Button>
               {isAdmin && (
                 <>

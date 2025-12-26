@@ -182,4 +182,27 @@ export const studentsApi = {
   getLevels: async (): Promise<{ levels: number[] }> => {
     return apiClient.get<{ levels: number[] }>("/students/levels");
   },
+
+  exportStudentsPDF: async (filters?: {
+    program?: string;
+    level?: string;
+  }): Promise<Blob> => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          params.append(key, String(value));
+        }
+      });
+    }
+    const queryString = params.toString();
+
+    // Use axios directly for blob response
+    const response = await apiClient
+      .getClient()
+      .get(`/students/export/pdf${queryString ? `?${queryString}` : ""}`, {
+        responseType: "blob",
+      });
+    return response.data;
+  },
 };

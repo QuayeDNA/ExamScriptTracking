@@ -6,14 +6,14 @@ import axios, {
 } from "axios";
 import type { ApiError } from "@/types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 class ApiClient {
   private client: AxiosInstance;
   private isRefreshing = false;
   private failedQueue: Array<{
     resolve: (value: string) => void;
-    reject: (reason?: any) => void;
+    reject: (reason?: unknown) => void;
   }> = [];
 
   constructor() {
@@ -106,18 +106,20 @@ class ApiClient {
         // Format error consistently
         const apiError: ApiError = {
           error:
-            (error.response?.data as any)?.error ||
-            (error.response?.data as any)?.message ||
+            (error.response?.data as { error?: string; message?: string })
+              ?.error ||
+            (error.response?.data as { error?: string; message?: string })
+              ?.message ||
             error.message ||
             "Network error",
-          details: (error.response?.data as any)?.details,
+          details: (error.response?.data as { details?: unknown })?.details,
         };
         return Promise.reject(apiError);
       }
     );
   }
 
-  private processQueue(error: any, token: string | null = null) {
+  private processQueue(error: unknown, token: string | null = null) {
     this.failedQueue.forEach((promise) => {
       if (error) {
         promise.reject(error);
@@ -183,6 +185,17 @@ class ApiClient {
 
   getToken(): string | null {
     return localStorage.getItem("token");
+  }
+
+  // Public method to make requests
+  async request<T = unknown>(config: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.request(config);
+    return response.data;
+  }
+
+  // Public method to get the axios instance for advanced usage
+  getClient(): AxiosInstance {
+    return this.client;
   }
 }
 
