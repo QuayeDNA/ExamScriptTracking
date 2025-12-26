@@ -86,8 +86,8 @@ export const MobileLoginPage = () => {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    {error?.error ||
-                      error?.message ||
+                    {(error as any)?.error ||
+                      (error as any)?.message ||
                       "Login failed. Please check your credentials."}
                   </AlertDescription>
                 </Alert>

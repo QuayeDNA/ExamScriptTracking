@@ -11,6 +11,7 @@ import {
   getLevels,
   getStudentByIndexNumber,
   lookupStudentForIncident,
+  uploadStudentPicture,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -48,7 +49,12 @@ router.get("/levels", getLevels);
  * @desc    Create new student
  * @access  Private (Admin only)
  */
-router.post("/", authorize(Role.ADMIN), createStudent);
+router.post(
+  "/",
+  authorize(Role.ADMIN),
+  uploadStudentPicture.single("profilePicture"),
+  createStudent
+);
 
 /**
  * @route   GET /api/students
@@ -76,7 +82,12 @@ router.get("/:id/qr-code", generateStudentQRCode);
  * @desc    Update student
  * @access  Private (Admin only)
  */
-router.put("/:id", authorize(Role.ADMIN), updateStudent);
+router.put(
+  "/:id",
+  authorize(Role.ADMIN),
+  uploadStudentPicture.single("profilePicture"),
+  updateStudent
+);
 
 /**
  * @route   DELETE /api/students/:id

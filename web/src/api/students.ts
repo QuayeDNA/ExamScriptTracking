@@ -8,6 +8,7 @@ export interface Student {
   program: string;
   level: number;
   qrCode: string;
+  profilePicture: string;
   createdAt: string;
 }
 
@@ -105,21 +106,52 @@ export const studentsApi = {
   },
 
   createStudent: async (
-    data: CreateStudentData
+    data: CreateStudentData,
+    profilePicture: File
   ): Promise<{ message: string; student: Student }> => {
+    const formData = new FormData();
+    formData.append("indexNumber", data.indexNumber);
+    formData.append("firstName", data.firstName);
+    formData.append("lastName", data.lastName);
+    formData.append("program", data.program);
+    formData.append("level", data.level.toString());
+    formData.append("profilePicture", profilePicture);
+
     return apiClient.post<{ message: string; student: Student }>(
       "/students",
-      data
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
     );
   },
 
   updateStudent: async (
     id: string,
-    data: UpdateStudentData
+    data: UpdateStudentData,
+    profilePicture?: File
   ): Promise<{ message: string; student: Student }> => {
+    const formData = new FormData();
+    if (data.indexNumber !== undefined)
+      formData.append("indexNumber", data.indexNumber);
+    if (data.firstName !== undefined)
+      formData.append("firstName", data.firstName);
+    if (data.lastName !== undefined) formData.append("lastName", data.lastName);
+    if (data.program !== undefined) formData.append("program", data.program);
+    if (data.level !== undefined)
+      formData.append("level", data.level.toString());
+    if (profilePicture) formData.append("profilePicture", profilePicture);
+
     return apiClient.put<{ message: string; student: Student }>(
       `/students/${id}`,
-      data
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
     );
   },
 

@@ -3,6 +3,7 @@ import "pdfkit-table";
 import ExcelJS from "exceljs";
 import { PrismaClient } from "@prisma/client";
 import { Response } from "express";
+import { exportData, ExportData } from "../utils/exportUtils";
 
 const prisma = new PrismaClient();
 
@@ -604,10 +605,20 @@ export const generateAnalyticsOverviewExcel = async (
   endDate?: Date
 ): Promise<ExcelJS.Buffer> => {
   try {
-    const dateFilter =
+    const examDateFilter =
       startDate && endDate
         ? {
             createdAt: {
+              gte: startDate,
+              lte: endDate,
+            },
+          }
+        : {};
+
+    const transferDateFilter =
+      startDate && endDate
+        ? {
+            requestedAt: {
               gte: startDate,
               lte: endDate,
             },
@@ -632,35 +643,263 @@ export const generateAnalyticsOverviewExcel = async (
       pattern: "solid",
       fgColor: { argb: "FF4472C4" },
     };
+    overviewSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
 
-    // Get metrics
-    const totalSessions = await prisma.examSession.count({ where: dateFilter });
+    // Get basic metrics
+    const totalSessions = await prisma.examSession.count({
+      where: examDateFilter,
+    });
     const activeTransfers = await prisma.batchTransfer.count({
       where: {
-        ...dateFilter,
+        ...transferDateFilter,
         status: { in: ["PENDING", "CONFIRMED"] },
       },
     });
     const completedTransfers = await prisma.batchTransfer.count({
       where: {
-        ...dateFilter,
+        ...transferDateFilter,
         status: "CONFIRMED",
       },
     });
-    const discrepancies = await prisma.batchTransfer.count({
+    const totalDiscrepancies = await prisma.batchTransfer.count({
       where: {
-        ...dateFilter,
+        ...transferDateFilter,
         discrepancyNote: { not: null },
       },
     });
+
+    // Get exam stats
+    const examStats = await prisma.examSession.findMany({
+      where: examDateFilter,
+      include: {
+        attendances: true,
+      },
+    });
+
+    const totalExams = examStats.length;
+    const completedExams = examStats.filter(
+      (e) => e.status === "COMPLETED"
+    ).length;
+    const completionRate =
+      totalExams > 0 ? (completedExams / totalExams) * 100 : 0;
+
+    const avgProcessingTime =
+      examStats.length > 0
+        ? examStats.reduce((acc, exam) => {
+            if (exam.status === "COMPLETED" && exam.createdAt) {
+              return (
+                acc + (exam.updatedAt.getTime() - exam.createdAt.getTime())
+              );
+            }
+            return acc;
+          }, 0) /
+          examStats.length /
+          (1000 * 60 * 60 * 24) // days
+        : 0;
+
+    const totalStudents = examStats.reduce(
+      (acc, exam) => acc + exam.attendances.length,
+      0
+    );
+    const avgStudentsPerExam = totalExams > 0 ? totalStudents / totalExams : 0;
 
     overviewSheet.addRows([
       { metric: "Total Exam Sessions", value: totalSessions },
       { metric: "Active Transfers", value: activeTransfers },
       { metric: "Completed Transfers", value: completedTransfers },
-      { metric: "Total Discrepancies", value: discrepancies },
+      { metric: "Total Discrepancies", value: totalDiscrepancies },
+      { metric: "Completed Exams", value: completedExams },
+      { metric: "Exam Completion Rate (%)", value: completionRate.toFixed(1) },
+      {
+        metric: "Avg Processing Time (days)",
+        value: avgProcessingTime.toFixed(1),
+      },
+      { metric: "Avg Students per Exam", value: avgStudentsPerExam.toFixed(1) },
       { metric: "Report Generated", value: new Date().toLocaleString() },
     ]);
+
+    // Handler Performance Sheet
+    const handlerSheet = workbook.addWorksheet("Handler Performance");
+    handlerSheet.columns = [
+      { header: "Handler Name", key: "name", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Role", key: "role", width: 20 },
+      { header: "Total Transfers", key: "total", width: 15 },
+      { header: "Sent", key: "sent", width: 15 },
+      { header: "Received", key: "received", width: 15 },
+      { header: "In Custody", key: "custody", width: 15 },
+      { header: "Avg Response (min)", key: "avgResponse", width: 20 },
+      { header: "Discrepancies", key: "discrepancies", width: 15 },
+      { header: "Discrepancy Rate (%)", key: "discrepancyRate", width: 20 },
+    ];
+
+    handlerSheet.getRow(1).font = { bold: true };
+    handlerSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    handlerSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+    // Get handlers
+    const handlers = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: "INVIGILATOR" },
+          { role: "FACULTY_OFFICER" },
+          { role: "DEPARTMENT_HEAD" },
+        ],
+        isActive: true,
+      },
+      include: {
+        handledBatches: {
+          where: transferDateFilter,
+        },
+        receivedBatches: {
+          where: transferDateFilter,
+        },
+      },
+    });
+
+    for (const handler of handlers) {
+      const sentTransfers = handler.handledBatches;
+      const receivedTransfers = handler.receivedBatches;
+      const totalTransfers = sentTransfers.length + receivedTransfers.length;
+
+      // Calculate average response time
+      const responseTimes = receivedTransfers
+        .filter((t) => t.confirmedAt)
+        .map(
+          (t) =>
+            (new Date(t.confirmedAt!).getTime() -
+              new Date(t.requestedAt).getTime()) /
+            (1000 * 60)
+        );
+      const avgResponseTime =
+        responseTimes.length > 0
+          ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+          : 0;
+
+      // Calculate discrepancy rate
+      const discrepancies = [...sentTransfers, ...receivedTransfers].filter(
+        (t) => t.discrepancyNote
+      ).length;
+      const discrepancyRate =
+        totalTransfers > 0 ? (discrepancies / totalTransfers) * 100 : 0;
+
+      handlerSheet.addRow({
+        name: `${handler.firstName} ${handler.lastName}`,
+        email: handler.email,
+        role: handler.role,
+        total: totalTransfers,
+        sent: sentTransfers.length,
+        received: receivedTransfers.length,
+        custody: sentTransfers.filter((t) => !t.confirmedAt).length,
+        avgResponse: avgResponseTime.toFixed(2),
+        discrepancies,
+        discrepancyRate: discrepancyRate.toFixed(2),
+      });
+    }
+
+    // Discrepancies Sheet
+    const discrepanciesSheet = workbook.addWorksheet("Discrepancies");
+    discrepanciesSheet.columns = [
+      { header: "Transfer ID", key: "id", width: 30 },
+      { header: "Course", key: "course", width: 25 },
+      { header: "From Handler", key: "from", width: 25 },
+      { header: "To Handler", key: "to", width: 25 },
+      { header: "Expected", key: "expected", width: 15 },
+      { header: "Received", key: "received", width: 15 },
+      { header: "Difference", key: "difference", width: 15 },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Reported At", key: "reported", width: 18 },
+      { header: "Note", key: "note", width: 40 },
+    ];
+
+    discrepanciesSheet.getRow(1).font = { bold: true };
+    discrepanciesSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    discrepanciesSheet.getRow(1).font = {
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+
+    const discrepancies = await prisma.batchTransfer.findMany({
+      where: {
+        ...transferDateFilter,
+        discrepancyNote: { not: null },
+      },
+      include: {
+        fromHandler: true,
+        toHandler: true,
+        examSession: true,
+      },
+      orderBy: { requestedAt: "desc" },
+    });
+
+    for (const transfer of discrepancies) {
+      discrepanciesSheet.addRow({
+        id: transfer.id,
+        course: transfer.examSession.courseCode,
+        from: `${transfer.fromHandler.firstName} ${transfer.fromHandler.lastName}`,
+        to: `${transfer.toHandler.firstName} ${transfer.toHandler.lastName}`,
+        expected: transfer.examsExpected,
+        received: transfer.examsReceived || 0,
+        difference: transfer.examsExpected - (transfer.examsReceived || 0),
+        status: transfer.status,
+        reported: transfer.requestedAt.toLocaleString(),
+        note: transfer.discrepancyNote || "",
+      });
+    }
+
+    // Exam Statistics Sheet
+    const examSheet = workbook.addWorksheet("Exam Statistics");
+    examSheet.columns = [
+      { header: "Exam ID", key: "id", width: 30 },
+      { header: "Course", key: "course", width: 25 },
+      { header: "Department", key: "department", width: 20 },
+      { header: "Faculty", key: "faculty", width: 20 },
+      { header: "Status", key: "status", width: 15 },
+      { header: "Total Students", key: "students", width: 15 },
+      { header: "Present", key: "present", width: 15 },
+      { header: "Submitted", key: "submitted", width: 15 },
+      { header: "Created", key: "created", width: 18 },
+      { header: "Completed", key: "completed", width: 18 },
+    ];
+
+    examSheet.getRow(1).font = { bold: true };
+    examSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4472C4" },
+    };
+    examSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+    for (const exam of examStats) {
+      const present = exam.attendances.filter(
+        (a) => a.status !== "ABSENT"
+      ).length;
+      const submitted = exam.attendances.filter(
+        (a) => a.status === "SUBMITTED"
+      ).length;
+
+      examSheet.addRow({
+        id: exam.id,
+        course: `${exam.courseCode} - ${exam.courseName}`,
+        department: exam.department,
+        faculty: exam.faculty,
+        status: exam.status,
+        students: exam.attendances.length,
+        present,
+        submitted,
+        created: exam.createdAt.toLocaleString(),
+        completed:
+          exam.status === "COMPLETED" ? exam.updatedAt.toLocaleString() : "",
+      });
+    }
 
     return await workbook.xlsx.writeBuffer();
   } catch (error) {

@@ -110,6 +110,7 @@ model Student {
   program     String
   level       Int
   qrCode      String   @unique
+  profilePicture String // Path to profile picture file
   createdAt   DateTime @default(now())
   
   attendances       ExamAttendance[]

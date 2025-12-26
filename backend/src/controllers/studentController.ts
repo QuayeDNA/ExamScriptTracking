@@ -2,8 +2,60 @@ import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import QRCode from "qrcode";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { storageService } from "../services/storageService";
 
 const prisma = new PrismaClient();
+
+// Configure multer for profile picture uploads
+const getStorageConfig = () => {
+  const provider = process.env.STORAGE_PROVIDER || "local";
+
+  if (provider === "local") {
+    return multer.diskStorage({
+      destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, "../../uploads/students");
+        // Ensure directory exists
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        // Generate unique filename with timestamp
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, `student-${uniqueSuffix}${path.extname(file.originalname)}`);
+      },
+    });
+  } else {
+    // For cloud storage, use memory storage
+    return multer.memoryStorage();
+  }
+};
+
+// File filter for images only
+const fileFilter = (
+  req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  if (file.mimetype.startsWith("image/")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only image files are allowed"));
+  }
+};
+
+// Configure multer upload
+export const uploadStudentPicture = multer({
+  storage: getStorageConfig(),
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
 
 // Validation schemas
 const createStudentSchema = z.object({
@@ -11,7 +63,13 @@ const createStudentSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   program: z.string().min(1, "Program is required"),
-  level: z.number().int().positive("Level must be a positive integer"),
+  level: z
+    .string()
+    .transform((val) => parseInt(val, 10))
+    .refine(
+      (val) => !isNaN(val) && val > 0,
+      "Level must be a positive integer"
+    ),
 });
 
 const updateStudentSchema = z.object({
@@ -19,7 +77,14 @@ const updateStudentSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   program: z.string().min(1).optional(),
-  level: z.number().int().positive().optional(),
+  level: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .refine(
+      (val) => val === undefined || (!isNaN(val) && val > 0),
+      "Level must be a positive integer"
+    ),
 });
 
 const bulkCreateStudentSchema = z.array(
@@ -28,7 +93,12 @@ const bulkCreateStudentSchema = z.array(
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     program: z.string().min(1),
-    level: z.number().int().positive(),
+    level: z
+      .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
+      .refine(
+        (val) => !isNaN(val) && val > 0,
+        "Level must be a positive integer"
+      ),
   })
 );
 
@@ -42,6 +112,12 @@ export const createStudent = async (
 
     const validatedData = createStudentSchema.parse(req.body);
 
+    // Check if profile picture was uploaded
+    if (!req.file) {
+      res.status(400).json({ error: "Profile picture is required" });
+      return;
+    }
+
     // Check if index number already exists
     const existingStudent = await prisma.student.findUnique({
       where: { indexNumber: validatedData.indexNumber },
@@ -52,6 +128,30 @@ export const createStudent = async (
         .status(400)
         .json({ error: "Student with this index number already exists" });
       return;
+    }
+
+    // Handle profile picture upload
+    let profilePictureUrl: string;
+    const isLocalStorage =
+      (process.env.STORAGE_PROVIDER || "local") === "local";
+
+    if (isLocalStorage) {
+      // For local storage, use the multer-generated path
+      profilePictureUrl = `/uploads/students/${req.file.filename}`;
+    } else {
+      // For cloud storage, upload using storage service
+      const uploadResult = await storageService.uploadFile(
+        req.file,
+        "students"
+      );
+      if (!uploadResult.success) {
+        res.status(500).json({
+          error: "Failed to upload profile picture",
+          details: uploadResult.error,
+        });
+        return;
+      }
+      profilePictureUrl = uploadResult.url;
     }
 
     // Generate QR code data
@@ -70,6 +170,7 @@ export const createStudent = async (
     const student = await prisma.student.create({
       data: {
         ...validatedData,
+        profilePicture: profilePictureUrl,
         qrCode: qrData, // Temporary, will regenerate with ID
       },
     });
@@ -102,6 +203,7 @@ export const createStudent = async (
           indexNumber: student.indexNumber,
           name: `${student.firstName} ${student.lastName}`,
           program: student.program,
+          profilePicture: profilePictureUrl,
         },
         ipAddress: req.ip,
       },
@@ -259,6 +361,10 @@ export const updateStudent = async (
       });
 
       if (duplicateStudent) {
+        // Clean up uploaded file if validation fails
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
         res
           .status(400)
           .json({ error: "Student with this index number already exists" });
@@ -266,11 +372,57 @@ export const updateStudent = async (
       }
     }
 
+    // Handle profile picture update
+    let profilePictureUrl = existingStudent.profilePicture;
+    let oldPictureUrl = existingStudent.profilePicture;
+    if (req.file) {
+      const isLocalStorage =
+        (process.env.STORAGE_PROVIDER || "local") === "local";
+
+      if (isLocalStorage) {
+        // For local storage, use the multer-generated path
+        profilePictureUrl = `/uploads/students/${req.file.filename}`;
+      } else {
+        // For cloud storage, upload using storage service
+        const uploadResult = await storageService.uploadFile(
+          req.file,
+          "students"
+        );
+        if (!uploadResult.success) {
+          res.status(500).json({
+            error: "Failed to upload profile picture",
+            details: uploadResult.error,
+          });
+          return;
+        }
+        profilePictureUrl = uploadResult.url;
+      }
+    }
+
     // Update student
     const student = await prisma.student.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...validatedData,
+        profilePicture: profilePictureUrl,
+      },
     });
+
+    // Delete old profile picture if it was replaced
+    if (req.file && oldPictureUrl) {
+      const isLocalStorage =
+        (process.env.STORAGE_PROVIDER || "local") === "local";
+      if (isLocalStorage) {
+        // For local storage, delete from filesystem
+        const oldPath = path.join(__dirname, "../../", oldPictureUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      } else {
+        // For cloud storage, delete using storage service
+        await storageService.deleteFile(oldPictureUrl);
+      }
+    }
 
     // Regenerate QR code if data changed
     const updatedQrData = JSON.stringify({
@@ -298,6 +450,7 @@ export const updateStudent = async (
         entityId: student.id,
         details: {
           changes: validatedData,
+          profilePictureUpdated: !!req.file,
         },
         ipAddress: req.ip,
       },
@@ -310,6 +463,11 @@ export const updateStudent = async (
       student: updatedStudent,
     });
   } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
     if (error instanceof z.ZodError) {
       res.status(400).json({
         error: "Validation failed",
@@ -359,6 +517,26 @@ export const deleteStudent = async (
     await prisma.student.delete({
       where: { id },
     });
+
+    // Delete profile picture if it exists
+    if (student.profilePicture) {
+      const isLocalStorage =
+        (process.env.STORAGE_PROVIDER || "local") === "local";
+      if (isLocalStorage) {
+        // For local storage, delete from filesystem
+        const picturePath = path.join(
+          __dirname,
+          "../../",
+          student.profilePicture
+        );
+        if (fs.existsSync(picturePath)) {
+          fs.unlinkSync(picturePath);
+        }
+      } else {
+        // For cloud storage, delete using storage service
+        await storageService.deleteFile(student.profilePicture);
+      }
+    }
 
     // Log audit
     await prisma.auditLog.create({
@@ -426,6 +604,7 @@ export const bulkCreateStudents = async (
         const student = await prisma.student.create({
           data: {
             ...studentData,
+            profilePicture: "/uploads/students/default-avatar.png", // Placeholder - requires manual upload
             qrCode: qrData,
           },
         });
@@ -450,6 +629,7 @@ export const bulkCreateStudents = async (
         results.success.push({
           indexNumber: student.indexNumber,
           name: `${student.firstName} ${student.lastName}`,
+          note: "Profile picture requires manual upload",
         });
       } catch (error) {
         results.failed.push({

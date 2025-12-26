@@ -6,6 +6,7 @@ import {
   type CreateStudentData,
   type UpdateStudentData,
 } from "@/api/students";
+import { getFileUrl } from "@/lib/api-client";
 import {
   Plus,
   Search,
@@ -18,7 +19,6 @@ import {
   AlertTriangle,
   Grid3X3,
   List,
-  User,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useAuthStore } from "@/store/auth";
@@ -86,6 +86,12 @@ export default function StudentsPage() {
     program: "",
     level: 100,
   });
+  const [profilePictureFile, setProfilePictureFile] = useState<File | null>(
+    null
+  );
+  const [profilePicturePreview, setProfilePicturePreview] = useState<
+    string | null
+  >(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [qrCodeData, setQrCodeData] = useState<string>("");
 
@@ -115,7 +121,8 @@ export default function StudentsPage() {
 
   // Create student mutation
   const createMutation = useMutation({
-    mutationFn: (data: CreateStudentData) => studentsApi.createStudent(data),
+    mutationFn: (data: { formData: CreateStudentData; file: File }) =>
+      studentsApi.createStudent(data.formData, data.file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
       toast.success("Student created successfully");
@@ -129,8 +136,15 @@ export default function StudentsPage() {
 
   // Update student mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateStudentData }) =>
-      studentsApi.updateStudent(id, data),
+    mutationFn: ({
+      id,
+      data,
+      file,
+    }: {
+      id: string;
+      data: UpdateStudentData;
+      file?: File;
+    }) => studentsApi.updateStudent(id, data, file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
       toast.success("Student updated successfully");
@@ -308,6 +322,8 @@ export default function StudentsPage() {
       level: 100,
     });
     setSelectedStudent(null);
+    setProfilePictureFile(null);
+    setProfilePicturePreview(null);
   };
 
   const openEditModal = (student: Student) => {
@@ -319,6 +335,7 @@ export default function StudentsPage() {
       program: student.program,
       level: student.level,
     });
+    setProfilePicturePreview(getFileUrl(student.profilePicture));
     setIsEditModalOpen(true);
   };
 
@@ -327,12 +344,48 @@ export default function StudentsPage() {
     setIsDeleteModalOpen(true);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select a valid image file");
+        return;
+      }
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("File size must be less than 5MB");
+        return;
+      }
+
+      setProfilePictureFile(file);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setProfilePicturePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!profilePictureFile && !isEditModalOpen) {
+      toast.error("Profile picture is required");
+      return;
+    }
     if (isEditModalOpen && selectedStudent) {
-      updateMutation.mutate({ id: selectedStudent.id, data: formData });
-    } else {
-      createMutation.mutate(formData);
+      updateMutation.mutate({
+        id: selectedStudent.id,
+        data: formData,
+        file: profilePictureFile || undefined,
+      });
+    } else if (profilePictureFile) {
+      createMutation.mutate({
+        formData,
+        file: profilePictureFile,
+      });
     }
   };
 
@@ -523,6 +576,7 @@ export default function StudentsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Photo</TableHead>
                     <TableHead>Index Number</TableHead>
                     <TableHead>First Name</TableHead>
                     <TableHead>Last Name</TableHead>
@@ -534,6 +588,19 @@ export default function StudentsPage() {
                 <TableBody>
                   {studentsData?.students.map((student) => (
                     <TableRow key={student.id}>
+                      <TableCell>
+                        <img
+                          src={getFileUrl(student.profilePicture)}
+                          alt={`${student.firstName} ${student.lastName}`}
+                          className="w-10 h-10 rounded-lg object-cover"
+                          onError={(e) => {
+                            // Fallback to default avatar if image fails to load
+                            (e.target as HTMLImageElement).src = getFileUrl(
+                              "/uploads/students/default-avatar.png"
+                            );
+                          }}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {student.indexNumber}
                       </TableCell>
@@ -621,9 +688,29 @@ export default function StudentsPage() {
                       className="overflow-hidden border-border bg-card"
                     >
                       <CardContent className="p-0">
-                        {/* Placeholder Image Section */}
-                        <div className="h-32 bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border">
-                          <User className="h-16 w-16 text-primary" />
+                        {/* Profile Picture Section */}
+                        <div className="h-32 bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border relative">
+                          <img
+                            src={getFileUrl(student.profilePicture)}
+                            alt={`${student.firstName} ${student.lastName}`}
+                            className="w-20 h-20 rounded-lg object-cover border-2 border-white shadow-lg"
+                            onError={(e) => {
+                              // Fallback to default avatar if image fails to load
+                              (e.target as HTMLImageElement).src = getFileUrl(
+                                "/uploads/students/default-avatar.png"
+                              );
+                            }}
+                          />
+                          {/* QR Code Button */}
+                          <Button
+                            onClick={() => handleShowQRCode(student)}
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 bg-background/80 backdrop-blur-sm hover:bg-background border border-border/50"
+                            title="View QR Code"
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
                         </div>
 
                         {/* Student Info */}
@@ -654,31 +741,6 @@ export default function StudentsPage() {
                                 {student.level}
                               </span>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* QR Code Section */}
-                        <div className="p-4 border-t border-border bg-muted/30">
-                          <div className="flex flex-col items-center space-y-2">
-                            <div className="bg-background p-3 rounded-md border-2 border-border shadow-sm">
-                              <QRCodeSVG
-                                value={student.indexNumber}
-                                size={120}
-                                level="H"
-                                includeMargin={true}
-                                fgColor="var(--foreground)"
-                                bgColor="var(--background)"
-                              />
-                            </div>
-                            <Button
-                              onClick={() => handleShowQRCode(student)}
-                              variant="outline"
-                              size="sm"
-                              className="w-full border-border hover:bg-accent hover:text-accent-foreground"
-                            >
-                              <QrCode className="h-4 w-4 mr-2" />
-                              View Large QR
-                            </Button>
                           </div>
                         </div>
 
@@ -844,6 +906,32 @@ export default function StudentsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="profilePicture">Profile Picture</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="profilePicture"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  required={!isEditModalOpen}
+                  className="cursor-pointer"
+                />
+                {profilePicturePreview && (
+                  <div className="relative">
+                    <img
+                      src={profilePicturePreview}
+                      alt="Profile preview"
+                      className="w-16 h-16 rounded-lg object-cover border"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Upload a clear photo of the student. Max size: 5MB. Formats:
+                JPG, PNG, GIF
+              </p>
+            </div>
             <DialogFooter>
               <Button
                 type="button"
@@ -913,7 +1001,8 @@ export default function StudentsPage() {
             <DialogTitle>Bulk Import Students</DialogTitle>
             <DialogDescription>
               Upload a CSV file with columns: indexNumber, firstName, lastName,
-              program, level
+              program, level. Note: Profile pictures must be uploaded
+              individually after bulk import.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

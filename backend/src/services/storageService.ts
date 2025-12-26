@@ -334,26 +334,6 @@ export function createStorageService(): StorageService {
         uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET,
       };
       break;
-
-    case "cloudflare":
-      if (
-        !process.env.CLOUDFLARE_ACCOUNT_ID ||
-        !process.env.CLOUDFLARE_ACCESS_KEY_ID ||
-        !process.env.CLOUDFLARE_SECRET_ACCESS_KEY ||
-        !process.env.CLOUDFLARE_BUCKET_NAME
-      ) {
-        throw new Error("Cloudflare R2 environment variables not configured");
-      }
-      config.cloudflare = {
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-        accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY_ID,
-        secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY,
-        bucketName: process.env.CLOUDFLARE_BUCKET_NAME,
-        publicUrl:
-          process.env.CLOUDFLARE_PUBLIC_URL ||
-          `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      };
-      break;
   }
 
   return new StorageService(config);

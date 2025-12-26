@@ -73,6 +73,7 @@ export const addExpectedStudents = async (req: Request, res: Response) => {
             program: studentData.program || "Unknown",
             level: studentData.level || 100,
             qrCode: qrData,
+            profilePicture: "/uploads/students/default-avatar.png", // Default avatar for auto-created students
           },
         });
 
@@ -215,6 +216,7 @@ export const addExpectedStudentsByIndex = async (
           program: "Unknown",
           level: 100,
           qrCode: qrData,
+          profilePicture: "/uploads/students/default-avatar.png", // Default avatar for auto-created students
         },
       });
 

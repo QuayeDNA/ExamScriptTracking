@@ -11,6 +11,11 @@ export const Role = {
 
 export type Role = (typeof Role)[keyof typeof Role];
 
+export interface ApiError {
+  error: string;
+  details?: any;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -312,13 +317,9 @@ export interface BatchTransfer {
   toHandler: User;
 }
 
-// API Error Types
 export interface ApiError {
   error: string;
-  details?: Array<{
-    path: string[];
-    message: string;
-  }>;
+  details?: any;
 }
 
 // Query Filters

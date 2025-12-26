@@ -13,13 +13,16 @@ export function QRCodeDisplay({
 }: QRCodeDisplayProps) {
   return (
     <div className={`flex justify-center ${className}`}>
-      <QRCodeSVG
-        value={data}
-        size={size}
-        level="M"
-        includeMargin={true}
-        className="border border-gray-200 rounded-lg shadow-sm"
-      />
+      <div className="bg-background p-4 rounded-lg border-2 border-border shadow-sm">
+        <QRCodeSVG
+          value={data}
+          size={280}
+          level="M"
+          includeMargin={true}
+          fgColor="var(--foreground)"
+          bgColor="var(--background)"
+        />
+      </div>
     </div>
   );
 }

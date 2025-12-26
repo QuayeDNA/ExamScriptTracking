@@ -386,6 +386,7 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
             program: validatedData.studentData.program || "Unknown",
             level: level || 100,
             qrCode: tempQrData, // Temporary, will regenerate with ID
+            profilePicture: "/uploads/students/default-avatar.png", // Default avatar for auto-created students
           },
         });
 

@@ -106,11 +106,11 @@ class ApiClient {
         // Format error consistently
         const apiError: ApiError = {
           error:
-            error.response?.data?.error ||
-            error.response?.data?.message ||
+            (error.response?.data as any)?.error ||
+            (error.response?.data as any)?.message ||
             error.message ||
             "Network error",
-          details: error.response?.data?.details,
+          details: (error.response?.data as any)?.details,
         };
         return Promise.reject(apiError);
       }
@@ -187,3 +187,26 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+/**
+ * Utility function to construct full URLs for uploaded files
+ * @param relativePath - The relative path from the backend (e.g., "/uploads/students/image.png")
+ * @returns Full URL to access the file
+ */
+export const getFileUrl = (relativePath: string): string => {
+  if (!relativePath) return "";
+
+  // If it's already a full URL (e.g., from Cloudinary), return as-is
+  if (
+    relativePath.startsWith("http://") ||
+    relativePath.startsWith("https://")
+  ) {
+    return relativePath;
+  }
+
+  // Remove leading slash if present and construct full URL
+  const cleanPath = relativePath.startsWith("/")
+    ? relativePath.substring(1)
+    : relativePath;
+  return `${API_URL}/${cleanPath}`;
+};
