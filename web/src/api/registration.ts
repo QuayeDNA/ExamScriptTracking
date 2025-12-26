@@ -3,6 +3,7 @@ import type { Role } from "@/types";
 
 export interface CreateSessionRequest {
   expiresInMinutes: number;
+  department: string;
 }
 
 export interface CreateSessionResponse {
@@ -12,6 +13,7 @@ export interface CreateSessionResponse {
   qrCodeData: {
     type: "REGISTRATION";
     token: string;
+    department: string;
     expiresAt: string;
   };
 }
@@ -19,6 +21,7 @@ export interface CreateSessionResponse {
 export interface RegistrationSession {
   id: string;
   qrToken: string;
+  department: string;
   expiresAt: string;
   used: boolean;
   usedAt?: string;
@@ -46,7 +49,6 @@ export interface RegisterWithQRRequest {
   lastName: string;
   phone: string;
   password: string;
-  department: string;
 }
 
 export interface RegisterWithQRResponse {
@@ -69,12 +71,14 @@ export interface RegisterWithQRResponse {
 
 export const registrationApi = {
   createSession: async (
-    expiresInMinutes: number
+    expiresInMinutes: number,
+    department: string
   ): Promise<CreateSessionResponse> => {
     return apiClient.post<CreateSessionResponse>(
       "/registration/create-session",
       {
         expiresInMinutes,
+        department,
       }
     );
   },

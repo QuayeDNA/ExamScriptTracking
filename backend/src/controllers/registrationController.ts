@@ -10,6 +10,7 @@ const prisma = new PrismaClient();
 // Validation schemas
 const createRegistrationSessionSchema = z.object({
   expiresInMinutes: z.number().min(1).max(1440).optional().default(60), // Default 1 hour
+  department: z.string().min(1, "Department is required"),
 });
 
 const registerWithQRSchema = z.object({
@@ -18,7 +19,6 @@ const registerWithQRSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   phone: z.string().regex(/^(\+233|0)[0-9]{9}$/, "Invalid phone number format"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  department: z.string().min(1, "Department is required"),
 });
 
 /**
@@ -30,7 +30,7 @@ export const createRegistrationSession = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { expiresInMinutes } = createRegistrationSessionSchema.parse(
+    const { expiresInMinutes, department } = createRegistrationSessionSchema.parse(
       req.body
     );
     const adminId = req.user!.userId;
@@ -47,6 +47,7 @@ export const createRegistrationSession = async (
       data: {
         qrToken,
         createdById: adminId,
+        department,
         expiresAt,
       },
     });
@@ -58,6 +59,7 @@ export const createRegistrationSession = async (
       qrCodeData: {
         type: "REGISTRATION",
         token: session.qrToken,
+        department: session.department,
         expiresAt: session.expiresAt.toISOString(),
       },
     });
@@ -87,7 +89,7 @@ export const registerWithQR = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { qrToken, firstName, lastName, phone, password, department } =
+    const { qrToken, firstName, lastName, phone, password } =
       registerWithQRSchema.parse(req.body);
 
     // Find and validate registration session
@@ -98,6 +100,13 @@ export const registerWithQR = async (
     if (!session) {
       res.status(400).json({
         error: "Invalid QR code",
+      });
+      return;
+    }
+
+    if (!session.department) {
+      res.status(400).json({
+        error: "QR code is not configured with a department",
       });
       return;
     }
@@ -150,7 +159,7 @@ export const registerWithQR = async (
         firstName,
         lastName,
         phone,
-        department,
+        department: session.department,
         role: "INVIGILATOR", // Default role for QR registrations
         registrationToken: null, // Clear any existing token
         passwordChanged: true, // Mark as changed since they set their own password

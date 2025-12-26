@@ -67,6 +67,7 @@ model RegistrationSession {
   id          String   @id @default(uuid())
   qrToken     String   @unique // Token encoded in QR code
   createdById String   // Admin who created the session
+  department  String?  // Department to assign to users who register with this QR
   expiresAt   DateTime // When the QR code expires
   used        Boolean  @default(false)
   usedAt      DateTime?

@@ -21,6 +21,7 @@ export interface User {
   isActive: boolean;
   passwordChanged: boolean;
   profilePicture?: string;
+  phone?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -51,6 +52,7 @@ export interface CreateUserData {
   name: string;
   department: string;
   role: Role;
+  phone?: string;
 }
 
 export interface CreateUserResponse {
@@ -63,6 +65,7 @@ export interface UpdateUserData {
   name?: string;
   department?: string;
   role?: Role;
+  phone?: string;
 }
 
 // Session Types
@@ -121,6 +124,7 @@ export interface BulkUserCreate {
   role: Role;
   name: string;
   department: string;
+  phone?: string;
 }
 
 export interface BulkCreateResponse {

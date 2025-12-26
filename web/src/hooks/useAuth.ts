@@ -105,7 +105,6 @@ export const useRegisterWithQR = () => {
       lastName: string;
       phone: string;
       password: string;
-      department: string;
     }) => registrationApi.register(data),
     onSuccess: (data) => {
       setAuth(data.user, data.token, data.refreshToken);

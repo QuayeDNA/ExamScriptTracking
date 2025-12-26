@@ -154,7 +154,7 @@ Your system administrator will provide:
 **Web Dashboard:**
 
 1. Navigate to the dashboard URL (e.g., `https://examtrack.yourdomain.com`)
-2. Enter your email and temporary password
+2. Enter your **email address or phone number** and temporary password
 3. Click **Login**
 4. You'll be prompted to change your password
 
@@ -162,7 +162,7 @@ Your system administrator will provide:
 
 1. Open your mobile browser (Safari, Chrome, etc.)
 2. Navigate to the dashboard URL (e.g., `https://examtrack.yourdomain.com`)
-3. Enter your email and temporary password
+3. Enter your **email address or phone number** and temporary password
 4. Tap **Login**
 5. Complete the password change process
 6. **Optional:** Add to home screen for app-like experience
@@ -233,11 +233,12 @@ Upon login, you'll see the main dashboard with key statistics:
    - **Name:** Full name (e.g., "John Doe")
    - **Department:** User's department
    - **Role:** Select from dropdown (ADMIN, INVIGILATOR, etc.)
+   - **Phone Number:** Optional mobile number for login (Ghana format: 0241234567 or +233241234567)
 3. Click **Create User**
 4. System generates a random password
 5. Share credentials with the new user securely
 
-**Note:** The user will be required to change their password on first login.
+**Note:** The user will be required to change their password on first login. Phone numbers enable mobile login alongside email login.
 
 #### Edit User
 

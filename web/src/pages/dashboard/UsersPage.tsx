@@ -4,6 +4,7 @@ import {
   useCreateUser,
   useDeactivateUser,
   useReactivateUser,
+  useUpdateUser,
 } from "@/hooks/useUsers";
 import {
   useUnlockAccount,
@@ -13,7 +14,7 @@ import {
   useBulkDeactivateUsers,
 } from "@/hooks/useAdminActions";
 import { usersApi } from "@/api/users";
-import { Role, type BulkUserCreate } from "@/types";
+import { Role, type BulkUserCreate, type User } from "@/types";
 import {
   Card,
   CardContent,
@@ -63,6 +64,7 @@ import {
   Trash2,
   X,
   AlertCircle,
+  Edit,
 } from "lucide-react";
 
 interface TemporaryCredentials {
@@ -83,6 +85,7 @@ interface UserActionState {
 export const UsersPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | "">("");
   const [searchFilter, setSearchFilter] = useState("");
@@ -119,6 +122,7 @@ export const UsersPage = () => {
 
   const { data: usersData, isLoading, error } = useUsers(filters);
   const { mutate: createUser, isPending: isCreating } = useCreateUser();
+  const { mutate: updateUser, isPending: isUpdating } = useUpdateUser();
   const { mutate: deactivateUser } = useDeactivateUser();
   const { mutate: reactivateUser } = useReactivateUser();
   const { mutate: unlockAccount } = useUnlockAccount();
@@ -139,6 +143,7 @@ export const UsersPage = () => {
         email: formData.get("email") as string,
         role: formData.get("role") as Role,
         department: formData.get("department") as string,
+        phone: (formData.get("phone") as string) || undefined,
       },
       {
         onSuccess: (data) => {
@@ -153,6 +158,36 @@ export const UsersPage = () => {
     );
   };
 
+  const handleEditUser = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    const formData = new FormData(e.currentTarget);
+
+    updateUser(
+      {
+        id: editingUser.id,
+        data: {
+          name: formData.get("name") as string,
+          role: formData.get("role") as Role,
+          department: formData.get("department") as string,
+          phone: (formData.get("phone") as string) || undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          setEditingUser(null);
+          setShowCreateModal(false);
+        },
+      }
+    );
+  };
+
+  const handleOpenEditModal = (user: User) => {
+    setEditingUser(user);
+    setShowCreateModal(true);
+  };
+
   const handleBulkImport = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -164,11 +199,17 @@ export const UsersPage = () => {
 
     // Skip header row
     for (let i = 1; i < lines.length; i++) {
-      const [email, role, name, department] = lines[i]
+      const [email, role, name, department, phone] = lines[i]
         .split(",")
         .map((s) => s.trim());
       if (email && role && name && department) {
-        users.push({ email, role: role as Role, name, department });
+        users.push({
+          email,
+          role: role as Role,
+          name,
+          department,
+          phone: phone || undefined,
+        });
       }
     }
 
@@ -521,6 +562,7 @@ export const UsersPage = () => {
                     </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Department</TableHead>
                     <TableHead>Status</TableHead>
@@ -550,6 +592,9 @@ export const UsersPage = () => {
                       <TableCell className="text-sm text-muted-foreground">
                         {user.email}
                       </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {user.phone || "-"}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">
                           {user.role.replace(/_/g, " ")}
@@ -568,6 +613,14 @@ export const UsersPage = () => {
                       <TableCell>
                         {!user.isSuperAdmin && (
                           <div className="flex justify-end gap-2">
+                            <Button
+                              onClick={() => handleOpenEditModal(user)}
+                              variant="ghost"
+                              size="sm"
+                              title="Edit user"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
                             <Button
                               onClick={() =>
                                 user.isActive
@@ -629,29 +682,66 @@ export const UsersPage = () => {
         </CardContent>
       </Card>
 
-      {/* Create User Dialog */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      {/* Create/Edit User Dialog */}
+      <Dialog open={showCreateModal} onOpenChange={(open) => {
+        if (!open) {
+          setShowCreateModal(false);
+          setEditingUser(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
+            <DialogTitle>
+              {editingUser ? "Edit User" : "Create New User"}
+            </DialogTitle>
             <DialogDescription>
-              Create a new user account with a temporary password
+              {editingUser
+                ? "Update user account information"
+                : "Create a new user account with a temporary password"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateUser} className="space-y-4">
+          <form onSubmit={editingUser ? handleEditUser : handleCreateUser} className="space-y-4">
             <div>
               <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" required />
+              <Input
+                id="name"
+                name="name"
+                required
+                defaultValue={editingUser?.name || ""}
+              />
             </div>
 
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required />
-            </div>
+            {!editingUser && (
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                />
+              </div>
+            )}
+
+            {editingUser && (
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={editingUser.email}
+                  disabled
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Email cannot be changed after account creation
+                </p>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="role">Role</Label>
-              <Select name="role" required>
+              <Select name="role" required defaultValue={editingUser?.role || ""}>
                 <SelectTrigger id="role">
                   <SelectValue placeholder="Select Role" />
                 </SelectTrigger>
@@ -671,20 +761,51 @@ export const UsersPage = () => {
 
             <div>
               <Label htmlFor="department">Department</Label>
-              <Input id="department" name="department" required />
+              <Input
+                id="department"
+                name="department"
+                required
+                defaultValue={editingUser?.department || ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="phone">
+                Phone Number{" "}
+                <span className="text-sm text-muted-foreground">
+                  (Optional)
+                </span>
+              </Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="0241234567 or +233241234567"
+                defaultValue={editingUser?.phone || ""}
+                pattern="^(\+233|0)[0-9]{9}$"
+                title="Phone number must be in Ghana format (e.g., 0241234567 or +233241234567)"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Ghana format: 0241234567 or +233241234567
+              </p>
             </div>
 
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowCreateModal(false)}
-                disabled={isCreating}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setEditingUser(null);
+                }}
+                disabled={isCreating || isUpdating}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isCreating}>
-                {isCreating ? "Creating..." : "Create User"}
+              <Button type="submit" disabled={isCreating || isUpdating}>
+                {isCreating || isUpdating
+                  ? (editingUser ? "Updating..." : "Creating...")
+                  : (editingUser ? "Update User" : "Create User")}
               </Button>
             </DialogFooter>
           </form>
@@ -704,14 +825,24 @@ export const UsersPage = () => {
             <div>
               <Label>CSV Format</Label>
               <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1 mt-2">
-                <div className="font-semibold">email,role,name,department</div>
-                <div className="text-muted-foreground">
-                  john@example.com,LECTURER,John Doe,Computer Science
+                <div className="font-semibold">
+                  email,role,name,department,phone
                 </div>
                 <div className="text-muted-foreground">
-                  jane@example.com,INVIGILATOR,Jane Smith,Mathematics
+                  john@example.com,LECTURER,John Doe,Computer Science,0241234567
+                </div>
+                <div className="text-muted-foreground">
+                  jane@example.com,INVIGILATOR,Jane
+                  Smith,Mathematics,+233241234567
+                </div>
+                <div className="text-muted-foreground">
+                  bob@example.com,ADMIN,Bob Johnson,Administration
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Phone number is optional. Use Ghana format: 0241234567 or
+                +233241234567
+              </p>
             </div>
 
             <div>

@@ -6,8 +6,12 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.prod
 **/.env
 **/.env.local
+**/.env.production
+**/.env.prod
 
 # Build outputs
 dist/
@@ -25,6 +29,10 @@ lerna-debug.log*
 
 # Scripts and automation files (security)
 *.ps1
+deploy-*.sh
+post-deploy*.sh
+**/deploy-*.sh
+**/post-deploy*.sh
 scripts/
 **/scripts/
 

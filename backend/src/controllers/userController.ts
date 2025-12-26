@@ -12,12 +12,40 @@ const createUserSchema = z.object({
   name: z.string().min(1, "Name is required"),
   department: z.string().min(1, "Department is required"),
   role: z.nativeEnum(Role),
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^(\+233|0)[0-9]{9}$/.test(val),
+      "Phone number must be in Ghana format (e.g., 0241234567 or +233241234567)"
+    ),
+});
+
+const bulkCreateUserSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  role: z.nativeEnum(Role),
+  name: z.string().min(1, "Name is required"),
+  department: z.string().min(1, "Department is required"),
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^(\+233|0)[0-9]{9}$/.test(val),
+      "Phone number must be in Ghana format (e.g., 0241234567 or +233241234567)"
+    ),
 });
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
   department: z.string().optional(),
   role: z.nativeEnum(Role).optional(),
+  phone: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^(\+233|0)[0-9]{9}$/.test(val),
+      "Phone number must be in Ghana format (e.g., 0241234567 or +233241234567)"
+    ),
 });
 
 // Generate random password
@@ -89,6 +117,7 @@ export const createUser = async (
         lastName: data.name.split(" ").slice(1).join(" ") || "",
         department: data.department,
         role: data.role,
+        phone: data.phone || null,
         isSuperAdmin: false,
         isActive: true,
         passwordChanged: false,
@@ -284,10 +313,18 @@ export const updateUser = async (
       return;
     }
 
+    // Prepare update data - convert name to firstName/lastName if provided
+    const updateData: any = { ...data };
+    if (data.name) {
+      updateData.firstName = data.name.split(" ")[0] || data.name;
+      updateData.lastName = data.name.split(" ").slice(1).join(" ") || "";
+      delete updateData.name;
+    }
+
     // Update user
     const user = await prisma.user.update({
       where: { id },
-      data,
+      data: updateData,
       select: {
         id: true,
         email: true,
@@ -315,7 +352,13 @@ export const updateUser = async (
       },
     });
 
-    res.json({ message: "User updated successfully", user });
+    // Transform response to include name field
+    const transformedUser = {
+      ...user,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+    };
+
+    res.json({ message: "User updated successfully", user: transformedUser });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res
@@ -514,7 +557,8 @@ export const bulkCreateUsers = async (
 
     for (const userData of users) {
       try {
-        const { email, role, name, department } = userData;
+        const validatedData = bulkCreateUserSchema.parse(userData);
+        const { email, role, name, department, phone } = validatedData;
 
         // Check if user exists
         const existing = await prisma.user.findUnique({
@@ -548,7 +592,8 @@ export const bulkCreateUsers = async (
             role: role as Role,
             firstName,
             lastName,
-            phone: department || "",
+            department,
+            phone: phone || null,
             passwordChanged: false,
             isActive: true,
           },

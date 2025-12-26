@@ -12,6 +12,7 @@ import { useRegisterWithQR } from "@/hooks/useAuth";
 interface QRData {
   type: "REGISTRATION";
   token: string;
+  department: string;
   expiresAt: string;
 }
 
@@ -27,7 +28,6 @@ export const MobileQRRegistrationPage = () => {
     lastName: "",
     phone: "",
     password: "",
-    department: "",
   });
   const [scanError, setScanError] = useState("");
   const [scanner, setScanner] = useState<QrScanner | null>(null);
@@ -109,8 +109,7 @@ export const MobileQRRegistrationPage = () => {
       !formData.firstName ||
       !formData.lastName ||
       !formData.phone ||
-      !formData.password ||
-      !formData.department
+      !formData.password
     ) {
       return;
     }
@@ -145,7 +144,6 @@ export const MobileQRRegistrationPage = () => {
       lastName: "",
       phone: "",
       password: "",
-      department: "",
     });
     setScanError("");
   };
@@ -226,6 +224,14 @@ export const MobileQRRegistrationPage = () => {
                 </Alert>
               )}
 
+              {qrData && (
+                <Alert>
+                  <AlertDescription>
+                    You will be registered to the <strong>{qrData.department}</strong> department.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName" className="text-foreground">
@@ -278,25 +284,6 @@ export const MobileQRRegistrationPage = () => {
                       setFormData((prev) => ({
                         ...prev,
                         phone: e.target.value,
-                      }))
-                    }
-                    disabled={isPending}
-                    className="bg-background border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="department" className="text-foreground">
-                    Department
-                  </Label>
-                  <Input
-                    id="department"
-                    placeholder="e.g., Computer Science"
-                    value={formData.department}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        department: e.target.value,
                       }))
                     }
                     disabled={isPending}

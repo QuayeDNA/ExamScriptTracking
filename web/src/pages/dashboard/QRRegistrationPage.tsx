@@ -15,6 +15,7 @@ import { format } from "date-fns";
 interface RegistrationSession {
   id: string;
   qrToken: string;
+  department: string;
   expiresAt: string;
   used: boolean;
   usedAt?: string;
@@ -28,6 +29,7 @@ interface RegistrationSession {
 
 export default function QRRegistrationPage() {
   const [expiresInMinutes, setExpiresInMinutes] = useState(60);
+  const [department, setDepartment] = useState("");
   const [currentQR, setCurrentQR] = useState<{
     token: string;
     expiresAt: string;
@@ -47,7 +49,8 @@ export default function QRRegistrationPage() {
 
   // Create QR session mutation
   const createSessionMutation = useMutation({
-    mutationFn: (minutes: number) => registrationApi.createSession(minutes),
+    mutationFn: (data: { expiresInMinutes: number; department: string }) => 
+      registrationApi.createSession(data.expiresInMinutes, data.department),
     onSuccess: (data) => {
       setCurrentQR({
         token: data.qrToken,
@@ -67,7 +70,11 @@ export default function QRRegistrationPage() {
       toast.error("Expiration time must be between 1 and 1440 minutes");
       return;
     }
-    createSessionMutation.mutate(expiresInMinutes);
+    if (!department.trim()) {
+      toast.error("Department is required");
+      return;
+    }
+    createSessionMutation.mutate({ expiresInMinutes, department: department.trim() });
   };
 
   const handleDownloadQR = () => {
@@ -133,6 +140,21 @@ export default function QRRegistrationPage() {
               />
               <p className="text-sm text-muted-foreground">
                 QR code will expire after this many minutes
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="department">Department</Label>
+              <Input
+                id="department"
+                type="text"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="Computer Science Department"
+                required
+              />
+              <p className="text-sm text-muted-foreground">
+                Users who register with this QR code will be assigned to this department
               </p>
             </div>
 
@@ -266,11 +288,15 @@ export default function QRRegistrationPage() {
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
+                      <span className="font-medium">Department:</span>{" "}
+                      {session.department}
+                    </div>
+                    <div>
                       <span className="font-medium">Expires:</span>{" "}
                       {format(new Date(session.expiresAt), "PPp")}
                     </div>
                     {session.used && session.usedAt && (
-                      <div>
+                      <div className="col-span-2">
                         <span className="font-medium">Used:</span>{" "}
                         {format(new Date(session.usedAt), "PPp")}
                       </div>
