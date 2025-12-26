@@ -72,7 +72,10 @@ class ApiClient {
           error.response?.data
         );
 
-        if (error.response?.status === 401) {
+        if (
+          error.response?.status === 401 &&
+          !error.config?.url?.includes("/auth/login")
+        ) {
           await clearAuth();
           // Notify auth invalidation callback
           this.onAuthInvalid?.();

@@ -63,7 +63,13 @@ class ApiClient {
           const refreshToken = localStorage.getItem("refreshToken");
 
           if (!refreshToken) {
-            this.handleLogout();
+            // Only logout if not on login page
+            if (
+              window.location.pathname !== "/login" &&
+              window.location.pathname !== "/mobile/login"
+            ) {
+              this.handleLogout();
+            }
             return Promise.reject(error);
           }
 
@@ -86,7 +92,13 @@ class ApiClient {
           } catch (refreshError) {
             this.processQueue(refreshError, null);
             this.isRefreshing = false;
-            this.handleLogout();
+            // Only logout if not on login page
+            if (
+              window.location.pathname !== "/login" &&
+              window.location.pathname !== "/mobile/login"
+            ) {
+              this.handleLogout();
+            }
             return Promise.reject(refreshError);
           }
         }
