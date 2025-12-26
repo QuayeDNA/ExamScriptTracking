@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -41,6 +42,12 @@ import {
   getTemplatesForType,
   type IncidentTemplate,
 } from "@/constants/incident-templates";
+import {
+  lookupStudentForIncident,
+  createStudent,
+  type Student,
+  type StudentLookupResult,
+} from "@/api/students";
 
 // Safe ImagePicker wrapper
 let imagePicker: any = null;
@@ -82,6 +89,20 @@ export default function ReportIncidentScreen() {
     isConfidential: false,
   });
 
+  // Student-related state
+  const [showStudentField, setShowStudentField] = useState(false);
+  const [studentIndexNumber, setStudentIndexNumber] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [studentLookupLoading, setStudentLookupLoading] = useState(false);
+  const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
+  const [createStudentData, setCreateStudentData] = useState({
+    indexNumber: "",
+    firstName: "",
+    lastName: "",
+    program: "",
+    level: "",
+  });
+
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [titleSuggestions, setTitleSuggestions] = useState<IncidentTemplate[]>(
@@ -89,6 +110,14 @@ export default function ReportIncidentScreen() {
   );
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Handle form field changes
+  const handleChange = (field: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
 
   // Auto-populate location when first attendance is recorded
   useEffect(() => {
@@ -101,9 +130,93 @@ export default function ReportIncidentScreen() {
     }
   }, [hasRecordedFirstAttendance, currentSession?.venue, formData.location]);
 
-  // Handle form field change
-  const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  // Show/hide student field based on incident type
+  useEffect(() => {
+    const studentRelatedTypes: IncidentType[] = [
+      "MALPRACTICE",
+      "STUDENT_ILLNESS",
+    ];
+    setShowStudentField(studentRelatedTypes.includes(formData.type));
+
+    // Clear student data when switching away from student-related types
+    if (!studentRelatedTypes.includes(formData.type)) {
+      setStudentIndexNumber("");
+      setSelectedStudent(null);
+    }
+  }, [formData.type]);
+
+  // Handle student index number input and lookup
+  const handleStudentIndexNumberChange = async (indexNumber: string) => {
+    setStudentIndexNumber(indexNumber);
+
+    if (indexNumber.trim().length === 0) {
+      setSelectedStudent(null);
+      return;
+    }
+
+    if (indexNumber.trim().length < 3) {
+      // Don't lookup until we have at least 3 characters
+      return;
+    }
+
+    try {
+      setStudentLookupLoading(true);
+      const result: StudentLookupResult = await lookupStudentForIncident(
+        indexNumber.trim(),
+        currentSession?.id
+      );
+
+      if (result.found && result.student) {
+        setSelectedStudent(result.student);
+      } else {
+        setSelectedStudent(null);
+      }
+    } catch (error) {
+      console.error("Student lookup error:", error);
+      setSelectedStudent(null);
+    } finally {
+      setStudentLookupLoading(false);
+    }
+  };
+
+  // Handle creating a new student
+  const handleCreateStudent = async () => {
+    if (
+      !createStudentData.indexNumber.trim() ||
+      !createStudentData.firstName.trim() ||
+      !createStudentData.lastName.trim() ||
+      !createStudentData.program.trim() ||
+      !createStudentData.level.trim()
+    ) {
+      Alert.alert("Error", "All fields are required");
+      return;
+    }
+
+    try {
+      const result = await createStudent({
+        indexNumber: createStudentData.indexNumber.trim(),
+        firstName: createStudentData.firstName.trim(),
+        lastName: createStudentData.lastName.trim(),
+        program: createStudentData.program.trim(),
+        level: parseInt(createStudentData.level.trim()),
+      });
+
+      setSelectedStudent(result.student);
+      setStudentIndexNumber(result.student.indexNumber);
+      setShowCreateStudentModal(false);
+      setCreateStudentData({
+        indexNumber: "",
+        firstName: "",
+        lastName: "",
+        program: "",
+        level: "",
+      });
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.response?.data?.error || "Failed to create student"
+      );
+    }
   };
 
   // Get current location
@@ -347,14 +460,18 @@ export default function ReportIncidentScreen() {
       setLoading(true);
 
       // Create incident
-      const response = await createIncident({
+      const incidentData = {
         type: formData.type,
         severity: formData.severity,
         title: formData.title.trim(),
         description: formData.description.trim(),
         location: formData.location.trim() || undefined,
         isConfidential: formData.isConfidential,
-      });
+        examSessionId: currentSession?.id, // Include current exam session
+        ...(selectedStudent?.id && { studentId: selectedStudent.id }), // Include student ID if available
+      };
+
+      const response = await createIncident(incidentData);
 
       const incidentId = response.incident.id;
 
@@ -493,6 +610,148 @@ export default function ReportIncidentScreen() {
               </ScrollView>
             </View>
           </Card>
+
+          {/* Student Information (for student-related incidents) */}
+          {showStudentField && (
+            <Card>
+              <View style={{ padding: Spacing[4] }}>
+                <Text
+                  style={[
+                    { color: colors.foreground, marginBottom: Spacing[3] },
+                    {
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    },
+                  ]}
+                >
+                  Student Information
+                </Text>
+
+                <View style={{ gap: Spacing[3] }}>
+                  <View>
+                    <Text
+                      style={[
+                        { color: colors.foreground, marginBottom: Spacing[2] },
+                        {
+                          fontSize: Typography.fontSize.sm,
+                          fontWeight: Typography.fontWeight.medium,
+                        },
+                      ]}
+                    >
+                      Student Index Number *
+                    </Text>
+                    <View style={{ position: "relative" }}>
+                      <TextInput
+                        style={{
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          borderRadius: BorderRadius.md,
+                          padding: Spacing[3],
+                          fontSize: Typography.fontSize.base,
+                          color: colors.foreground,
+                          backgroundColor: colors.background,
+                        }}
+                        placeholder="Enter student index number"
+                        value={studentIndexNumber}
+                        onChangeText={handleStudentIndexNumberChange}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                      />
+                      {studentLookupLoading && (
+                        <View
+                          style={{
+                            position: "absolute",
+                            right: Spacing[3],
+                            top: "50%",
+                            transform: [{ translateY: -8 }],
+                          }}
+                        >
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {selectedStudent && (
+                    <View
+                      style={{
+                        padding: Spacing[3],
+                        backgroundColor: colors.muted,
+                        borderRadius: BorderRadius.md,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        style={[
+                          {
+                            color: colors.foreground,
+                            marginBottom: Spacing[2],
+                          },
+                          {
+                            fontSize: Typography.fontSize.sm,
+                            fontWeight: Typography.fontWeight.semibold,
+                          },
+                        ]}
+                      >
+                        Student Found
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.foreground,
+                          marginBottom: Spacing[1],
+                        }}
+                      >
+                        {selectedStudent.firstName} {selectedStudent.lastName}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.foregroundMuted,
+                          fontSize: Typography.fontSize.sm,
+                        }}
+                      >
+                        {selectedStudent.program} - Level{" "}
+                        {selectedStudent.level}
+                      </Text>
+                    </View>
+                  )}
+
+                  {!selectedStudent &&
+                    studentIndexNumber.trim().length >= 3 &&
+                    !studentLookupLoading && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setCreateStudentData({
+                            ...createStudentData,
+                            indexNumber: studentIndexNumber.trim(),
+                          });
+                          setShowCreateStudentModal(true);
+                        }}
+                        style={{
+                          padding: Spacing[3],
+                          backgroundColor: colors.primary,
+                          borderRadius: BorderRadius.md,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "white",
+                            fontSize: Typography.fontSize.sm,
+                            fontWeight: Typography.fontWeight.medium,
+                          }}
+                        >
+                          Create New Student
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                </View>
+              </View>
+            </Card>
+          )}
 
           {/* Severity Selection */}
           <Card>
@@ -1081,6 +1340,284 @@ export default function ReportIncidentScreen() {
           </Button>
         </View>
       </ScrollView>
+
+      {/* Create Student Modal */}
+      <Modal
+        visible={showCreateStudentModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCreateStudentModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.background,
+              borderTopLeftRadius: BorderRadius.lg,
+              borderTopRightRadius: BorderRadius.lg,
+              padding: Spacing[4],
+              maxHeight: "80%",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: Spacing[4],
+              }}
+            >
+              <Text
+                style={[
+                  { color: colors.foreground },
+                  {
+                    fontSize: Typography.fontSize.lg,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
+              >
+                Create New Student
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowCreateStudentModal(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ gap: Spacing[4] }}>
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[2] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      },
+                    ]}
+                  >
+                    Index Number *
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: BorderRadius.md,
+                      padding: Spacing[3],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    }}
+                    placeholder="Enter index number"
+                    value={createStudentData.indexNumber}
+                    onChangeText={(value) =>
+                      setCreateStudentData((prev) => ({
+                        ...prev,
+                        indexNumber: value,
+                      }))
+                    }
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[2] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      },
+                    ]}
+                  >
+                    First Name *
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: BorderRadius.md,
+                      padding: Spacing[3],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    }}
+                    placeholder="Enter first name"
+                    value={createStudentData.firstName}
+                    onChangeText={(value) =>
+                      setCreateStudentData((prev) => ({
+                        ...prev,
+                        firstName: value,
+                      }))
+                    }
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[2] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      },
+                    ]}
+                  >
+                    Last Name *
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: BorderRadius.md,
+                      padding: Spacing[3],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    }}
+                    placeholder="Enter last name"
+                    value={createStudentData.lastName}
+                    onChangeText={(value) =>
+                      setCreateStudentData((prev) => ({
+                        ...prev,
+                        lastName: value,
+                      }))
+                    }
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[2] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      },
+                    ]}
+                  >
+                    Program *
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: BorderRadius.md,
+                      padding: Spacing[3],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    }}
+                    placeholder="Enter program"
+                    value={createStudentData.program}
+                    onChangeText={(value) =>
+                      setCreateStudentData((prev) => ({
+                        ...prev,
+                        program: value,
+                      }))
+                    }
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[2] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      },
+                    ]}
+                  >
+                    Level *
+                  </Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: BorderRadius.md,
+                      padding: Spacing[3],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    }}
+                    placeholder="Enter level (1-4)"
+                    value={createStudentData.level}
+                    onChangeText={(value) =>
+                      setCreateStudentData((prev) => ({
+                        ...prev,
+                        level: value,
+                      }))
+                    }
+                    keyboardType="numeric"
+                    maxLength={1}
+                  />
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: Spacing[3],
+                    marginTop: Spacing[4],
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setShowCreateStudentModal(false)}
+                    style={{
+                      flex: 1,
+                      padding: Spacing[3],
+                      borderRadius: BorderRadius.md,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.foreground,
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      }}
+                    >
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleCreateStudent}
+                    style={{
+                      flex: 1,
+                      padding: Spacing[3],
+                      borderRadius: BorderRadius.md,
+                      backgroundColor: colors.primary,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "white",
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.medium,
+                      }}
+                    >
+                      Create Student
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

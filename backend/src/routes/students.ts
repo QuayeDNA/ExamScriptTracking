@@ -10,6 +10,7 @@ import {
   getPrograms,
   getLevels,
   getStudentByIndexNumber,
+  lookupStudentForIncident,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -83,6 +84,13 @@ router.put("/:id", authorize(Role.ADMIN), updateStudent);
  * @access  Private (Admin only)
  */
 router.delete("/:id", authorize(Role.ADMIN), deleteStudent);
+
+/**
+ * @route   GET /api/students/lookup
+ * @desc    Lookup student for incident reporting (includes expected students)
+ * @access  Private
+ */
+router.get("/lookup", lookupStudentForIncident);
 
 /**
  * @route   POST /api/students/bulk

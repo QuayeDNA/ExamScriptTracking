@@ -65,73 +65,7 @@ async function main() {
     "📱 Use these shared credentials on mobile devices for class attendance"
   );
 
-  // Only create sample students in development
-  if (process.env.NODE_ENV !== "production") {
-    console.log("\n🎓 Creating sample students...");
-
-    const students = await Promise.all([
-      prisma.student.upsert({
-        where: { indexNumber: "STU001" },
-        update: {},
-        create: {
-          indexNumber: "STU001",
-          firstName: "John",
-          lastName: "Doe",
-          program: "Computer Science",
-          level: 300,
-          qrCode: JSON.stringify({
-            id: "student-1",
-            indexNumber: "STU001",
-            name: "John Doe",
-            program: "Computer Science",
-            level: 300,
-          }),
-        },
-      }),
-      prisma.student.upsert({
-        where: { indexNumber: "STU002" },
-        update: {},
-        create: {
-          indexNumber: "STU002",
-          firstName: "Jane",
-          lastName: "Smith",
-          program: "Information Technology",
-          level: 300,
-          qrCode: JSON.stringify({
-            id: "student-2",
-            indexNumber: "STU002",
-            name: "Jane Smith",
-            program: "Information Technology",
-            level: 300,
-          }),
-        },
-      }),
-      prisma.student.upsert({
-        where: { indexNumber: "STU003" },
-        update: {},
-        create: {
-          indexNumber: "STU003",
-          firstName: "Bob",
-          lastName: "Johnson",
-          program: "Software Engineering",
-          level: 400,
-          qrCode: JSON.stringify({
-            id: "student-3",
-            indexNumber: "STU003",
-            name: "Bob Johnson",
-            program: "Software Engineering",
-            level: 400,
-          }),
-        },
-      }),
-    ]);
-
-    console.log(`✅ Created ${students.length} sample students`);
-  } else {
-    console.log("\n⏭️  Skipping sample students in production environment");
-  }
-
-  console.log("\n✨ Production database seed completed!");
+  console.log("\n✨ Database seed completed!");
 }
 
 main()

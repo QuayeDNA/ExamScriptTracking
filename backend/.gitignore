@@ -34,3 +34,6 @@ coverage/
 
 # Prisma
 prisma/migrations/
+
+# Local uploads (development only)
+uploads/

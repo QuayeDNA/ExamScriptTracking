@@ -622,3 +622,85 @@ export const getStudentByIndexNumber = async (
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// Lookup student for incident reporting (includes expected students from current session)
+export const lookupStudentForIncident = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { indexNumber, examSessionId } = req.query;
+
+    if (!indexNumber || typeof indexNumber !== "string") {
+      res.status(400).json({ error: "Index number is required" });
+      return;
+    }
+
+    const trimmedIndexNumber = indexNumber.trim();
+
+    // First, try to find the student in the database
+    const student = await prisma.student.findUnique({
+      where: { indexNumber: trimmedIndexNumber },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        program: true,
+        level: true,
+        createdAt: true,
+      },
+    });
+
+    let expectedStudent = null;
+
+    // If exam session is provided, also check expected students
+    if (examSessionId && typeof examSessionId === "string") {
+      expectedStudent = await prisma.examSessionStudent.findUnique({
+        where: {
+          examSessionId_indexNumber: {
+            examSessionId,
+            indexNumber: trimmedIndexNumber,
+          },
+        },
+        select: {
+          indexNumber: true,
+          firstName: true,
+          lastName: true,
+          program: true,
+          level: true,
+        },
+      });
+    }
+
+    // Return result
+    if (student) {
+      res.json({
+        found: true,
+        source: "database",
+        student,
+      });
+    } else if (expectedStudent) {
+      res.json({
+        found: true,
+        source: "expected",
+        student: {
+          id: null, // Not in database yet
+          indexNumber: expectedStudent.indexNumber,
+          firstName: expectedStudent.firstName || "",
+          lastName: expectedStudent.lastName || "",
+          program: expectedStudent.program || "",
+          level: expectedStudent.level || null,
+        },
+      });
+    } else {
+      res.json({
+        found: false,
+        student: null,
+      });
+    }
+  } catch (error) {
+    console.error("Lookup student for incident error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

@@ -429,12 +429,15 @@ model IncidentAttachment {
   incidentId   String
   
   fileName     String   // Original filename
-  filePath     String   // Relative path: uploads/incidents/{incidentId}/{filename}
+  filePath     String   // Relative path or cloud URL
   fileType     String   // MIME type: image/jpeg, video/mp4, application/pdf
   fileSize     Int      // Size in bytes
   
   uploadedBy   String   // User who uploaded
   uploadedAt   DateTime @default(now())
+  
+  // Cloud storage metadata (publicId, provider, etc.)
+  metadata     Json?
   
   incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   uploader     User     @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)

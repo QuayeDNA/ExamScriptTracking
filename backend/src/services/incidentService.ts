@@ -69,6 +69,23 @@ export class IncidentService {
     // Auto-set confidentiality for MALPRACTICE incidents
     const isConfidential = data.isConfidential ?? data.type === "MALPRACTICE";
 
+    // Validate exam session if provided
+    if (data.examSessionId) {
+      const examSession = await prisma.examSession.findUnique({
+        where: { id: data.examSessionId },
+        select: { id: true, status: true, courseName: true },
+      });
+
+      if (!examSession) {
+        throw new Error("Invalid exam session ID provided");
+      }
+
+      // Log that incident is being created for this session
+      console.log(
+        `[CREATE_INCIDENT] Creating incident for exam session: ${examSession.courseName} (${examSession.id})`
+      );
+    }
+
     const incident = await prisma.incident.create({
       data: {
         incidentNumber,

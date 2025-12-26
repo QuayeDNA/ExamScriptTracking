@@ -39,7 +39,7 @@ class ApiClient {
     // Response interceptor for error handling and token refresh
     this.client.interceptors.response.use(
       (response) => response,
-      async (error: AxiosError<ApiError>) => {
+      async (error: AxiosError) => {
         const originalRequest = error.config as InternalAxiosRequestConfig & {
           _retry?: boolean;
         };
@@ -91,7 +91,16 @@ class ApiClient {
           }
         }
 
-        return Promise.reject(error);
+        // Format error consistently
+        const apiError: ApiError = {
+          error:
+            error.response?.data?.error ||
+            error.response?.data?.message ||
+            error.message ||
+            "Network error",
+          details: error.response?.data?.details,
+        };
+        return Promise.reject(apiError);
       }
     );
   }

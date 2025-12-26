@@ -90,6 +90,53 @@ See `.env.example` for all required environment variables:
 - `CORS_ORIGIN` - Allowed CORS origin
 - `NODE_ENV` - Environment (development/production)
 
+## Storage Configuration
+
+The application automatically selects storage providers based on environment:
+
+### Automatic Storage Selection
+
+- **Development** (`NODE_ENV=development`): Local storage
+- **Production** (`NODE_ENV=production`): Cloudinary
+
+### Local Storage (Development)
+
+- Files stored in `uploads/incidents/` directory
+- Faster for development, no external dependencies
+- Files are **excluded from git** (added to `.gitignore`)
+
+### Cloudinary (Production)
+
+- `STORAGE_PROVIDER=cloudinary` (automatically set in production)
+- 25GB storage, 25GB monthly bandwidth
+- ✅ **CONFIGURED AND TESTED**
+- Cloudinary credentials required:
+  - `CLOUDINARY_CLOUD_NAME`
+  - `CLOUDINARY_API_KEY`
+  - `CLOUDINARY_API_SECRET`
+
+### Cloudflare R2 (Production - Free Tier)
+
+- `STORAGE_PROVIDER=cloudflare`
+- 10GB storage, 1GB egress/month
+- Copy `.env.example.cloudflare` to `.env` and configure:
+  - `CLOUDFLARE_ACCOUNT_ID`
+  - `CLOUDFLARE_ACCESS_KEY_ID`
+  - `CLOUDFLARE_SECRET_ACCESS_KEY`
+  - `CLOUDFLARE_BUCKET_NAME`
+  - `CLOUDFLARE_PUBLIC_URL`
+
+### Migration from Local to Cloud
+
+If you have existing local files and want to migrate to cloud storage:
+
+```bash
+# Run migration script
+npm run migrate:attachments
+```
+
+This will upload all existing local files to your configured cloud provider and update the database records.
+
 ## Project Structure
 
 ```

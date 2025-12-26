@@ -507,35 +507,80 @@ export const getComments = async (req: Request, res: Response) => {
 export const uploadAttachments = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const files = req.files as Express.Multer.File[];
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "No files uploaded" });
-    }
+    // Check if using cloud storage (uploadedFiles will be set by middleware)
+    const uploadedFiles = (req as any).uploadedFiles as Array<{
+      filename: string;
+      url: string;
+      size: number;
+      mimetype: string;
+      publicId?: string;
+      provider?: string;
+    }>;
 
-    const attachments = await Promise.all(
-      files.map((file) =>
-        prisma.incidentAttachment.create({
-          data: {
-            incidentId: id,
-            fileName: file.originalname,
-            filePath: `uploads/incidents/${id}/${file.filename}`,
-            fileType: file.mimetype,
-            fileSize: file.size,
-            uploadedBy: req.user!.userId,
-          },
-          include: {
-            uploader: {
-              select: {
-                firstName: true,
-                lastName: true,
-                role: true,
+    let attachments;
+
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      // Cloud storage - use uploaded file data
+      attachments = await Promise.all(
+        uploadedFiles.map((file) =>
+          prisma.incidentAttachment.create({
+            data: {
+              incidentId: id,
+              fileName: file.filename,
+              filePath: file.url, // Store the cloud URL
+              fileType: file.mimetype,
+              fileSize: file.size,
+              uploadedBy: req.user!.userId,
+              metadata: {
+                publicId: file.publicId,
+                provider: file.provider,
               },
             },
-          },
-        })
-      )
-    );
+            include: {
+              uploader: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  role: true,
+                },
+              },
+            },
+          })
+        )
+      );
+    } else {
+      // Local storage - use multer files
+      const files = req.files as Express.Multer.File[];
+
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+
+      attachments = await Promise.all(
+        files.map((file) =>
+          prisma.incidentAttachment.create({
+            data: {
+              incidentId: id,
+              fileName: file.originalname,
+              filePath: `uploads/incidents/${id}/${file.filename}`,
+              fileType: file.mimetype,
+              fileSize: file.size,
+              uploadedBy: req.user!.userId,
+            },
+            include: {
+              uploader: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  role: true,
+                },
+              },
+            },
+          })
+        )
+      );
+    }
 
     // Log audit
     await prisma.auditLog.create({
@@ -544,7 +589,7 @@ export const uploadAttachments = async (req: Request, res: Response) => {
         action: "UPLOAD_INCIDENT_ATTACHMENTS",
         entity: "Incident",
         entityId: id,
-        details: { fileCount: files.length },
+        details: { fileCount: attachments.length },
         ipAddress: req.ip,
       },
     });
@@ -575,8 +620,10 @@ export const deleteAttachment = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Attachment not found" });
     }
 
-    // Delete file from filesystem
-    deleteIncidentFile(attachment.filePath);
+    // Delete file from storage (works for both local and cloud)
+    const metadata = attachment.metadata as { publicId?: string } | null;
+    const publicId = metadata?.publicId;
+    await deleteIncidentFile(attachment.filePath, publicId);
 
     // Delete from database
     await prisma.incidentAttachment.delete({
@@ -616,8 +663,16 @@ export const deleteIncident = async (req: Request, res: Response) => {
       isSuperAdmin: req.user!.isSuperAdmin,
     };
 
-    // Delete files from filesystem
-    deleteIncidentFolder(id);
+    // Delete all attachment files from storage
+    const attachments = await prisma.incidentAttachment.findMany({
+      where: { incidentId: id },
+    });
+
+    for (const attachment of attachments) {
+      const metadata = attachment.metadata as { publicId?: string } | null;
+      const publicId = metadata?.publicId;
+      await deleteIncidentFile(attachment.filePath, publicId);
+    }
 
     await incidentService.deleteIncident(id, userContext);
 

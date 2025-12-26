@@ -113,9 +113,9 @@ export const MobileChangePasswordPage = () => {
               <Alert variant="destructive" className="mb-6">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  {error instanceof Error
-                    ? error.message
-                    : "Failed to change password. Please try again."}
+                  {error?.error ||
+                    error?.message ||
+                    "Failed to change password. Please try again."}
                 </AlertDescription>
               </Alert>
             )}
