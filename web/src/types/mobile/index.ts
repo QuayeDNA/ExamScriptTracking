@@ -72,6 +72,7 @@ export interface Student {
   program: string;
   level: number;
   qrCode: string;
+  profilePicture: string;
   createdAt: string;
 }
 

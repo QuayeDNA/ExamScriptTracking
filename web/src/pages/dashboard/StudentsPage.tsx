@@ -20,7 +20,6 @@ import {
   Grid3X3,
   List,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { useAuthStore } from "@/store/auth";
 import {
   Card,

@@ -787,6 +787,7 @@ export const getStudentByIndexNumber = async (
         program: true,
         level: true,
         qrCode: true,
+        profilePicture: true,
         createdAt: true,
       },
     });

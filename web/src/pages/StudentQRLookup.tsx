@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { studentsApi } from "@/api/students";
+import { getFileUrl } from "@/lib/api-client";
 import type { Student } from "@/types";
 import { AlertCircle, Download, User, GraduationCap, Hash } from "lucide-react";
 
@@ -99,18 +100,18 @@ export default function StudentQRLookup() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-background py-8">
       <div className="max-w-2xl mx-auto px-4">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             Student QR Code Lookup
           </h1>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Enter your index number to view and download your QR code
           </p>
         </div>
 
-        <Card className="mb-6">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Hash className="h-5 w-5" />
@@ -155,39 +156,48 @@ export default function StudentQRLookup() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Student Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-gray-500" />
-                    <span className="font-medium">Name:</span>
-                    <span>
-                      {student.firstName} {student.lastName}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Hash className="h-4 w-4 text-gray-500" />
-                    <span className="font-medium">Index Number:</span>
-                    <Badge variant="secondary">{student.indexNumber}</Badge>
-                  </div>
+              {/* Profile Picture and Basic Info */}
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                <div className="flex-shrink-0">
+                  <img
+                    src={getFileUrl(student.profilePicture)}
+                    alt={`${student.firstName} ${student.lastName}`}
+                    className="w-24 h-24 rounded-lg object-cover border-2 border-border shadow-md"
+                    onError={(e) => {
+                      // Fallback to default avatar if image fails to load
+                      (e.target as HTMLImageElement).src = getFileUrl(
+                        "/uploads/students/default-avatar.png"
+                      );
+                    }}
+                  />
                 </div>
 
-                <div className="space-y-3">
-                  {student.program && (
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="h-4 w-4 text-gray-500" />
-                      <span className="font-medium">Program:</span>
-                      <span>{student.program}</span>
+                <div className="flex-1 text-center sm:text-left">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    {student.firstName} {student.lastName}
+                  </h3>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-center sm:justify-start gap-2">
+                      <Hash className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Index Number:</span>
+                      <Badge variant="secondary">{student.indexNumber}</Badge>
                     </div>
-                  )}
 
-                  {student.level && (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Level:</span>
-                      <Badge variant="outline">Level {student.level}</Badge>
-                    </div>
-                  )}
+                    {student.program && (
+                      <div className="flex items-center justify-center sm:justify-start gap-2">
+                        <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Program:</span>
+                        <span>{student.program}</span>
+                      </div>
+                    )}
+
+                    {student.level && (
+                      <div className="flex items-center justify-center sm:justify-start gap-2">
+                        <span className="font-medium">Level:</span>
+                        <Badge variant="outline">Level {student.level}</Badge>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -196,21 +206,12 @@ export default function StudentQRLookup() {
               {/* QR Code Section */}
               <div className="text-center space-y-4">
                 <h3 className="text-lg font-semibold">Your QR Code</h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   Use this QR code for attendance scanning
                 </p>
 
                 <div className="flex justify-center">
-                  <QRCodeDisplay
-                    data={JSON.stringify({
-                      type: "STUDENT",
-                      indexNumber: student.indexNumber,
-                      name: `${student.firstName} ${student.lastName}`,
-                      program: student.program,
-                      level: student.level,
-                    })}
-                    size={200}
-                  />
+                  <QRCodeDisplay data={student.qrCode} size={250} />
                 </div>
 
                 <Button onClick={handleDownload} variant="outline">

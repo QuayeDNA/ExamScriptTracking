@@ -16,6 +16,7 @@ export interface Student {
   lastName: string;
   program: string;
   level: number | null;
+  profilePicture?: string;
 }
 
 export interface StudentLookupResult {
