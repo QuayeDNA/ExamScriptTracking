@@ -33,7 +33,9 @@ model User {
   
   handledBatches  BatchTransfer[] @relation("Handler")
   receivedBatches BatchTransfer[] @relation("Receiver")
-  createdExams    ExamSession[]
+  createdExams    ExamSession[]   @relation("CreatedBy")
+  invigilatedExams ExamSession[]  @relation("Invigilator")  // Exams where this user is the invigilator
+  invigilatorHistory ExamSessionInvigilator[] // All sessions where user was an invigilator
   auditLogs       AuditLog[]
   refreshTokens   RefreshToken[]
   passwordResetTokens PasswordResetToken[]
@@ -131,17 +133,20 @@ model ExamSession {
   venue        String
   examDate     DateTime
   status       BatchStatus @default(NOT_STARTED)
+  invigilatorId String?    // ID of the user who first scanned a student
+  invigilatorName String?  // Name of the invigilator
   createdById  String
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   
-  createdBy        User                 @relation(fields: [createdById], references: [id])
+  createdBy        User                 @relation("CreatedBy", fields: [createdById], references: [id])
+  invigilator      User?                @relation("Invigilator", fields: [invigilatorId], references: [id])
   attendances      ExamAttendance[]
   transfers        BatchTransfer[]
   expectedStudents ExamSessionStudent[]
   incidents        Incident[]
+  invigilators     ExamSessionInvigilator[]
 }
-
 enum BatchStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -170,6 +175,30 @@ model ExamSessionStudent {
   @@unique([examSessionId, indexNumber])
   @@index([examSessionId])
   @@index([indexNumber])
+}
+
+// Invigilator History for Exam Sessions (Tracks all users who scanned students)
+model ExamSessionInvigilator {
+  id              String            @id @default(uuid())
+  examSessionId   String
+  userId          String
+  role            InvigilatorRole   @default(ASSISTANT)
+  assignedAt      DateTime          @default(now()) // When they first scanned
+  firstScanAt     DateTime?         // First scan timestamp
+  lastScanAt      DateTime?         // Last scan timestamp
+  studentsScanned Int               @default(0)     // Count of students scanned
+  
+  examSession     ExamSession       @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  user            User              @relation(fields: [userId], references: [id])
+  
+  @@unique([examSessionId, userId])
+  @@index([examSessionId])
+  @@index([userId])
+}
+
+enum InvigilatorRole {
+  PRIMARY   // First scanner for the session
+  ASSISTANT // Subsequent scanners
 }
 
 // Student Attendance & Submission

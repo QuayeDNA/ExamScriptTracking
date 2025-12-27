@@ -15,6 +15,8 @@ import {
   Clock,
   QrCode,
   Eye,
+  ShieldCheck,
+  User,
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import Papa from "papaparse";
@@ -56,6 +58,7 @@ import {
   type ParsedStudent,
 } from "@/utils/csvTemplates";
 import type { BatchStatus } from "@/api/examSessions";
+import type { ExamSessionInvigilator } from "@/types";
 
 const getStatusBadgeVariant = (
   status: BatchStatus
@@ -599,6 +602,71 @@ export default function BatchDetailsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Invigilators Card */}
+      {session.invigilators && session.invigilators.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" />
+              Invigilators ({session.invigilators.length})
+            </CardTitle>
+            <CardDescription>
+              Users who have scanned students for this exam session
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {session.invigilators
+                .sort((a: ExamSessionInvigilator, b: ExamSessionInvigilator) => {
+                  // Sort by role (PRIMARY first) then by assigned time
+                  if (a.role !== b.role) {
+                    return a.role === "PRIMARY" ? -1 : 1;
+                  }
+                  return new Date(a.assignedAt).getTime() - new Date(b.assignedAt).getTime();
+                })
+                .map((invigilator: ExamSessionInvigilator) => (
+                  <div
+                    key={invigilator.id}
+                    className="flex items-center justify-between p-4 border rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">
+                            {invigilator.user.firstName} {invigilator.user.lastName}
+                          </p>
+                          <Badge
+                            variant={invigilator.role === "PRIMARY" ? "default" : "secondary"}
+                            className="text-xs"
+                          >
+                            {invigilator.role === "PRIMARY" ? "Primary" : "Assistant"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {invigilator.user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        {invigilator.studentsScanned} students
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Last scan: {invigilator.lastScanAt
+                          ? new Date(invigilator.lastScanAt).toLocaleTimeString()
+                          : "Never"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

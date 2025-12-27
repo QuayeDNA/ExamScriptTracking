@@ -88,6 +88,48 @@ export const recordEntry = async (req: Request, res: Response) => {
 
     const isFirstAttendance = existingAttendanceCount === 0;
 
+    // Handle invigilator assignment and history tracking
+    const existingInvigilator = await prisma.examSessionInvigilator.findUnique({
+      where: {
+        examSessionId_userId: {
+          examSessionId: validatedData.examSessionId,
+          userId: req.user!.userId,
+        },
+      },
+    });
+
+    if (!existingInvigilator) {
+      // First time this user is scanning for this session
+      const isFirstInvigilator = await prisma.examSessionInvigilator.count({
+        where: { examSessionId: validatedData.examSessionId },
+      }) === 0;
+
+      await prisma.examSessionInvigilator.create({
+        data: {
+          examSessionId: validatedData.examSessionId,
+          userId: req.user!.userId,
+          role: isFirstInvigilator ? "PRIMARY" : "ASSISTANT",
+          firstScanAt: new Date(),
+          lastScanAt: new Date(),
+          studentsScanned: 1,
+        },
+      });
+    } else {
+      // Update existing invigilator record
+      await prisma.examSessionInvigilator.update({
+        where: {
+          examSessionId_userId: {
+            examSessionId: validatedData.examSessionId,
+            userId: req.user!.userId,
+          },
+        },
+        data: {
+          lastScanAt: new Date(),
+          studentsScanned: { increment: 1 },
+        },
+      });
+    }
+
     // Record entry
     const attendance = await prisma.examAttendance.create({
       data: {
@@ -123,7 +165,11 @@ export const recordEntry = async (req: Request, res: Response) => {
     if (isFirstAttendance && examSession.status === "NOT_STARTED") {
       await prisma.examSession.update({
         where: { id: validatedData.examSessionId },
-        data: { status: "IN_PROGRESS" },
+        data: { 
+          status: "IN_PROGRESS",
+          invigilatorId: req.user!.userId,
+          invigilatorName: `${req.user!.firstName} ${req.user!.lastName}`,
+        },
       });
 
       // Log status change
@@ -223,6 +269,18 @@ export const recordExit = async (req: Request, res: Response) => {
       });
       return;
     }
+
+    // Update invigilator record for exit scan
+    await prisma.examSessionInvigilator.updateMany({
+      where: {
+        examSessionId: attendance.examSessionId,
+        userId: req.user!.userId,
+      },
+      data: {
+        lastScanAt: new Date(),
+        studentsScanned: { increment: 1 },
+      },
+    });
 
     // Update exit time
     const updatedAttendance = await prisma.examAttendance.update({

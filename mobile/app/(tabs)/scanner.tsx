@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Animated,
   ActivityIndicator,
+  Modal,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, Camera } from "expo-camera";
@@ -26,6 +28,9 @@ function ScannerScreen() {
   const [scanMode, setScanMode] = useState<"ENTRY" | "EXIT">("ENTRY");
   const [activeExamSession, setActiveExamSession] =
     useState<ExamSession | null>(null);
+  const [expectedStudents, setExpectedStudents] = useState<Map<string, any>>(new Map());
+  const [lastScannedStudent, setLastScannedStudent] = useState<any>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const drawerRef = useRef<CustomDrawerRef>(null);
   const router = useRouter();
   const scanAreaHeight = useRef(new Animated.Value(0)).current;
@@ -63,8 +68,20 @@ function ScannerScreen() {
 
   const loadExamSession = async (batchId: string) => {
     try {
-      const session = await examSessionsApi.getExamSession(batchId);
+      // Load session and expected students in parallel
+      const [session, studentsData] = await Promise.all([
+        examSessionsApi.getExamSession(batchId),
+        examSessionsApi.getExpectedStudents(batchId)
+      ]);
+
       setActiveExamSession(session);
+
+      // Cache expected students in Map for O(1) lookup by indexNumber
+      const studentsMap = new Map();
+      studentsData.expectedStudents.forEach((student: any) => {
+        studentsMap.set(student.indexNumber, student);
+      });
+      setExpectedStudents(studentsMap);
 
       // Use requestAnimationFrame to ensure state is updated before opening drawer
       requestAnimationFrame(() => {
@@ -102,12 +119,8 @@ function ScannerScreen() {
     try {
       const studentIndexNumber = qrData.indexNumber;
 
-      const students = await examSessionsApi.getExpectedStudents(
-        activeExamSession.id
-      );
-      const expectedStudent = students.expectedStudents.find(
-        (s: any) => s.indexNumber === studentIndexNumber
-      );
+      // O(1) lookup using cached Map instead of API call
+      const expectedStudent = expectedStudents.get(studentIndexNumber);
 
       if (!expectedStudent) {
         Toast.show({
@@ -117,6 +130,9 @@ function ScannerScreen() {
         });
         return;
       }
+
+      // Store last scanned student for profile display
+      setLastScannedStudent(expectedStudent);
 
       const studentName = `${expectedStudent.firstName || ""} ${expectedStudent.lastName || ""}`;
 
@@ -137,6 +153,7 @@ function ScannerScreen() {
           text1: "✓ Entry Recorded",
           text2: `${studentName} (${studentIndexNumber})`,
         });
+        setShowProfileModal(true);
       } else {
         if (!expectedStudent.attendance) {
           Toast.show({
@@ -163,12 +180,23 @@ function ScannerScreen() {
           text1: "✓ Exit Recorded",
           text2: `${studentName} (${studentIndexNumber})`,
         });
+        setShowProfileModal(true);
       }
 
+      // Update cached student data after attendance change
       const updatedSession = await examSessionsApi.getExamSession(
         activeExamSession.id
       );
       setActiveExamSession(updatedSession);
+
+      // Refresh expected students cache to get updated attendance status
+      const studentsData = await examSessionsApi.getExpectedStudents(activeExamSession.id);
+      const studentsMap = new Map();
+      studentsData.expectedStudents.forEach((student: any) => {
+        studentsMap.set(student.indexNumber, student);
+      });
+      setExpectedStudents(studentsMap);
+
     } catch (error: any) {
       Toast.show({
         type: "error",
@@ -501,6 +529,46 @@ function ScannerScreen() {
         onViewDetails={handleViewDetails}
         onEndSession={handleEndSession}
       />
+
+      {/* Profile Picture Modal */}
+      <Modal
+        visible={showProfileModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowProfileModal(false)}
+        >
+          <View style={[styles.profileModal, { backgroundColor: colors.card }]}>
+            {lastScannedStudent?.profilePicture ? (
+              <Image
+                source={{ uri: lastScannedStudent.profilePicture }}
+                style={styles.profileImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.profilePlaceholder, { backgroundColor: colors.muted }]}>
+                <Ionicons name="person" size={48} color={colors.foregroundMuted} />
+              </View>
+            )}
+            <Text style={[styles.profileName, { color: colors.foreground }]}>
+              {lastScannedStudent?.firstName} {lastScannedStudent?.lastName}
+            </Text>
+            <Text style={[styles.profileIndex, { color: colors.foregroundMuted }]}>
+              {lastScannedStudent?.indexNumber}
+            </Text>
+            <TouchableOpacity
+              style={[styles.closeButton, { backgroundColor: colors.primary }]}
+              onPress={() => setShowProfileModal(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -658,6 +726,52 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileModal: {
+    width: "80%",
+    maxWidth: 300,
+    padding: 24,
+    borderRadius: 16,
+    alignItems: "center",
+    gap: 16,
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  profilePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  profileIndex: {
+    fontSize: 16,
+    textAlign: "center",
+  },
+  closeButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  closeButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",

@@ -436,6 +436,45 @@ export default function BatchDetailsScreen() {
           </View>
         </Card>
 
+        {/* Invigilator Information */}
+        {session.invigilators && session.invigilators.length > 0 && (
+          <Card elevation="md" style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
+              <Text
+                variant="h3"
+                style={[styles.cardTitle, { color: colors.foreground }]}
+              >
+                Invigilators ({session.invigilators.length})
+              </Text>
+            </View>
+            <View style={styles.cardContent}>
+              {session.invigilators.map((invigilator, index) => (
+                <View key={invigilator.id} style={styles.invigilatorRow}>
+                  <View style={styles.invigilatorInfo}>
+                    <View style={styles.invigilatorHeader}>
+                      <Text style={[styles.invigilatorName, { color: colors.foreground }]}>
+                        {invigilator.user.firstName} {invigilator.user.lastName}
+                      </Text>
+                      <View style={[
+                        styles.roleBadge,
+                        { backgroundColor: invigilator.role === 'PRIMARY' ? '#10b981' : '#6b7280' }
+                      ]}>
+                        <Text style={styles.roleText}>
+                          {invigilator.role === 'PRIMARY' ? 'Primary' : 'Assistant'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.invigilatorStats, { color: colors.foregroundMuted }]}>
+                      {invigilator.studentsScanned} students • Last scan: {invigilator.lastScanAt ? new Date(invigilator.lastScanAt).toLocaleTimeString() : 'Never'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </Card>
+        )}
+
         <View style={{ height: 32 }} />
       </ScrollView>
 
@@ -866,5 +905,34 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     marginTop: 16,
+  },
+  invigilatorRow: {
+    marginBottom: 16,
+  },
+  invigilatorInfo: {
+    flex: 1,
+  },
+  invigilatorHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  invigilatorName: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  invigilatorStats: {
+    fontSize: 12,
   },
 });

@@ -326,6 +326,21 @@ export const getExamSession = async (req: Request, res: Response) => {
               email: true,
             },
           },
+          invigilators: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: {
+              assignedAt: "asc",
+            },
+          },
           attendances: {
             include: {
               student: {

@@ -260,6 +260,9 @@ export interface ExamSession {
   venue: string;
   examDate: string;
   status: BatchStatus;
+  invigilatorId?: string;
+  invigilatorName?: string;
+  invigilators?: ExamSessionInvigilator[];
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -267,6 +270,30 @@ export interface ExamSession {
     attendances: number;
   };
 }
+
+export interface ExamSessionInvigilator {
+  id: string;
+  examSessionId: string;
+  userId: string;
+  role: InvigilatorRole;
+  assignedAt: string;
+  firstScanAt?: string;
+  lastScanAt?: string;
+  studentsScanned: number;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+export const InvigilatorRole = {
+  PRIMARY: "PRIMARY",
+  ASSISTANT: "ASSISTANT",
+} as const;
+
+export type InvigilatorRole = (typeof InvigilatorRole)[keyof typeof InvigilatorRole];
 
 // Attendance Types
 export const AttendanceStatus = {

@@ -178,6 +178,7 @@ export const createStudent = async (
 
     // Generate QR code data
     const qrData = JSON.stringify({
+      type: "STUDENT",
       id: "", // Will be updated after creation
       indexNumber: validatedData.indexNumber,
     });
@@ -193,6 +194,7 @@ export const createStudent = async (
 
     // Regenerate QR code with actual ID
     const updatedQrData = JSON.stringify({
+      type: "STUDENT",
       id: student.id,
       indexNumber: student.indexNumber,
     });
@@ -439,11 +441,6 @@ export const updateStudent = async (
       type: "STUDENT",
       id: student.id,
       indexNumber: student.indexNumber,
-      firstName: student.firstName,
-      lastName: student.lastName,
-      program: student.program,
-      level: student.level,
-      timestamp: new Date().toISOString(),
     });
 
     const updatedStudent = await prisma.student.update({
@@ -605,6 +602,7 @@ export const bulkCreateStudents = async (
 
         // Generate QR code data
         const qrData = JSON.stringify({
+          type: "STUDENT",
           id: "", // Temporary
           indexNumber: studentData.indexNumber,
         });
@@ -619,6 +617,7 @@ export const bulkCreateStudents = async (
 
         // Update QR code with actual ID
         const updatedQrData = JSON.stringify({
+          type: "STUDENT",
           id: student.id,
           indexNumber: student.indexNumber,
         });
@@ -705,6 +704,7 @@ export const generateStudentQRCode = async (
 
     // Generate QR code data containing only ID and index number
     const qrData = {
+      type: "STUDENT",
       id: student.id,
       indexNumber: student.indexNumber,
     };
@@ -712,8 +712,8 @@ export const generateStudentQRCode = async (
     // Generate QR code as data URL
     const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
       width: 600,
-      margin: 4,
-      errorCorrectionLevel: "H",
+      margin: 2,
+      errorCorrectionLevel: "L",
       color: {
         dark: "#000000",
         light: "#FFFFFF",

@@ -105,9 +105,34 @@ export interface ExamSession {
   venue: string;
   examDate: string;
   status: BatchStatus;
+  invigilatorId?: string;
+  invigilatorName?: string;
+  invigilators?: ExamSessionInvigilator[];
   createdById: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ExamSessionInvigilator {
+  id: string;
+  examSessionId: string;
+  userId: string;
+  role: InvigilatorRole;
+  assignedAt: string;
+  firstScanAt?: string;
+  lastScanAt?: string;
+  studentsScanned: number;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+export enum InvigilatorRole {
+  PRIMARY = "PRIMARY",
+  ASSISTANT = "ASSISTANT",
 }
 
 export interface ExamAttendance {

@@ -3,12 +3,14 @@ import { QRCodeSVG } from "qrcode.react";
 interface QRCodeDisplayProps {
   data: string;
   size?: number;
+  marginSize?: number;
   className?: string;
 }
 
 export function QRCodeDisplay({
   data,
   size = 300,
+  marginSize = 2,
   className = "",
 }: QRCodeDisplayProps) {
   // Check if data is a data URL (starts with "data:")
@@ -23,8 +25,8 @@ export function QRCodeDisplay({
           <QRCodeSVG
             value={data}
             size={size}
-            level="H"
-            includeMargin={true}
+            level="L"
+            marginSize={marginSize}
             fgColor="#000000"
             bgColor="#FFFFFF"
           />

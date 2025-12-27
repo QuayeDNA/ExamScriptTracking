@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api-client";
+import type { ExamSessionInvigilator } from "@/types";
 
 export interface ExamSession {
   id: string;
@@ -12,6 +13,9 @@ export interface ExamSession {
   venue: string;
   examDate: string;
   status: BatchStatus;
+  invigilatorId?: string;
+  invigilatorName?: string;
+  invigilators?: ExamSessionInvigilator[];
   createdById: string;
   createdAt: string;
   updatedAt: string;

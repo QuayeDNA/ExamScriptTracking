@@ -4,6 +4,28 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Utility function to construct full URLs for uploaded files
+const getFileUrl = (relativePath: string): string => {
+  if (!relativePath) return "";
+
+  // If it's already a full URL (e.g., from Cloudinary), return as-is
+  if (
+    relativePath.startsWith("http://") ||
+    relativePath.startsWith("https://")
+  ) {
+    return relativePath;
+  }
+
+  // Remove leading slash if present and construct full URL
+  const cleanPath = relativePath.startsWith("/")
+    ? relativePath.substring(1)
+    : relativePath;
+
+  const API_URL =
+    process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
+  return `${API_URL}/${cleanPath}`;
+};
+
 // Validation schemas
 const addStudentsSchema = z.object({
   students: z
@@ -366,7 +388,7 @@ export const getExpectedStudents = async (req: Request, res: Response) => {
           lastName: expected.lastName,
           program: expected.program,
           level: expected.level,
-          profilePicture: student?.profilePicture || null,
+          profilePicture: student?.profilePicture ? getFileUrl(student.profilePicture) : null,
           expectedAt: expected.createdAt,
           attendance: attendance || null,
         };
