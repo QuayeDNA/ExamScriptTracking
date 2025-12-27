@@ -14,6 +14,8 @@ import { useAuthStore } from "@/store/auth";
 import * as batchTransfersApi from "@/api/batchTransfers";
 import * as usersApi from "@/api/users";
 import { examSessionsApi } from "@/api/examSessions";
+import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function InitiateTransferScreen() {
   const { examSessionId, batchQrCode, courseCode, courseName, custodyStatus } =
@@ -33,6 +35,8 @@ export default function InitiateTransferScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [scriptsCount, setScriptsCount] = useState<number>(0);
+  const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     // Validate custody status - only allow transfer if batch is in current user's custody
@@ -70,14 +74,68 @@ export default function InitiateTransferScreen() {
       // Get actual attendance count (students who attended the exam)
       const attendanceCount = sessionData.attendances?.length || 0;
       setScriptsCount(attendanceCount);
+      setScriptsCount(attendanceCount);
     } catch (error: any) {
-      Alert.alert("Error", error.error || "Failed to load data");
+      // Check if it's a network error
+      if (error.message?.includes('Network') || error.message?.includes('fetch')) {
+        setIsOffline(true);
+        Alert.alert("Network Error", "Unable to load data. Please check your connection and try again.");
+      } else {
+        Alert.alert("Error", error.error || "Failed to load data");
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Get current location
+  const getCurrentLocation = async () => {
+    try {
+      setFetchingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Location permission is required to get your current location."
+        );
+        return;
+      }
+
+      const locationData = await Location.getCurrentPositionAsync({});
+      const address = await Location.reverseGeocodeAsync({
+        latitude: locationData.coords.latitude,
+        longitude: locationData.coords.longitude,
+      });
+
+      if (address[0]) {
+        const { name, street, city, region } = address[0];
+        const locationStr = [name, street, city, region]
+          .filter(Boolean)
+          .join(", ");
+        setLocation(locationStr);
+      } else {
+        setLocation(
+          `${locationData.coords.latitude.toFixed(6)}, ${locationData.coords.longitude.toFixed(6)}`
+        );
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to get current location");
+    } finally {
+      setFetchingLocation(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    if (isOffline) {
+      Alert.alert(
+        "Offline",
+        "Transfer cannot be initiated while offline. Please check your connection and try again.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     if (!selectedHandlerId) {
       Alert.alert("Error", "Please select a receiving handler");
       return;
@@ -135,6 +193,16 @@ export default function InitiateTransferScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
+        {/* Offline Indicator */}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline" size={20} color="#ef4444" />
+            <Text style={styles.offlineText}>
+              You&apos;re currently offline. Some features may not be available.
+            </Text>
+          </View>
+        )}
+
         {/* Batch Info */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Batch Information</Text>
@@ -211,12 +279,25 @@ export default function InitiateTransferScreen() {
           {/* Location (Optional) */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Location (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Main Office, Room 101"
-              value={location}
-              onChangeText={setLocation}
-            />
+            <View style={styles.locationContainer}>
+              <TextInput
+                style={styles.locationInput}
+                placeholder="e.g., Main Office, Room 101"
+                value={location}
+                onChangeText={setLocation}
+              />
+              <TouchableOpacity
+                style={styles.locationButton}
+                onPress={getCurrentLocation}
+                disabled={fetchingLocation}
+              >
+                {fetchingLocation ? (
+                  <ActivityIndicator size="small" color="#3b82f6" />
+                ) : (
+                  <Text style={styles.locationButtonText}>📍 GPS</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -224,15 +305,17 @@ export default function InitiateTransferScreen() {
         <TouchableOpacity
           style={[
             styles.submitButton,
-            submitting && styles.submitButtonDisabled,
+            (submitting || isOffline) && styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || isOffline}
         >
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitButtonText}>Initiate Transfer</Text>
+            <Text style={styles.submitButtonText}>
+              {isOffline ? "Offline - Cannot Initiate" : "Initiate Transfer"}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -266,6 +349,23 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  offlineText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#dc2626",
+    fontWeight: "500",
   },
   card: {
     backgroundColor: "#fff",
@@ -317,6 +417,33 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     backgroundColor: "#fff",
+  },
+  locationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  locationInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: "#fff",
+  },
+  locationButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  locationButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#3b82f6",
   },
   handlersList: {
     gap: 8,

@@ -12,6 +12,49 @@ import { incidentService } from "../services/incidentService";
 
 const prisma = new PrismaClient();
 
+// Status transition validation logic
+type BatchStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "IN_TRANSIT"
+  | "WITH_LECTURER"
+  | "UNDER_GRADING"
+  | "GRADED"
+  | "RETURNED"
+  | "COMPLETED";
+
+function validateStatusTransition(
+  currentStatus: BatchStatus,
+  newStatus: BatchStatus
+): { valid: boolean; error?: string } {
+  // Define allowed transitions
+  const allowedTransitions: Record<BatchStatus, BatchStatus[]> = {
+    NOT_STARTED: ["IN_PROGRESS"], // Auto-triggered only
+    IN_PROGRESS: ["SUBMITTED"], // Auto-triggered only on session end
+    SUBMITTED: ["IN_TRANSIT"], // When transfer starts
+    IN_TRANSIT: ["WITH_LECTURER", "SUBMITTED"], // Normal flow or return
+    WITH_LECTURER: ["IN_TRANSIT", "UNDER_GRADING"], // Rollback or progress
+    UNDER_GRADING: ["GRADED"],
+    GRADED: ["RETURNED"],
+    RETURNED: ["COMPLETED"],
+    COMPLETED: [], // Terminal state
+  };
+
+  // Check if transition is allowed
+  const allowed = allowedTransitions[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    return {
+      valid: false,
+      error: `Cannot transition from ${currentStatus} to ${newStatus}. Allowed transitions: ${
+        allowed.join(", ") || "none"
+      }`,
+    };
+  }
+
+  return { valid: true };
+}
+
 // Validation Schemas
 const createTransferSchema = z.object({
   examSessionId: z.string().uuid("Invalid exam session ID"),
@@ -214,6 +257,8 @@ export const confirmTransfer = async (req: Request, res: Response) => {
           select: {
             courseCode: true,
             courseName: true,
+            venue: true,
+            status: true,
           },
         },
         fromHandler: {
@@ -224,8 +269,10 @@ export const confirmTransfer = async (req: Request, res: Response) => {
         },
         toHandler: {
           select: {
+            id: true,
             firstName: true,
             lastName: true,
+            role: true,
           },
         },
       },
@@ -354,6 +401,60 @@ export const confirmTransfer = async (req: Request, res: Response) => {
         },
       },
     });
+
+    // AUTO-STATUS PROGRESSION: Update exam session status based on receiver role
+    let newStatus: string | null = null;
+    if (transfer.toHandler.role === "LECTURER") {
+      newStatus = "WITH_LECTURER";
+    } else if (transfer.toHandler.role === "DEPARTMENT_HEAD" || transfer.toHandler.role === "FACULTY_OFFICER") {
+      newStatus = "UNDER_GRADING";
+    }
+
+    if (newStatus && transfer.examSession.status !== newStatus) {
+      // Validate status transition
+      const validation = validateStatusTransition(
+        transfer.examSession.status as BatchStatus,
+        newStatus as BatchStatus
+      );
+
+      if (validation.valid) {
+        // Update exam session status
+        const updatedExamSession = await prisma.examSession.update({
+          where: { id: transfer.examSessionId },
+          data: { status: newStatus },
+        });
+
+        // Log status change audit trail
+        await prisma.auditLog.create({
+          data: {
+            userId: receiverHandlerId,
+            action: "AUTO_UPDATE_EXAM_SESSION_STATUS",
+            entity: "ExamSession",
+            entityId: transfer.examSessionId,
+            details: {
+              statusChange: {
+                from: transfer.examSession.status,
+                to: newStatus,
+                triggeredBy: "transfer_confirmation",
+                transferId: transfer.id,
+                receiverRole: transfer.toHandler.role,
+              },
+            },
+          },
+        });
+
+        // Emit batch status update event
+        emitBatchStatusUpdated(io, {
+          id: updatedExamSession.id,
+          batchQrCode: updatedExamSession.batchQrCode,
+          courseCode: updatedExamSession.courseCode,
+          courseName: updatedExamSession.courseName,
+          status: updatedExamSession.status,
+          department: updatedExamSession.department,
+          faculty: updatedExamSession.faculty,
+        });
+      }
+    }
 
     // Emit real-time notification
     emitTransferConfirmed(io, {

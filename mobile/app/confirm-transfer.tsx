@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import * as batchTransfersApi from "@/api/batchTransfers";
 import type { BatchTransfer } from "@/api/batchTransfers";
 
@@ -216,6 +217,14 @@ export default function ConfirmTransferScreen() {
             </View>
           </View>
 
+          {/* Transfer Priority */}
+          <View style={[styles.card, styles.priorityCard]}>
+            <Text style={styles.priorityLabel}>Transfer Priority</Text>
+            <View style={styles.priorityContainer}>
+              {getTransferPriority(transfer.toHandler.role)}
+            </View>
+          </View>
+
           {/* Batch Information */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Batch Information</Text>
@@ -366,6 +375,40 @@ function getStatusColor(status: string): string {
   }
 }
 
+// Helper function for transfer priority
+function getTransferPriority(role: string) {
+  let priority: "HIGH" | "MEDIUM" | "NORMAL" = "NORMAL";
+  let priorityColor = "#6b7280";
+  let priorityIcon = "flag-outline";
+
+  switch (role) {
+    case "DEPARTMENT_HEAD":
+    case "FACULTY_OFFICER":
+      priority = "HIGH";
+      priorityColor = "#ef4444";
+      priorityIcon = "flag";
+      break;
+    case "LECTURER":
+      priority = "MEDIUM";
+      priorityColor = "#f59e0b";
+      priorityIcon = "flag-outline";
+      break;
+    default:
+      priority = "NORMAL";
+      priorityColor = "#6b7280";
+      priorityIcon = "flag-outline";
+  }
+
+  return (
+    <View style={styles.priorityBadge}>
+      <Ionicons name={priorityIcon as any} size={16} color={priorityColor} />
+      <Text style={[styles.priorityText, { color: priorityColor }]}>
+        {priority} PRIORITY
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -418,6 +461,39 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 14,
+  },
+  priorityCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  priorityLabel: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  priorityContainer: {
+    alignItems: "flex-start",
+  },
+  priorityBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#f9fafb",
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   cardTitle: {
     fontSize: 18,

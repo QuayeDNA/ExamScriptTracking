@@ -15,6 +15,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text, Card, Badge, Dialog, Button } from "@/components/ui";
 import Toast from "react-native-toast-message";
 import { useThemeColors } from "@/constants/design-system";
+import * as batchTransfersApi from "@/api/batchTransfers";
+import type { BatchTransfer } from "@/api/batchTransfers";
 
 const STATUS_OPTIONS: { value: BatchStatus; label: string; color: string }[] = [
   { value: "NOT_STARTED", label: "Not Started", color: "#9ca3af" },
@@ -44,6 +46,7 @@ export default function BatchDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [filter, setFilter] = useState<FilterType>("ALL");
+  const [transferHistory, setTransferHistory] = useState<BatchTransfer[]>([]);
 
   // Dialog states
   const [showStatusDialog, setShowStatusDialog] = useState(false);
@@ -61,12 +64,14 @@ export default function BatchDetailsScreen() {
 
     try {
       setLoading(true);
-      const [sessionData, studentsData] = await Promise.all([
+      const [sessionData, studentsData, transferData] = await Promise.all([
         examSessionsApi.getExamSession(batchId),
         examSessionsApi.getExpectedStudents(batchId),
+        batchTransfersApi.getTransferHistory(batchId),
       ]);
       setSession(sessionData);
       setExpectedStudents(studentsData.expectedStudents);
+      setTransferHistory(transferData.transfers);
     } catch (error: any) {
       setErrorMessage(error.error || "Failed to load batch details");
       setShowErrorDialog(true);
@@ -475,6 +480,30 @@ export default function BatchDetailsScreen() {
           </Card>
         )}
 
+        {/* Transfer History Timeline */}
+        {transferHistory.length > 0 && (
+          <Card elevation="md" style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="time" size={20} color={colors.primary} />
+              <Text
+                variant="h3"
+                style={[styles.cardTitle, { color: colors.foreground }]}
+              >
+                Transfer History ({transferHistory.length})
+              </Text>
+            </View>
+            <View style={styles.cardContent}>
+              {transferHistory.map((transfer, index) => (
+                <TransferTimelineItem
+                  key={transfer.id}
+                  transfer={transfer}
+                  isLast={index === transferHistory.length - 1}
+                />
+              ))}
+            </View>
+          </Card>
+        )}
+
         <View style={{ height: 32 }} />
       </ScrollView>
 
@@ -609,7 +638,124 @@ function FilterButton({
   );
 }
 
-function StudentItem({ student }: { student: any }) {
+function TransferTimelineItem({
+  transfer,
+  isLast,
+}: {
+  transfer: BatchTransfer;
+  isLast: boolean;
+}) {
+  const colors = useThemeColors();
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "PENDING":
+        return "#f59e0b"; // amber
+      case "CONFIRMED":
+        return "#10b981"; // green
+      case "DISCREPANCY_REPORTED":
+        return "#ef4444"; // red
+      case "RESOLVED":
+        return "#6b7280"; // gray
+      default:
+        return colors.foregroundMuted;
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "PENDING":
+        return "time-outline";
+      case "CONFIRMED":
+        return "checkmark-circle";
+      case "DISCREPANCY_REPORTED":
+        return "alert-circle";
+      case "RESOLVED":
+        return "checkmark-done";
+      default:
+        return "ellipse";
+    }
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  return (
+    <View style={styles.timelineItem}>
+      <View style={styles.timelineConnector}>
+        <View
+          style={[
+            styles.timelineDot,
+            { backgroundColor: getStatusColor(transfer.status) },
+          ]}
+        >
+          <Ionicons
+            name={getStatusIcon(transfer.status) as any}
+            size={12}
+            color="#fff"
+          />
+        </View>
+        {!isLast && <View style={styles.timelineLine} />}
+      </View>
+      <View style={styles.timelineContent}>
+        <View style={styles.transferHeader}>
+          <Text style={[styles.transferTitle, { color: colors.foreground }]}>
+            Transfer to {transfer.toHandler.firstName} {transfer.toHandler.lastName}
+          </Text>
+          <Badge
+            variant="default"
+            style={{
+              backgroundColor: getStatusColor(transfer.status),
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "600" }}>
+              {transfer.status.replace("_", " ")}
+            </Text>
+          </Badge>
+        </View>
+
+        <Text style={[styles.transferTime, { color: colors.foregroundMuted }]}>
+          Requested: {formatDateTime(transfer.requestedAt)}
+        </Text>
+
+        {transfer.confirmedAt && (
+          <Text style={[styles.transferTime, { color: colors.foregroundMuted }]}>
+            Confirmed: {formatDateTime(transfer.confirmedAt)}
+          </Text>
+        )}
+
+        <View style={styles.transferDetails}>
+          <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
+            From: {transfer.fromHandler.firstName} {transfer.fromHandler.lastName}
+          </Text>
+          <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
+            Expected: {transfer.examsExpected} scripts
+          </Text>
+          {transfer.examsReceived !== null && (
+            <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
+              Received: {transfer.examsReceived} scripts
+            </Text>
+          )}
+          {transfer.location && (
+            <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
+              Location: {transfer.location}
+            </Text>
+          )}
+        </View>
+
+        {transfer.discrepancyNote && (
+          <View style={styles.discrepancyNote}>
+            <Ionicons name="warning" size={14} color="#ef4444" />
+            <Text style={[styles.discrepancyText, { color: "#ef4444" }]}>
+              {transfer.discrepancyNote}
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
   const colors = useThemeColors();
   const isSubmitted = student.attendance?.submissionTime;
   const isPresent = student.attendance && !student.attendance.submissionTime;
@@ -934,5 +1080,67 @@ const styles = StyleSheet.create({
   },
   invigilatorStats: {
     fontSize: 12,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  timelineConnector: {
+    width: 20,
+    alignItems: "center",
+    marginRight: 12,
+  },
+  timelineDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineLine: {
+    width: 2,
+    height: 40,
+    backgroundColor: "#e5e7eb",
+    marginTop: 8,
+  },
+  timelineContent: {
+    flex: 1,
+  },
+  transferHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  transferTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    flex: 1,
+  },
+  transferTime: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  transferDetails: {
+    marginTop: 8,
+  },
+  transferDetail: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  discrepancyNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#fef2f2",
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: "#ef4444",
+  },
+  discrepancyText: {
+    fontSize: 12,
+    marginLeft: 6,
+    flex: 1,
   },
 });
