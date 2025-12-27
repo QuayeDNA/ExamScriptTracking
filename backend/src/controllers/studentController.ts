@@ -178,14 +178,8 @@ export const createStudent = async (
 
     // Generate QR code data
     const qrData = JSON.stringify({
-      type: "STUDENT",
       id: "", // Will be updated after creation
       indexNumber: validatedData.indexNumber,
-      firstName: validatedData.firstName,
-      lastName: validatedData.lastName,
-      program: validatedData.program,
-      level: validatedData.level,
-      timestamp: new Date().toISOString(),
     });
 
     // Create student
@@ -199,14 +193,8 @@ export const createStudent = async (
 
     // Regenerate QR code with actual ID
     const updatedQrData = JSON.stringify({
-      type: "STUDENT",
       id: student.id,
       indexNumber: student.indexNumber,
-      firstName: student.firstName,
-      lastName: student.lastName,
-      program: student.program,
-      level: student.level,
-      timestamp: new Date().toISOString(),
     });
 
     const updatedStudent = await prisma.student.update({
@@ -617,10 +605,8 @@ export const bulkCreateStudents = async (
 
         // Generate QR code data
         const qrData = JSON.stringify({
-          type: "STUDENT",
           id: "", // Temporary
-          ...studentData,
-          timestamp: new Date().toISOString(),
+          indexNumber: studentData.indexNumber,
         });
 
         const student = await prisma.student.create({
@@ -633,14 +619,8 @@ export const bulkCreateStudents = async (
 
         // Update QR code with actual ID
         const updatedQrData = JSON.stringify({
-          type: "STUDENT",
           id: student.id,
           indexNumber: student.indexNumber,
-          firstName: student.firstName,
-          lastName: student.lastName,
-          program: student.program,
-          level: student.level,
-          timestamp: new Date().toISOString(),
         });
 
         await prisma.student.update({
@@ -723,10 +703,17 @@ export const generateStudentQRCode = async (
       return;
     }
 
+    // Generate QR code data containing only ID and index number
+    const qrData = {
+      id: student.id,
+      indexNumber: student.indexNumber,
+    };
+
     // Generate QR code as data URL
-    const qrCodeDataURL = await QRCode.toDataURL(student.qrCode, {
-      width: 400,
-      margin: 2,
+    const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
+      width: 600,
+      margin: 4,
+      errorCorrectionLevel: "H",
       color: {
         dark: "#000000",
         light: "#FFFFFF",

@@ -8,20 +8,27 @@ interface QRCodeDisplayProps {
 
 export function QRCodeDisplay({
   data,
-  size = 200,
+  size = 300,
   className = "",
 }: QRCodeDisplayProps) {
+  // Check if data is a data URL (starts with "data:")
+  const isDataURL = data.startsWith("data:");
+
   return (
     <div className={`flex justify-center ${className}`}>
       <div className="bg-background p-4 rounded-lg border-2 border-border shadow-sm">
-        <QRCodeSVG
-          value={data}
-          size={size}
-          level="M"
-          includeMargin={true}
-          fgColor="var(--foreground)"
-          bgColor="var(--background)"
-        />
+        {isDataURL ? (
+          <img src={data} alt="QR Code" style={{ width: size, height: size }} />
+        ) : (
+          <QRCodeSVG
+            value={data}
+            size={size}
+            level="H"
+            includeMargin={true}
+            fgColor="#000000"
+            bgColor="#FFFFFF"
+          />
+        )}
       </div>
     </div>
   );

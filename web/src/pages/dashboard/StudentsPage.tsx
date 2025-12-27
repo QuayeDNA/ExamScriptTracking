@@ -7,6 +7,7 @@ import {
   type UpdateStudentData,
 } from "@/api/students";
 import { getFileUrl } from "@/lib/api-client";
+import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import {
   Plus,
   Search,
@@ -268,8 +269,8 @@ export default function StudentsPage() {
       setQrCodeData(data.qrCode);
       setSelectedStudent(student);
       setIsQRModalOpen(true);
-    } catch (error) {
-      toast.error((error as Error).message || "Failed to fetch QR code");
+    } catch {
+      toast.error("Failed to fetch QR code");
     }
   };
 
@@ -716,7 +717,7 @@ export default function StudentsPage() {
                     >
                       <CardContent className="p-0">
                         {/* Profile Picture Section */}
-                        <div className="h-32 bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border relative">
+                        <div className="h-32 bg-linear-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border relative">
                           <img
                             src={getFileUrl(student.profilePicture)}
                             alt={`${student.firstName} ${student.lastName}`}
@@ -1091,7 +1092,7 @@ export default function StudentsPage() {
 
       {/* QR Code Modal */}
       <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Student QR Code</DialogTitle>
             <DialogDescription>
@@ -1101,11 +1102,7 @@ export default function StudentsPage() {
           </DialogHeader>
           <div className="flex flex-col items-center py-4">
             {qrCodeData && (
-              <img
-                src={qrCodeData}
-                alt="Student QR Code"
-                className="w-64 h-64 border rounded-lg"
-              />
+              <QRCodeDisplay data={qrCodeData} size={400} className="mb-4" />
             )}
           </div>
           <DialogFooter>

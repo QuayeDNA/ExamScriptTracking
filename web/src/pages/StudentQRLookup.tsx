@@ -211,7 +211,7 @@ export default function StudentQRLookup() {
                 </p>
 
                 <div className="flex justify-center">
-                  <QRCodeDisplay data={student.qrCode} size={250} />
+                  <QRCodeDisplay data={student.qrCode} size={350} />
                 </div>
 
                 <Button onClick={handleDownload} variant="outline">
