@@ -78,6 +78,7 @@ export interface Incident {
     courseName: string;
     batchQrCode: string;
   };
+  attachments?: IncidentAttachment[];
   _count?: {
     comments: number;
     attachments: number;
@@ -104,6 +105,7 @@ export interface IncidentAttachment {
   id: string;
   incidentId: string;
   filename: string;
+  filePath: string;
   mimeType: string;
   size: number;
   uploadedAt: string;

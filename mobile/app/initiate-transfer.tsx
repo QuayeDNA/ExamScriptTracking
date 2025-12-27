@@ -99,7 +99,7 @@ export default function InitiateTransferScreen() {
               await batchTransfersApi.createTransfer({
                 examSessionId,
                 toHandlerId: selectedHandlerId,
-                scriptsExpected: scriptsCount, // Actual attendance count
+                examsExpected: scriptsCount, // Actual attendance count
                 location: location || undefined,
               });
 

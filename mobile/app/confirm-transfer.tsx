@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   ActivityIndicator,
   Alert,
 } from "react-native";
@@ -13,23 +14,39 @@ import * as batchTransfersApi from "@/api/batchTransfers";
 import type { BatchTransfer } from "@/api/batchTransfers";
 
 export default function ConfirmTransferScreen() {
-  const { transferId } = useLocalSearchParams<{ transferId: string }>();
+  const { transferId, quickAccept } = useLocalSearchParams<{
+    transferId: string;
+    quickAccept?: string;
+  }>();
   const router = useRouter();
 
   const [transfer, setTransfer] = useState<BatchTransfer | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [scriptsReceived, setScriptsReceived] = useState<string>("");
+  const [discrepancyNote, setDiscrepancyNote] = useState<string>("");
 
   useEffect(() => {
     loadTransfer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transferId]);
 
+  // Auto-confirm for quick accept from notification
+  useEffect(() => {
+    if (quickAccept === "true" && transfer && !loading && !submitting) {
+      // Auto-confirm with expected count for quick accept
+      handleQuickAccept();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickAccept, transfer, loading, submitting]);
+
   const loadTransfer = async () => {
     try {
       setLoading(true);
       const data = await batchTransfersApi.getTransferById(transferId);
       setTransfer(data.transfer);
+      // Initialize with expected count
+      setScriptsReceived(data.transfer.examsExpected.toString());
     } catch (error: any) {
       Alert.alert("Error", error.error || "Failed to load transfer details");
       router.back();
@@ -39,9 +56,20 @@ export default function ConfirmTransferScreen() {
   };
 
   const handleConfirm = async () => {
+    const receivedCount = parseInt(scriptsReceived);
+    if (isNaN(receivedCount) || receivedCount < 0) {
+      Alert.alert("Error", "Please enter a valid number of scripts received");
+      return;
+    }
+
+    const hasDiscrepancy = receivedCount !== transfer!.examsExpected;
+    const confirmMessage = hasDiscrepancy
+      ? `Confirm receipt of ${receivedCount} scripts (expected: ${transfer!.examsExpected})? This will create an incident report.`
+      : `Confirm that you have received ${receivedCount} exam scripts from ${transfer!.fromHandler.firstName} ${transfer!.fromHandler.lastName}?`;
+
     Alert.alert(
       "Confirm Transfer",
-      `Confirm that you have received the exam scripts from ${transfer!.fromHandler.firstName} ${transfer!.fromHandler.lastName}?`,
+      confirmMessage,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -50,7 +78,8 @@ export default function ConfirmTransferScreen() {
             try {
               setSubmitting(true);
               await batchTransfersApi.confirmTransfer(transferId, {
-                examsReceived: transfer!.examsExpected,
+                examsReceived: receivedCount,
+                discrepancyNote: discrepancyNote.trim() || undefined,
               });
 
               Alert.alert(
@@ -72,6 +101,32 @@ export default function ConfirmTransferScreen() {
         },
       ]
     );
+  };
+
+  const handleQuickAccept = async () => {
+    if (!transfer) return;
+
+    try {
+      setSubmitting(true);
+      await batchTransfersApi.confirmTransfer(transferId, {
+        examsReceived: transfer.examsExpected, // Assume all received for quick accept
+      });
+
+      Alert.alert(
+        "✓ Transfer Accepted",
+        "You now have custody of this batch.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.error || "Failed to accept transfer");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReject = async () => {
@@ -188,7 +243,7 @@ export default function ConfirmTransferScreen() {
             />
             <InfoRow
               label="Scripts Expected"
-              value={transfer.scriptsExpected.toString()}
+              value={transfer.examsExpected.toString()}
             />
             <InfoRow
               label="Requested At"
@@ -209,12 +264,43 @@ export default function ConfirmTransferScreen() {
               </Text>
               .
             </Text>
-            <View style={styles.infoHighlight}>
-              <Text style={styles.infoHighlightLabel}>Scripts Expected:</Text>
-              <Text style={styles.infoHighlightValue}>
-                {transfer.scriptsExpected}
+
+            {/* Scripts Count Input */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Scripts Received</Text>
+              <TextInput
+                style={styles.numberInput}
+                value={scriptsReceived}
+                onChangeText={setScriptsReceived}
+                keyboardType="numeric"
+                placeholder="Enter actual count"
+                placeholderTextColor="#9ca3af"
+              />
+              <Text style={styles.expectedText}>
+                Expected: {transfer.examsExpected} scripts
               </Text>
             </View>
+
+            {/* Discrepancy Note (shown when count differs) */}
+            {parseInt(scriptsReceived) !== transfer.examsExpected && scriptsReceived !== "" && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Discrepancy Note (Required)</Text>
+                <TextInput
+                  style={[styles.textInput, styles.discrepancyInput]}
+                  value={discrepancyNote}
+                  onChangeText={setDiscrepancyNote}
+                  placeholder="Explain the discrepancy (e.g., '2 scripts missing', 'Extra script found')"
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+                <Text style={styles.warningText}>
+                  ⚠️ This will create an incident report for investigation
+                </Text>
+              </View>
+            )}
+
             <Text style={styles.noteText}>
               ℹ️ By confirming, you acknowledge custody of this batch.
             </Text>
@@ -356,14 +442,49 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "right",
   },
-  formGroup: {
+  inputGroup: {
     marginBottom: 16,
   },
-  formLabel: {
+  inputLabel: {
     fontSize: 14,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 8,
+  },
+  numberInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: "#fff",
+    minHeight: 80,
+  },
+  discrepancyInput: {
+    borderColor: "#f59e0b",
+    backgroundColor: "#fefce8",
+  },
+  expectedText: {
+    fontSize: 12,
+    color: "#6b7280",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    color: "#dc2626",
+    fontWeight: "500",
+    marginTop: 4,
   },
   input: {
     borderWidth: 1,

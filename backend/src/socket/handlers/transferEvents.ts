@@ -24,6 +24,7 @@ export function emitTransferRequested(
     courseCode: transfer.examSession.courseCode,
     courseName: transfer.examSession.courseName,
     batchQrCode: transfer.examSession.batchQrCode,
+    type: "transfer_requested",
     timestamp: new Date().toISOString(),
   });
 
@@ -34,6 +35,7 @@ export function emitTransferRequested(
     toHandlerId: transfer.toHandlerId,
     courseCode: transfer.examSession.courseCode,
     courseName: transfer.examSession.courseName,
+    type: "transfer_requested",
     timestamp: new Date().toISOString(),
   });
 }

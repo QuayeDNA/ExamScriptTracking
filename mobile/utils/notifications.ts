@@ -5,6 +5,35 @@ import { Platform } from "react-native";
  * Configure notification behavior for the app
  */
 export function configureNotifications() {
+  // Set up notification categories with actions
+  Notifications.setNotificationCategoryAsync("transfer_request", [
+    {
+      identifier: "ACCEPT",
+      buttonTitle: "Accept",
+      options: {
+        isAuthenticationRequired: false,
+        opensAppToForeground: true,
+      },
+    },
+    {
+      identifier: "VIEW",
+      buttonTitle: "View Details",
+      options: {
+        isAuthenticationRequired: false,
+        opensAppToForeground: true,
+      },
+    },
+    {
+      identifier: "REJECT",
+      buttonTitle: "Reject",
+      options: {
+        isAuthenticationRequired: false,
+        opensAppToForeground: true,
+        isDestructive: true, // Move inside options for iOS
+      },
+    },
+  ]);
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -23,7 +52,7 @@ export function configureNotifications() {
 export async function registerForPushNotificationsAsync(): Promise<
   string | undefined
 > {
-  let token;
+  let token: string | undefined;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
@@ -58,7 +87,8 @@ export async function registerForPushNotificationsAsync(): Promise<
     // This is expected behavior and doesn't affect local notifications
     if (__DEV__) {
       console.log(
-        "Push tokens not available in Expo Go. Use local notifications only."
+        "Push tokens not available in Expo Go. Use local notifications only.",
+        error
       );
     }
   }
@@ -72,7 +102,8 @@ export async function registerForPushNotificationsAsync(): Promise<
 export async function scheduleNotification(
   title: string,
   body: string,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
+  categoryId?: string
 ) {
   try {
     await Notifications.scheduleNotificationAsync({
@@ -81,12 +112,25 @@ export async function scheduleNotification(
         body,
         data: data || {},
         sound: true,
+        categoryIdentifier: categoryId,
       },
       trigger: null, // null = show immediately
     });
   } catch (error) {
     console.error("Error scheduling notification:", error);
   }
+}
+
+/**
+ * Set up notification response listener
+ */
+export function setupNotificationResponseListener(
+  onResponse: (response: Notifications.NotificationResponse) => void
+) {
+  const subscription = Notifications.addNotificationResponseReceivedListener(
+    onResponse
+  );
+  return subscription;
 }
 
 /**

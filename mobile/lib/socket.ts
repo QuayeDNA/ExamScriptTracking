@@ -111,7 +111,8 @@ class MobileSocketService {
       await scheduleNotification(
         "New Transfer Request",
         `Transfer request for ${eventData.courseCode} - ${eventData.courseName}`,
-        { type: "transfer_requested", ...eventData }
+        { type: "transfer_requested", ...eventData },
+        "transfer_request" // Use action buttons category
       );
     });
 

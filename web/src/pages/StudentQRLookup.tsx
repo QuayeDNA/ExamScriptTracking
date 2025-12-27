@@ -31,6 +31,7 @@ export default function StudentQRLookup() {
     try {
       const studentData = await studentsApi.getStudentQR(indexNumber.trim());
       setStudent(studentData);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setError(error.error || "Student not found or QR code not available");
     } finally {
@@ -158,7 +159,7 @@ export default function StudentQRLookup() {
             <CardContent className="space-y-6">
               {/* Profile Picture and Basic Info */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <img
                     src={getFileUrl(student.profilePicture)}
                     alt={`${student.firstName} ${student.lastName}`}

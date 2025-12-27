@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-redeclare */
+import type { IncidentAttachment } from "../api/incidents";
+
 export const Role = {
   ADMIN: "ADMIN",
   INVIGILATOR: "INVIGILATOR",
@@ -149,10 +152,10 @@ export interface ExamAttendance {
 
 export interface ApiError {
   error: string;
-  details?: Array<{
+  details?: {
     path: string[];
     message: string;
-  }>;
+  }[];
 }
 
 // ============================================
@@ -215,6 +218,7 @@ export interface Incident {
   assigneeId?: string;
   studentId?: string;
   examSessionId?: string;
+  attachments?: IncidentAttachment[];
   reporter?: {
     id: string;
     name: string;

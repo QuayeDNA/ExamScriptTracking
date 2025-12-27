@@ -72,10 +72,7 @@ class ApiClient {
           error.response?.data
         );
 
-        if (
-          error.response?.status === 401 &&
-          !error.config?.url?.includes("/auth/login")
-        ) {
+        if (error.response?.status === 401 && !error.config?.url?.includes("/auth/login")) {
           await clearAuth();
           // Notify auth invalidation callback
           this.onAuthInvalid?.();
@@ -132,3 +129,6 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+// Export the API URL for use in components
+export const API_BASE_URL = API_URL;

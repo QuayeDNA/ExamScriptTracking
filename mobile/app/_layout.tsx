@@ -89,7 +89,7 @@ export default function RootLayout() {
   const responseListener = useRef<Notifications.Subscription | undefined>(
     undefined
   );
-  const { handleNotificationTap } = useNotificationNavigation();
+  const { handleNotificationTap, handleNotificationAction } = useNotificationNavigation();
 
   // Create QueryClient instance
   const queryClient = new QueryClient({
@@ -123,9 +123,17 @@ export default function RootLayout() {
     // Listen for user interactions with notifications
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification tapped:", response);
+        console.log("Notification response:", response);
         const data = response.notification.request.content.data;
-        handleNotificationTap(data);
+        const actionId = response.actionIdentifier;
+
+        if (actionId && actionId !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
+          // Handle action button press
+          handleNotificationAction(actionId, data);
+        } else {
+          // Handle regular notification tap
+          handleNotificationTap(data);
+        }
       });
 
     return () => {

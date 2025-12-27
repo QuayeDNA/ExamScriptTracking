@@ -99,7 +99,7 @@ export const getTransferHistory = async (
 export const createTransfer = async (data: {
   examSessionId: string;
   toHandlerId: string;
-  scriptsExpected: number;
+  examsExpected: number;
   location?: string;
 }): Promise<{ message: string; transfer: BatchTransfer }> => {
   return apiClient.post("/batch-transfers", data);

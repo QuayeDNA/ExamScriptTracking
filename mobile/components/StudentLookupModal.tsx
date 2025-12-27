@@ -18,6 +18,7 @@ import {
   findStudent,
   saveStudent,
   searchStudents,
+  getAllStudents,
 } from "@/utils/localStudentStorage";
 
 interface StudentLookupModalProps {
@@ -76,7 +77,7 @@ export function StudentLookupModal({
       const allStudents = await getAllStudents(sessionId);
       const recent = allStudents
         .sort(
-          (a, b) =>
+          (a: LocalStudent, b: LocalStudent) =>
             new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime()
         )
         .slice(0, 5);

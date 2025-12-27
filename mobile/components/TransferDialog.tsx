@@ -125,7 +125,7 @@ export function TransferDialog({
       await batchTransfersApi.createTransfer({
         examSessionId,
         toHandlerId: selectedHandlerId,
-        scriptsExpected: scriptsCount,
+        examsExpected: scriptsCount,
         location: location || undefined,
       });
 

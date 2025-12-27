@@ -4,6 +4,7 @@ interface NotificationData {
   type?: string;
   id?: string;
   examSessionId?: string;
+  transferId?: string;
   [key: string]: unknown;
 }
 
@@ -25,6 +26,17 @@ export function useNotificationNavigation() {
     try {
       switch (data.type) {
         case "transfer_requested":
+          // Navigate directly to confirm transfer screen
+          if (data.transferId) {
+            router.push({
+              pathname: "/confirm-transfer",
+              params: { transferId: data.transferId },
+            });
+          } else {
+            router.push("/(tabs)/custody");
+          }
+          break;
+
         case "transfer_confirmed":
         case "transfer_rejected":
         case "transfer_updated":
@@ -63,5 +75,53 @@ export function useNotificationNavigation() {
     }
   };
 
-  return { handleNotificationTap };
+  const handleNotificationAction = async (
+    actionId: string,
+    data: NotificationData
+  ) => {
+    console.log("Handling notification action:", actionId, data);
+
+    try {
+      switch (actionId) {
+        case "ACCEPT":
+          if (data.transferId && data.type === "transfer_requested") {
+            // Quick accept - navigate to confirm screen with auto-confirm
+            router.push({
+              pathname: "/confirm-transfer",
+              params: {
+                transferId: data.transferId,
+                quickAccept: "true"
+              },
+            });
+          }
+          break;
+
+        case "REJECT":
+          if (data.transferId && data.type === "transfer_requested") {
+            // Quick reject - could implement background rejection
+            // For now, navigate to confirm screen
+            router.push({
+              pathname: "/confirm-transfer",
+              params: { transferId: data.transferId },
+            });
+          }
+          break;
+
+        case "VIEW":
+          // Navigate to details (same as tap)
+          handleNotificationTap(data);
+          break;
+
+        default:
+          console.warn("Unknown notification action:", actionId);
+      }
+    } catch (error) {
+      console.error("Error handling notification action:", error);
+    }
+  };
+
+  return {
+    handleNotificationTap,
+    handleNotificationAction,
+  };
 }
