@@ -26,6 +26,7 @@ import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
 import DashboardStatsPage from "@/pages/dashboard/DashboardStatsPage";
 import StudentsPage from "@/pages/dashboard/StudentsPage";
 import ExamSessionsPage from "@/pages/dashboard/ExamSessionsPage";
+import BatchDetailsPage from "@/pages/dashboard/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import IncidentsPage from "@/pages/dashboard/IncidentsPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
@@ -135,6 +136,10 @@ function App() {
                     <Route
                       path="exam-sessions"
                       element={<ExamSessionsPage />}
+                    />
+                    <Route
+                      path="exam-sessions/:id"
+                      element={<BatchDetailsPage />}
                     />
                     <Route
                       path="batch-tracking"

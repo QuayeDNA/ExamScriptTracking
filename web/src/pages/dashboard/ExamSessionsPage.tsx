@@ -20,6 +20,8 @@ import {
   Calendar,
   Eye,
   AlertTriangle,
+  Grid3X3,
+  List,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { toast } from "sonner";
 
 const BATCH_STATUSES: { value: BatchStatus; label: string }[] = [
@@ -107,6 +110,7 @@ export default function ExamSessionsPage() {
   const [dateToFilter, setDateToFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
+  const [viewMode, setViewMode] = useState<"list" | "card">("list");
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -119,7 +123,16 @@ export default function ExamSessionsPage() {
   const [selectedSession, setSelectedSession] = useState<ExamSession | null>(
     null
   );
-  const [formData, setFormData] = useState<CreateExamSessionData>({
+  const [formData, setFormData] = useState<{
+    courseCode: string;
+    courseName: string;
+    lecturerId: string;
+    lecturerName: string;
+    department: string;
+    faculty: string;
+    venue: string;
+    examDate: Date | undefined;
+  }>({
     courseCode: "",
     courseName: "",
     lecturerId: "",
@@ -127,7 +140,7 @@ export default function ExamSessionsPage() {
     department: "",
     faculty: "",
     venue: "",
-    examDate: "",
+    examDate: undefined,
   });
   const [qrCodeData, setQrCodeData] = useState<string>("");
   const [newStatus, setNewStatus] = useState<BatchStatus>("IN_PROGRESS");
@@ -296,6 +309,22 @@ export default function ExamSessionsPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Download CSV template
+  const handleDownloadTemplate = () => {
+    const templateContent = `courseCode,courseName,lecturerId,lecturerName,department,faculty,venue,examDate
+CS101,Introduction to Computer Science,LEC001,Dr. John Smith,Computer Science,Faculty of Science,Room 101,2025-01-15T09:00:00.000Z
+MATH201,Calculus II,LEC002,Prof. Sarah Johnson,Mathematics,Faculty of Science,Room 205,2025-01-16T14:30:00.000Z
+ENG301,Advanced English Literature,LEC003,Dr. Michael Brown,English Literature,Faculty of Arts,Room 312,2025-01-17T11:15:00.000Z`;
+
+    const blob = new Blob([templateContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "exam_sessions_template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const resetForm = () => {
     setFormData({
       courseCode: "",
@@ -305,7 +334,7 @@ export default function ExamSessionsPage() {
       department: "",
       faculty: "",
       venue: "",
-      examDate: "",
+      examDate: undefined,
     });
     setSelectedSession(null);
   };
@@ -320,7 +349,7 @@ export default function ExamSessionsPage() {
       department: session.department,
       faculty: session.faculty,
       venue: session.venue,
-      examDate: session.examDate.split("T")[0],
+      examDate: new Date(session.examDate),
     });
     setIsEditModalOpen(true);
   };
@@ -345,10 +374,15 @@ export default function ExamSessionsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Convert datetime-local to ISO 8601 format
+    if (!formData.examDate) {
+      toast.error("Please select an exam date and time");
+      return;
+    }
+
+    // Convert Date object to ISO 8601 format
     const formattedData = {
       ...formData,
-      examDate: new Date(formData.examDate).toISOString(),
+      examDate: formData.examDate.toISOString(),
     };
 
     if (isEditModalOpen && selectedSession) {
@@ -367,6 +401,133 @@ export default function ExamSessionsPage() {
     }
   };
 
+  // Exam Session Card Component
+  const ExamSessionCard = ({ session }: { session: ExamSession }) => (
+    <Card className="h-full w-full min-w-[280px]">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-start">
+          <div className="space-y-1">
+            <CardTitle className="text-lg font-semibold">
+              {session.courseCode}
+            </CardTitle>
+            <CardDescription className="text-sm">
+              {session.courseName}
+            </CardDescription>
+          </div>
+          <Badge
+            variant={getStatusBadgeVariant(session.status)}
+            className="text-xs"
+          >
+            {session.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground">Lecturer</p>
+            <p className="font-medium">{session.lecturerName}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Venue</p>
+            <p className="font-medium">{session.venue}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Department</p>
+            <p className="font-medium">{session.department}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Faculty</p>
+            <p className="font-medium">{session.faculty}</p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">
+              {new Date(session.examDate).toLocaleDateString("en-US", {
+                weekday: "short",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Eye className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm">
+              {session._count?.attendances || 0} students
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t">
+          <div className="text-xs text-muted-foreground font-mono">
+            {session.batchQrCode}
+          </div>
+          <div className="flex gap-1">
+            <Button
+              onClick={() => navigate(`/dashboard/exam-sessions/${session.id}`)}
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="View Details"
+            >
+              <Eye className="h-3 w-3" />
+            </Button>
+            <Button
+              onClick={() => handleShowQRCode(session)}
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="View QR Code"
+            >
+              <QrCode className="h-3 w-3" />
+            </Button>
+            {(isAdmin || user?.id === session.createdById) && (
+              <>
+                <Button
+                  onClick={() => openStatusModal(session)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  title="Update Status"
+                >
+                  <Calendar className="h-3 w-3" />
+                </Button>
+                <Button
+                  onClick={() => openEditModal(session)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  title="Edit"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button
+                  onClick={() => openDeleteModal(session)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  title="Delete"
+                  disabled={Boolean(
+                    session._count?.attendances &&
+                      session._count.attendances > 0
+                  )}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -380,9 +541,31 @@ export default function ExamSessionsPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              <div className="flex border rounded-md">
+                <Button
+                  onClick={() => setViewMode("list")}
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-r-none"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={() => setViewMode("card")}
+                  variant={viewMode === "card" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-l-none"
+                >
+                  <Grid3X3 className="h-4 w-4" />
+                </Button>
+              </div>
               <Button onClick={handleExportCSV} variant="outline">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export CSV
+              </Button>
+              <Button onClick={handleDownloadTemplate} variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Download Template
               </Button>
               {canCreate && (
                 <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -486,7 +669,7 @@ export default function ExamSessionsPage() {
         </CardContent>
       </Card>
 
-      {/* Table */}
+      {/* Content - List or Card View */}
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -495,133 +678,252 @@ export default function ExamSessionsPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Batch QR Code</TableHead>
-                    <TableHead>Course Code</TableHead>
-                    <TableHead>Course Name</TableHead>
-                    <TableHead>Venue</TableHead>
-                    <TableHead>Exam Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Students</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sessionsData?.examSessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell className="font-mono text-xs">
-                        {session.batchQrCode}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {session.courseCode}
-                      </TableCell>
-                      <TableCell>{session.courseName}</TableCell>
-                      <TableCell>{session.venue}</TableCell>
-                      <TableCell>
-                        {new Date(session.examDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadgeVariant(session.status)}>
-                          {session.status.replace(/_/g, " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{session._count?.attendances || 0}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            onClick={() =>
-                              navigate(`/dashboard/exam-sessions/${session.id}`)
-                            }
-                            variant="ghost"
-                            size="icon"
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4 text-primary" />
-                          </Button>
-                          <Button
-                            onClick={() => handleShowQRCode(session)}
-                            variant="ghost"
-                            size="icon"
-                            title="View QR Code"
-                          >
-                            <QrCode className="h-4 w-4" />
-                          </Button>
-                          {(isAdmin || user?.id === session.createdById) && (
-                            <>
+              {viewMode === "list" ? (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Batch QR Code</TableHead>
+                        <TableHead>Course Code</TableHead>
+                        <TableHead>Course Name</TableHead>
+                        <TableHead>Venue</TableHead>
+                        <TableHead>Exam Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Students</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sessionsData?.examSessions.map((session) => (
+                        <TableRow key={session.id}>
+                          <TableCell className="font-mono text-xs">
+                            {session.batchQrCode}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {session.courseCode}
+                          </TableCell>
+                          <TableCell>{session.courseName}</TableCell>
+                          <TableCell>{session.venue}</TableCell>
+                          <TableCell>
+                            {new Date(session.examDate).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={getStatusBadgeVariant(session.status)}
+                            >
+                              {session.status.replace(/_/g, " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {session._count?.attendances || 0}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
                               <Button
-                                onClick={() => openStatusModal(session)}
-                                variant="ghost"
-                                size="icon"
-                                title="Update Status"
-                              >
-                                <Calendar className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => openEditModal(session)}
-                                variant="ghost"
-                                size="icon"
-                                title="Edit"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => openDeleteModal(session)}
-                                variant="ghost"
-                                size="icon"
-                                title={
-                                  session._count?.attendances &&
-                                  session._count.attendances > 0
-                                    ? `Cannot delete: ${session._count.attendances} attendance record(s) exist`
-                                    : "Delete"
+                                onClick={() =>
+                                  navigate(
+                                    `/dashboard/exam-sessions/${session.id}`
+                                  )
                                 }
-                                disabled={Boolean(
-                                  session._count?.attendances &&
-                                    session._count.attendances > 0
-                                )}
+                                variant="ghost"
+                                size="icon"
+                                title="View Details"
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <Eye className="h-4 w-4 text-primary" />
                               </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                              <Button
+                                onClick={() => handleShowQRCode(session)}
+                                variant="ghost"
+                                size="icon"
+                                title="View QR Code"
+                              >
+                                <QrCode className="h-4 w-4" />
+                              </Button>
+                              {(isAdmin ||
+                                user?.id === session.createdById) && (
+                                <>
+                                  <Button
+                                    onClick={() => openStatusModal(session)}
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Update Status"
+                                  >
+                                    <Calendar className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    onClick={() => openEditModal(session)}
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Edit"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    onClick={() => openDeleteModal(session)}
+                                    variant="ghost"
+                                    size="icon"
+                                    title={
+                                      session._count?.attendances &&
+                                      session._count.attendances > 0
+                                        ? `Cannot delete: ${session._count.attendances} attendance record(s) exist`
+                                        : "Delete"
+                                    }
+                                    disabled={Boolean(
+                                      session._count?.attendances &&
+                                        session._count.attendances > 0
+                                    )}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
 
-              {/* Pagination */}
-              {sessionsData && sessionsData.pagination.pages > 1 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {(page - 1) * limit + 1} to{" "}
-                    {Math.min(page * limit, sessionsData.pagination.total)} of{" "}
-                    {sessionsData.pagination.total} sessions
+                  {/* Empty State for List View */}
+                  {(!sessionsData?.examSessions ||
+                    sessionsData.examSessions.length === 0) && (
+                    <div className="p-12 text-center">
+                      <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                        No exam sessions found
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+                        {search ||
+                        statusFilter ||
+                        departmentFilter ||
+                        facultyFilter ||
+                        dateFromFilter ||
+                        dateToFilter
+                          ? "No exam sessions match your current filters. Try adjusting your search criteria."
+                          : "Get started by creating your first exam session to manage batch QR codes and track attendance."}
+                      </p>
+                      {canCreate &&
+                        !search &&
+                        !statusFilter &&
+                        !departmentFilter &&
+                        !facultyFilter &&
+                        !dateFromFilter &&
+                        !dateToFilter && (
+                          <Button onClick={() => setIsCreateModalOpen(true)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Your First Session
+                          </Button>
+                        )}
+                    </div>
+                  )}
+
+                  {/* Pagination for List View */}
+                  {sessionsData && sessionsData.pagination.pages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {(page - 1) * limit + 1} to{" "}
+                        {Math.min(page * limit, sessionsData.pagination.total)}{" "}
+                        of {sessionsData.pagination.total} sessions
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => setPage(page - 1)}
+                          disabled={page === 1}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Previous
+                        </Button>
+                        <span className="px-4 py-2 text-sm">
+                          Page {page} of {sessionsData.pagination.pages}
+                        </span>
+                        <Button
+                          onClick={() => setPage(page + 1)}
+                          disabled={page === sessionsData.pagination.pages}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Card View */}
+                  <div className="p-6">
+                    {!sessionsData?.examSessions ||
+                    sessionsData.examSessions.length === 0 ? (
+                      <div className="text-center py-12">
+                        <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-muted-foreground mb-2">
+                          No exam sessions found
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+                          {search ||
+                          statusFilter ||
+                          departmentFilter ||
+                          facultyFilter ||
+                          dateFromFilter ||
+                          dateToFilter
+                            ? "No exam sessions match your current filters. Try adjusting your search criteria."
+                            : "Get started by creating your first exam session to manage batch QR codes and track attendance."}
+                        </p>
+                        {canCreate &&
+                          !search &&
+                          !statusFilter &&
+                          !departmentFilter &&
+                          !facultyFilter &&
+                          !dateFromFilter &&
+                          !dateToFilter && (
+                            <Button onClick={() => setIsCreateModalOpen(true)}>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create Your First Session
+                            </Button>
+                          )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+                        {sessionsData.examSessions.map((session) => (
+                          <ExamSessionCard key={session.id} session={session} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => setPage(page - 1)}
-                      disabled={page === 1}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Previous
-                    </Button>
-                    <span className="px-4 py-2 text-sm">
-                      Page {page} of {sessionsData.pagination.pages}
-                    </span>
-                    <Button
-                      onClick={() => setPage(page + 1)}
-                      disabled={page === sessionsData.pagination.pages}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
+
+                  {/* Pagination for Card View */}
+                  {sessionsData && sessionsData.pagination.pages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {(page - 1) * limit + 1} to{" "}
+                        {Math.min(page * limit, sessionsData.pagination.total)}{" "}
+                        of {sessionsData.pagination.total} sessions
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => setPage(page - 1)}
+                          disabled={page === 1}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Previous
+                        </Button>
+                        <span className="px-4 py-2 text-sm">
+                          Page {page} of {sessionsData.pagination.pages}
+                        </span>
+                        <Button
+                          onClick={() => setPage(page + 1)}
+                          disabled={page === sessionsData.pagination.pages}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -778,14 +1080,12 @@ export default function ExamSessionsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="examDate">Exam Date & Time</Label>
-                <Input
-                  id="examDate"
-                  type="datetime-local"
-                  value={formData.examDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, examDate: e.target.value })
+                <DateTimePicker
+                  date={formData.examDate}
+                  onDateChange={(date) =>
+                    setFormData({ ...formData, examDate: date })
                   }
-                  required
+                  placeholder="Select exam date and time"
                 />
               </div>
             </div>

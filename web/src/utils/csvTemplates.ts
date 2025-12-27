@@ -1,25 +1,10 @@
 export const downloadExpectedStudentsTemplate = () => {
   const csv = `indexNumber,firstName,lastName,program,level
-20230001,Kwame,Mensah,Computer Science,300
-20230002,Ama,Owusu,Information Technology,300
-20230003,Kofi,Appiah,Software Engineering,200
-20230004,Abena,Asante,Computer Science,300
-20230005,Yaw,Boateng,Cyber Security,400
-20230006,Akosua,Osei,Data Science,300
-20230007,Kwesi,Agyeman,Information Technology,200
-20230008,Adjoa,Mensah,Computer Science,300
-20230009,Kojo,Darko,Software Engineering,300
-20230010,Efua,Frimpong,Computer Science,400
-20230011,Kwabena,Nkrumah,Information Technology,300
-20230012,Adwoa,Gyasi,Data Science,200
-20230013,Yaa,Bonsu,Computer Science,300
-20230014,Kwaku,Amponsah,Software Engineering,400
-20230015,Esi,Ofosu,Cyber Security,300
-20230016,Kofi,Asiedu,Information Technology,300
-20230017,Ama,Sarpong,Computer Science,200
-20230018,Kwame,Boakye,Data Science,300
-20230019,Abena,Ansah,Software Engineering,300
-20230020,Yaw,Amoako,Computer Science,400`;
+BT/ITS/24/001,Kwame,Mensah,Information Technology,100
+BT/ITS/24/002,Ama,Owusu,Information Technology,100
+BT/ITS/24/003,Kofi,Appiah,Information Technology,100
+BT/ITS/24/004,Abena,Asante,Information Technology,100
+BT/ITS/24/005,Yaw,Boateng,Information Technology,100`;
 
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);

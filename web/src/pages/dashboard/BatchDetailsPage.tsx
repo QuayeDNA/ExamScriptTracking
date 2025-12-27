@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Trash2,
   Clock,
+  QrCode,
+  Eye,
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import Papa from "papaparse";
@@ -34,6 +36,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   downloadExpectedStudentsTemplate,
@@ -228,6 +237,37 @@ export default function BatchDetailsPage() {
     },
   });
 
+  // Mutation for updating session status
+  const updateStatusMutation = useMutation({
+    mutationFn: (status: BatchStatus) =>
+      examSessionsApi.updateExamSessionStatus(id!, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["examSession", id] });
+      queryClient.invalidateQueries({ queryKey: ["examSessions"] });
+      toast.success("Status updated successfully");
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to update status", {
+        description: error.message,
+      });
+    },
+  });
+
+  // Mutation for deleting session
+  const deleteSessionMutation = useMutation({
+    mutationFn: () => examSessionsApi.deleteExamSession(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["examSessions"] });
+      toast.success("Session deleted successfully");
+      navigate("/dashboard/exam-sessions");
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to delete session", {
+        description: error.message,
+      });
+    },
+  });
+
   const handleFileUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -321,13 +361,45 @@ export default function BatchDetailsPage() {
                     {session.status.replace(/_/g, " ")}
                   </Badge>
                 </div>
-                <CardDescription className="mt-2">
-                  Batch: {session.batchQrCode} • {session.venue} •{" "}
-                  {new Date(session.examDate).toLocaleDateString()}
-                </CardDescription>
               </div>
             </div>
             <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  // Open QR code modal or section
+                  const qrUrl = `${window.location.origin}/student-lookup?batch=${session.batchQrCode}`;
+                  window.open(qrUrl, "_blank");
+                }}
+                variant="outline"
+                size="sm"
+              >
+                <QrCode className="w-4 h-4 mr-2" />
+                View QR
+              </Button>
+              <Select
+                value={session.status}
+                onValueChange={(value: BatchStatus) => {
+                  if (value !== session.status) {
+                    updateStatusMutation.mutate(value);
+                  }
+                }}
+                disabled={updateStatusMutation.isPending}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NOT_STARTED">Not Started</SelectItem>
+                  <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                  <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                  <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
+                  <SelectItem value="WITH_LECTURER">With Lecturer</SelectItem>
+                  <SelectItem value="UNDER_GRADING">Under Grading</SelectItem>
+                  <SelectItem value="GRADED">Graded</SelectItem>
+                  <SelectItem value="RETURNED">Returned</SelectItem>
+                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                </SelectContent>
+              </Select>
               {session.status === "IN_PROGRESS" && (
                 <Button
                   onClick={() => {
@@ -349,6 +421,24 @@ export default function BatchDetailsPage() {
                   {endSessionMutation.isPending ? "Ending..." : "End Session"}
                 </Button>
               )}
+              <Button
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Are you sure you want to delete this exam session?\n\n" +
+                        "This action cannot be undone and will remove all associated data."
+                    )
+                  ) {
+                    deleteSessionMutation.mutate();
+                  }
+                }}
+                variant="destructive"
+                size="sm"
+                disabled={deleteSessionMutation.isPending}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {deleteSessionMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
               <Button onClick={handleRefresh} variant="outline">
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh
@@ -356,6 +446,160 @@ export default function BatchDetailsPage() {
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      {/* QR Code Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <QrCode className="w-5 h-5" />
+            Batch QR Code
+          </CardTitle>
+          <CardDescription>
+            Students can scan this QR code to check in for the exam session
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center space-y-4">
+            <div className="p-4 bg-white border rounded-lg">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                  session.batchQrCode
+                )}`}
+                alt="Batch QR Code"
+                className="w-48 h-48"
+              />
+            </div>
+            <div className="text-center">
+              <p className="font-medium text-lg">{session.batchQrCode}</p>
+              <p className="text-sm text-muted-foreground">Scan to check in</p>
+            </div>
+            <Button
+              onClick={() => {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = () => {
+                  canvas.width = 300;
+                  canvas.height = 300;
+                  ctx?.drawImage(img, 0, 0, 300, 300);
+                  canvas.toBlob((blob) => {
+                    if (blob) {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `batch-${session.batchQrCode}.png`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }
+                  });
+                };
+                img.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+                  session.batchQrCode
+                )}`;
+              }}
+              variant="outline"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download QR Code
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Session Details Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="w-5 h-5" />
+            Session Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-medium mb-2">Course Information</h4>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Code:</span>
+                    <span className="font-medium">{session.courseCode}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Name:</span>
+                    <span>{session.courseName}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-medium mb-2">Schedule & Location</h4>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date:</span>
+                    <span>
+                      {new Date(session.examDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Venue:</span>
+                    <span>{session.venue}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-medium mb-2">Staff & Department</h4>
+                <div className="space-y-1 text-sm">
+                  {session.lecturerName && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Lecturer:</span>
+                      <span>{session.lecturerName}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Department:</span>
+                    <span>{session.department}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Faculty:</span>
+                    <span>{session.faculty}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-medium mb-2">Status & Batch</h4>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status:</span>
+                    <Badge
+                      variant={getStatusBadgeVariant(session.status)}
+                      className="text-xs"
+                    >
+                      {session.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Batch Code:</span>
+                    <span className="font-mono text-xs">
+                      {session.batchQrCode}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Stats Cards */}
