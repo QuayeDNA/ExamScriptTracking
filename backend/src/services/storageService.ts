@@ -8,7 +8,7 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 
 // Storage provider types
-export type StorageProvider = "local" | "cloudinary" | "cloudflare";
+export type StorageProvider = "local" | "cloudinary";
 
 // Storage configuration
 export interface StorageConfig {
@@ -61,8 +61,6 @@ export class StorageService {
           return await this.uploadToLocal(file, folder);
         case "cloudinary":
           return await this.uploadToCloudinary(file, folder);
-        case "cloudflare":
-          return await this.uploadToCloudflare(file, folder);
         default:
           throw new Error(
             `Unsupported storage provider: ${this.config.provider}`
@@ -89,8 +87,6 @@ export class StorageService {
           return await this.deleteFromLocal(url);
         case "cloudinary":
           return await this.deleteFromCloudinary(publicId || url);
-        case "cloudflare":
-          return await this.deleteFromCloudflare(url);
         default:
           return false;
       }
@@ -177,49 +173,6 @@ export class StorageService {
   }
 
   /**
-   * Upload to Cloudflare R2 (free tier)
-   */
-  private async uploadToCloudflare(
-    file: Express.Multer.File,
-    folder: string
-  ): Promise<UploadResult> {
-    if (!this.config.cloudflare) {
-      throw new Error("Cloudflare configuration missing");
-    }
-
-    // Dynamic import to avoid requiring AWS SDK in development
-    const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-
-    const s3Client = new S3Client({
-      region: "auto",
-      endpoint: `https://${this.config.cloudflare.accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: this.config.cloudflare.accessKeyId,
-        secretAccessKey: this.config.cloudflare.secretAccessKey,
-      },
-    });
-
-    const fileName = `${folder}/${uuidv4()}-${file.originalname}`;
-    const command = new PutObjectCommand({
-      Bucket: this.config.cloudflare.bucketName,
-      Key: fileName,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-      ACL: "public-read",
-    });
-
-    await s3Client.send(command);
-
-    const publicUrl = `${this.config.cloudflare.publicUrl}/${fileName}`;
-
-    return {
-      success: true,
-      url: publicUrl,
-      provider: "cloudflare",
-    };
-  }
-
-  /**
    * Delete from local filesystem
    */
   private async deleteFromLocal(url: string): Promise<boolean> {
@@ -257,45 +210,6 @@ export class StorageService {
       return result.result === "ok";
     } catch (error) {
       console.error("Cloudinary delete error:", error);
-      return false;
-    }
-  }
-
-  /**
-   * Delete from Cloudflare R2
-   */
-  private async deleteFromCloudflare(url: string): Promise<boolean> {
-    try {
-      if (!this.config.cloudflare) {
-        throw new Error("Cloudflare configuration missing");
-      }
-
-      const { S3Client, DeleteObjectCommand } = await import(
-        "@aws-sdk/client-s3"
-      );
-
-      const s3Client = new S3Client({
-        region: "auto",
-        endpoint: `https://${this.config.cloudflare.accountId}.r2.cloudflarestorage.com`,
-        credentials: {
-          accessKeyId: this.config.cloudflare.accessKeyId,
-          secretAccessKey: this.config.cloudflare.secretAccessKey,
-        },
-      });
-
-      // Extract key from URL
-      const urlParts = url.split("/");
-      const fileName = urlParts.slice(-2).join("/"); // folder/filename
-
-      const command = new DeleteObjectCommand({
-        Bucket: this.config.cloudflare.bucketName,
-        Key: fileName,
-      });
-
-      await s3Client.send(command);
-      return true;
-    } catch (error) {
-      console.error("Cloudflare delete error:", error);
       return false;
     }
   }

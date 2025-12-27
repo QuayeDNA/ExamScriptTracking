@@ -8,6 +8,7 @@ import {
   emitBatchCreated,
 } from "../socket/handlers/batchEvents";
 import { incidentService } from "../services/incidentService";
+import { BatchTransferAutomationService } from "../services/batchTransferAutomationService";
 
 const prisma = new PrismaClient();
 
@@ -580,6 +581,13 @@ export const updateExamSessionStatus = async (req: Request, res: Response) => {
       department: examSession.department,
       faculty: examSession.faculty,
     });
+
+    // Handle additional automation for manual status updates
+    await BatchTransferAutomationService.handleManualStatusUpdate(
+      examSession.id,
+      validatedData.status as BatchStatus,
+      req.user!.userId
+    );
 
     res.json({
       message: "Exam session status updated successfully",

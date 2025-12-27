@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -37,19 +37,49 @@ export default function InitiateTransferScreen() {
   const [scriptsCount, setScriptsCount] = useState<number>(0);
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [searchText, setSearchText] = useState<string>("");
+  const [showDropdown, setShowDropdown] = useState<boolean>(false);
+
+  // Filter handlers based on search text
+  const filteredHandlers = handlers.filter((handler) => {
+    if (!searchText.trim()) return false;
+    const searchLower = searchText.toLowerCase();
+    const fullName = `${handler.firstName} ${handler.lastName}`.toLowerCase();
+    const role = handler.role.toLowerCase();
+    const email = handler.email?.toLowerCase() || "";
+    return fullName.includes(searchLower) || role.includes(searchLower) || email.includes(searchLower);
+  });
+
+  // Get selected handler details
+  const selectedHandler = handlers.find((h) => h.id === selectedHandlerId);
+
+  // Handle search input change
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    setShowDropdown(text.trim().length > 0);
+  };
+
+  // Handle handler selection
+  const handleHandlerSelect = (handler: usersApi.Handler) => {
+    setSelectedHandlerId(handler.id);
+    setSearchText(`${handler.firstName} ${handler.lastName}`);
+    setShowDropdown(false);
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedHandlerId("");
+    setSearchText("");
+    setShowDropdown(false);
+  };
 
   useEffect(() => {
-    // Validate custody status - only allow transfer if batch is in current user's custody
+    // Validate custody status
     if (custodyStatus && custodyStatus !== "IN_CUSTODY") {
       Alert.alert(
         "Cannot Transfer",
         "You can only initiate transfers for batches currently in your custody.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.back(),
-          },
-        ]
+        [{ text: "OK", onPress: () => router.back() }]
       );
       return;
     }
@@ -57,7 +87,7 @@ export default function InitiateTransferScreen() {
     loadHandlers();
   }, [custodyStatus]);
 
-  const loadHandlers = async () => {
+  const loadHandlers = useCallback(async () => {
     try {
       setLoading(true);
       const [handlersData, sessionData] = await Promise.all([
@@ -71,24 +101,28 @@ export default function InitiateTransferScreen() {
       );
       setHandlers(filteredHandlers);
 
-      // Get actual attendance count (students who attended the exam)
+      // Get actual attendance count
       const attendanceCount = sessionData.attendances?.length || 0;
       setScriptsCount(attendanceCount);
-      setScriptsCount(attendanceCount);
     } catch (error: any) {
-      // Check if it's a network error
-      if (error.message?.includes('Network') || error.message?.includes('fetch')) {
+      console.error("[INITIATE_TRANSFER] Error loading handlers:", error);
+      if (
+        error.message?.includes("Network") ||
+        error.message?.includes("fetch")
+      ) {
         setIsOffline(true);
-        Alert.alert("Network Error", "Unable to load data. Please check your connection and try again.");
+        Alert.alert(
+          "Network Error",
+          "Unable to load data. Please check your connection and try again."
+        );
       } else {
         Alert.alert("Error", error.error || "Failed to load data");
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [examSessionId, user?.id]);
 
-  // Get current location
   const getCurrentLocation = async () => {
     try {
       setFetchingLocation(true);
@@ -119,7 +153,7 @@ export default function InitiateTransferScreen() {
           `${locationData.coords.latitude.toFixed(6)}, ${locationData.coords.longitude.toFixed(6)}`
         );
       }
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Failed to get current location");
     } finally {
       setFetchingLocation(false);
@@ -127,6 +161,15 @@ export default function InitiateTransferScreen() {
   };
 
   const handleSubmit = async () => {
+    if (handlers.length === 0) {
+      Alert.alert(
+        "No Handlers Available",
+        "There are no users with handler roles available to receive this transfer. Please contact your administrator.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     if (isOffline) {
       Alert.alert(
         "Offline",
@@ -157,15 +200,12 @@ export default function InitiateTransferScreen() {
               await batchTransfersApi.createTransfer({
                 examSessionId,
                 toHandlerId: selectedHandlerId,
-                examsExpected: scriptsCount, // Actual attendance count
+                examsExpected: scriptsCount,
                 location: location || undefined,
               });
 
               Alert.alert("Success", "Transfer request created successfully", [
-                {
-                  text: "OK",
-                  onPress: () => router.back(),
-                },
+                { text: "OK", onPress: () => router.back() },
               ]);
             } catch (error: any) {
               Alert.alert(
@@ -191,7 +231,7 @@ export default function InitiateTransferScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         {/* Offline Indicator */}
         {isOffline && (
@@ -234,46 +274,151 @@ export default function InitiateTransferScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Transfer Details</Text>
 
-          {/* Receiving Handler */}
+          {/* Receiving Handler with Search */}
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Receiving Handler *</Text>
-            <View style={styles.handlersList}>
-              {handlers.map((handler) => (
-                <TouchableOpacity
-                  key={handler.id}
-                  style={[
-                    styles.handlerItem,
-                    selectedHandlerId === handler.id &&
-                      styles.handlerItemSelected,
-                  ]}
-                  onPress={() => setSelectedHandlerId(handler.id)}
-                >
-                  <View>
-                    <Text
-                      style={[
-                        styles.handlerName,
-                        selectedHandlerId === handler.id &&
-                          styles.handlerNameSelected,
-                      ]}
+            {handlers.length === 0 ? (
+              <View style={styles.emptyHandlersContainer}>
+                <Text style={styles.emptyHandlersText}>
+                  No handlers available for transfer
+                </Text>
+                <Text style={styles.emptyHandlersSubtext}>
+                  Please contact your administrator to add users with handler
+                  roles (Invigilator, Lecturer, Department Head, or Faculty
+                  Officer).
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.searchContainer}>
+                {/* Search Input */}
+                <View style={styles.searchInputContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search handlers by name or role..."
+                    value={searchText}
+                    onChangeText={handleSearchChange}
+                    onFocus={() => {
+                      if (searchText.trim().length > 0) {
+                        setShowDropdown(true);
+                      }
+                    }}
+                  />
+                  {selectedHandlerId ? (
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={clearSelection}
                     >
-                      {handler.firstName} {handler.lastName}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.handlerRole,
-                        selectedHandlerId === handler.id &&
-                          styles.handlerRoleSelected,
-                      ]}
-                    >
-                      {handler.role}
-                    </Text>
-                  </View>
-                  {selectedHandlerId === handler.id && (
-                    <Text style={styles.checkmark}>✓</Text>
+                      <Ionicons
+                        name="close-circle"
+                        size={20}
+                        color="#6b7280"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <Ionicons
+                      name="search"
+                      size={20}
+                      color="#6b7280"
+                      style={styles.searchIcon}
+                    />
                   )}
-                </TouchableOpacity>
-              ))}
-            </View>
+                </View>
+
+                {/* Selected Handler Display */}
+                {selectedHandler && (
+                  <View style={styles.selectedHandlerContainer}>
+                    <View style={styles.selectedHandlerInfo}>
+                      <Text style={styles.selectedHandlerName}>
+                        {selectedHandler.firstName} {selectedHandler.lastName}
+                      </Text>
+                      <Text style={styles.selectedHandlerRole}>
+                        {selectedHandler.role.replace(/_/g, " ")}
+                      </Text>
+                      {selectedHandler.email && (
+                        <Text style={styles.selectedHandlerEmail}>
+                          {selectedHandler.email}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.selectedBadge}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color="#10b981"
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Dropdown Results */}
+                {showDropdown && filteredHandlers.length > 0 && (
+                  <View style={styles.dropdownContainer}>
+                    <ScrollView
+                      style={styles.dropdownList}
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {filteredHandlers.slice(0, 5).map((handler) => (
+                        <TouchableOpacity
+                          key={handler.id}
+                          style={styles.dropdownItem}
+                          onPress={() => handleHandlerSelect(handler)}
+                        >
+                          <View style={styles.handlerInfo}>
+                            <Text style={styles.dropdownHandlerName}>
+                              {handler.firstName} {handler.lastName}
+                            </Text>
+                            <Text style={styles.dropdownHandlerRole}>
+                              {handler.role.replace(/_/g, " ")}
+                            </Text>
+                            {handler.email && (
+                              <Text style={styles.handlerEmail}>
+                                {handler.email}
+                              </Text>
+                            )}
+                          </View>
+                          {selectedHandlerId === handler.id && (
+                            <Ionicons
+                              name="checkmark"
+                              size={20}
+                              color="#3b82f6"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {filteredHandlers.length > 5 && (
+                      <View style={styles.moreResultsHint}>
+                        <Text style={styles.moreResultsText}>
+                          + {filteredHandlers.length - 5} more results. Keep
+                          typing to refine...
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* No results message */}
+                {showDropdown &&
+                  searchText.trim().length > 0 &&
+                  filteredHandlers.length === 0 && (
+                    <View style={styles.noResultsContainer}>
+                      <Ionicons name="search" size={24} color="#9ca3af" />
+                      <Text style={styles.noResultsText}>
+                        No handlers found matching &quot;{searchText}&quot;
+                      </Text>
+                    </View>
+                  )}
+
+                {/* Helper text */}
+                {!selectedHandlerId && !showDropdown && (
+                  <Text style={styles.helperText}>
+                    Start typing to search for a handler by name, role, or
+                    email
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Location (Optional) */}
@@ -294,7 +439,7 @@ export default function InitiateTransferScreen() {
                 {fetchingLocation ? (
                   <ActivityIndicator size="small" color="#3b82f6" />
                 ) : (
-                  <Text style={styles.locationButtonText}>📍 GPS</Text>
+                  <Ionicons name="location" size={20} color="#3b82f6" />
                 )}
               </TouchableOpacity>
             </View>
@@ -305,16 +450,31 @@ export default function InitiateTransferScreen() {
         <TouchableOpacity
           style={[
             styles.submitButton,
-            (submitting || isOffline) && styles.submitButtonDisabled,
+            (submitting ||
+              isOffline ||
+              handlers.length === 0 ||
+              !selectedHandlerId) &&
+              styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={submitting || isOffline}
+          disabled={
+            submitting ||
+            isOffline ||
+            handlers.length === 0 ||
+            !selectedHandlerId
+          }
         >
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.submitButtonText}>
-              {isOffline ? "Offline - Cannot Initiate" : "Initiate Transfer"}
+              {handlers.length === 0
+                ? "No Handlers Available"
+                : isOffline
+                  ? "Offline - Cannot Initiate"
+                  : !selectedHandlerId
+                    ? "Select a Handler First"
+                    : "Initiate Transfer"}
             </Text>
           )}
         </TouchableOpacity>
@@ -410,14 +570,6 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: "#fff",
-  },
   locationContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -433,55 +585,167 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   locationButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    padding: 12,
     backgroundColor: "#f3f4f6",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#d1d5db",
-  },
-  locationButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#3b82f6",
-  },
-  handlersList: {
-    gap: 8,
-  },
-  handlerItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
+    justifyContent: "center",
+  },
+  searchContainer: {
+    position: "relative",
+    zIndex: 1000,
+  },
+  searchInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderRadius: 8,
     backgroundColor: "#fff",
+    marginBottom: 8,
   },
-  handlerItemSelected: {
-    borderColor: "#3b82f6",
-    backgroundColor: "#eff6ff",
-  },
-  handlerName: {
+  searchInput: {
+    flex: 1,
+    padding: 12,
     fontSize: 14,
-    fontWeight: "600",
     color: "#111827",
   },
-  handlerNameSelected: {
-    color: "#3b82f6",
+  searchIcon: {
+    marginRight: 12,
   },
-  handlerRole: {
+  clearButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  selectedHandlerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#eff6ff",
+    borderColor: "#3b82f6",
+    borderWidth: 2,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  selectedHandlerInfo: {
+    flex: 1,
+  },
+  selectedHandlerName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e40af",
+    marginBottom: 2,
+  },
+  selectedHandlerRole: {
+    fontSize: 13,
+    color: "#3b82f6",
+    textTransform: "capitalize",
+    marginBottom: 2,
+  },
+  selectedHandlerEmail: {
+    fontSize: 12,
+    color: "#60a5fa",
+  },
+  selectedBadge: {
+    marginLeft: 8,
+  },
+  dropdownContainer: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    maxHeight: 240,
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  handlerInfo: {
+    flex: 1,
+  },
+  dropdownHandlerName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 3,
+  },
+  dropdownHandlerRole: {
+    fontSize: 13,
+    color: "#6b7280",
+    textTransform: "capitalize",
+    marginBottom: 2,
+  },
+  handlerEmail: {
+    fontSize: 12,
+    color: "#9ca3af",
+  },
+  moreResultsHint: {
+    padding: 8,
+    backgroundColor: "#f9fafb",
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  moreResultsText: {
     fontSize: 12,
     color: "#6b7280",
-    marginTop: 2,
+    textAlign: "center",
+    fontStyle: "italic",
   },
-  handlerRoleSelected: {
-    color: "#3b82f6",
+  noResultsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    backgroundColor: "#f9fafb",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    gap: 8,
   },
-  checkmark: {
-    fontSize: 20,
-    color: "#3b82f6",
-    fontWeight: "bold",
+  noResultsText: {
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#9ca3af",
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  emptyHandlersContainer: {
+    padding: 16,
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    alignItems: "center",
+  },
+  emptyHandlersText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#dc2626",
+    marginBottom: 8,
+  },
+  emptyHandlersSubtext: {
+    fontSize: 14,
+    color: "#7f1d1d",
+    textAlign: "center",
+    lineHeight: 20,
   },
   submitButton: {
     backgroundColor: "#3b82f6",

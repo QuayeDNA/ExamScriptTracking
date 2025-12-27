@@ -47,6 +47,7 @@ export default function BatchDetailsScreen() {
   const [updating, setUpdating] = useState(false);
   const [filter, setFilter] = useState<FilterType>("ALL");
   const [transferHistory, setTransferHistory] = useState<BatchTransfer[]>([]);
+  const [showAllStudents, setShowAllStudents] = useState(false);
 
   // Dialog states
   const [showStatusDialog, setShowStatusDialog] = useState(false);
@@ -71,6 +72,7 @@ export default function BatchDetailsScreen() {
       ]);
       setSession(sessionData);
       setExpectedStudents(studentsData.expectedStudents);
+      // Keep original order to show current handler at top
       setTransferHistory(transferData.transfers);
     } catch (error: any) {
       setErrorMessage(error.error || "Failed to load batch details");
@@ -190,6 +192,12 @@ export default function BatchDetailsScreen() {
     notYet: expectedStudents.filter((s) => !s.attendance).length,
     attended: expectedStudents.filter((s) => s.attendance).length,
   };
+
+  // Show first 5 students or all if expanded
+  const displayedStudents = showAllStudents
+    ? filteredStudents
+    : filteredStudents.slice(0, 5);
+  const hasMoreStudents = filteredStudents.length > 5;
 
   return (
     <SafeAreaView
@@ -382,7 +390,7 @@ export default function BatchDetailsScreen() {
           />
         </View>
 
-        {/* Student List */}
+        {/* Student List with Show All/Show Less */}
         <Card elevation="md" style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="list" size={20} color={colors.primary} />
@@ -408,12 +416,81 @@ export default function BatchDetailsScreen() {
                 </Text>
               </View>
             ) : (
-              filteredStudents.map((student) => (
-                <StudentItem key={student.id} student={student} />
-              ))
+              <>
+                {displayedStudents.map((student, index) => (
+                  <StudentItem
+                    key={student.id}
+                    student={student}
+                    isLast={
+                      index === displayedStudents.length - 1 && !hasMoreStudents
+                    }
+                  />
+                ))}
+
+                {/* Show All / Show Less Button */}
+                {hasMoreStudents && (
+                  <TouchableOpacity
+                    style={[
+                      styles.showMoreButton,
+                      { backgroundColor: colors.muted },
+                    ]}
+                    onPress={() => setShowAllStudents(!showAllStudents)}
+                  >
+                    <Text
+                      style={[
+                        styles.showMoreText,
+                        { color: colors.primary },
+                      ]}
+                    >
+                      {showAllStudents
+                        ? "Show Less"
+                        : `Show ${filteredStudents.length - 5} More`}
+                    </Text>
+                    <Ionicons
+                      name={
+                        showAllStudents ? "chevron-up" : "chevron-down"
+                      }
+                      size={16}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
         </Card>
+
+        {/* Transfer History Timeline - Current Handler at Top */}
+        {transferHistory.length > 0 && (
+          <Card elevation="md" style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="git-network" size={20} color={colors.primary} />
+              <Text
+                variant="h3"
+                style={[styles.cardTitle, { color: colors.foreground }]}
+              >
+                Transfer Chain ({transferHistory.length})
+              </Text>
+              <Badge
+                variant="secondary"
+                style={{ marginLeft: "auto" }}
+              >
+                Current at Top
+              </Badge>
+            </View>
+            <View style={styles.timelineContainer}>
+              {[...transferHistory].reverse().map((transfer, index) => (
+                <TransferTimelineItem
+                  key={transfer.id}
+                  transfer={transfer}
+                  isFirst={index === 0}
+                  isLast={index === transferHistory.length - 1}
+                  isCurrent={index === 0} // Current handler is now at the top
+                />
+              ))}
+            </View>
+          </Card>
+        )}
 
         {/* Lecturer Information */}
         <Card elevation="md" style={styles.card}>
@@ -445,7 +522,11 @@ export default function BatchDetailsScreen() {
         {session.invigilators && session.invigilators.length > 0 && (
           <Card elevation="md" style={styles.card}>
             <View style={styles.cardHeader}>
-              <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
+              <Ionicons
+                name="shield-checkmark"
+                size={20}
+                color={colors.primary}
+              />
               <Text
                 variant="h3"
                 style={[styles.cardTitle, { color: colors.foreground }]}
@@ -454,51 +535,49 @@ export default function BatchDetailsScreen() {
               </Text>
             </View>
             <View style={styles.cardContent}>
-              {session.invigilators.map((invigilator, index) => (
+              {session.invigilators.map((invigilator) => (
                 <View key={invigilator.id} style={styles.invigilatorRow}>
                   <View style={styles.invigilatorInfo}>
                     <View style={styles.invigilatorHeader}>
-                      <Text style={[styles.invigilatorName, { color: colors.foreground }]}>
+                      <Text
+                        style={[
+                          styles.invigilatorName,
+                          { color: colors.foreground },
+                        ]}
+                      >
                         {invigilator.user.firstName} {invigilator.user.lastName}
                       </Text>
-                      <View style={[
-                        styles.roleBadge,
-                        { backgroundColor: invigilator.role === 'PRIMARY' ? '#10b981' : '#6b7280' }
-                      ]}>
+                      <View
+                        style={[
+                          styles.roleBadge,
+                          {
+                            backgroundColor:
+                              invigilator.role === "PRIMARY"
+                                ? "#10b981"
+                                : "#6b7280",
+                          },
+                        ]}
+                      >
                         <Text style={styles.roleText}>
-                          {invigilator.role === 'PRIMARY' ? 'Primary' : 'Assistant'}
+                          {invigilator.role === "PRIMARY"
+                            ? "Primary"
+                            : "Assistant"}
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.invigilatorStats, { color: colors.foregroundMuted }]}>
-                      {invigilator.studentsScanned} students • Last scan: {invigilator.lastScanAt ? new Date(invigilator.lastScanAt).toLocaleTimeString() : 'Never'}
+                    <Text
+                      style={[
+                        styles.invigilatorStats,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
+                      {invigilator.studentsScanned} students • Last scan:{" "}
+                      {invigilator.lastScanAt
+                        ? new Date(invigilator.lastScanAt).toLocaleTimeString()
+                        : "Never"}
                     </Text>
                   </View>
                 </View>
-              ))}
-            </View>
-          </Card>
-        )}
-
-        {/* Transfer History Timeline */}
-        {transferHistory.length > 0 && (
-          <Card elevation="md" style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="time" size={20} color={colors.primary} />
-              <Text
-                variant="h3"
-                style={[styles.cardTitle, { color: colors.foreground }]}
-              >
-                Transfer History ({transferHistory.length})
-              </Text>
-            </View>
-            <View style={styles.cardContent}>
-              {transferHistory.map((transfer, index) => (
-                <TransferTimelineItem
-                  key={transfer.id}
-                  transfer={transfer}
-                  isLast={index === transferHistory.length - 1}
-                />
               ))}
             </View>
           </Card>
@@ -596,6 +675,7 @@ function InfoRow({
       </View>
       <Text
         style={[styles.infoValue, { color: colors.foreground }, valueStyle]}
+        numberOfLines={2}
       >
         {value}
       </Text>
@@ -640,23 +720,27 @@ function FilterButton({
 
 function TransferTimelineItem({
   transfer,
+  isFirst,
   isLast,
+  isCurrent,
 }: {
   transfer: BatchTransfer;
+  isFirst: boolean;
   isLast: boolean;
+  isCurrent: boolean;
 }) {
   const colors = useThemeColors();
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "#f59e0b"; // amber
+        return "#f59e0b";
       case "CONFIRMED":
-        return "#10b981"; // green
+        return "#10b981";
       case "DISCREPANCY_REPORTED":
-        return "#ef4444"; // red
+        return "#ef4444";
       case "RESOLVED":
-        return "#6b7280"; // gray
+        return "#6b7280";
       default:
         return colors.foregroundMuted;
     }
@@ -665,7 +749,7 @@ function TransferTimelineItem({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "PENDING":
-        return "time-outline";
+        return "time";
       case "CONFIRMED":
         return "checkmark-circle";
       case "DISCREPANCY_REPORTED":
@@ -678,91 +762,212 @@ function TransferTimelineItem({
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    const date = new Date(dateString);
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
   };
 
   return (
     <View style={styles.timelineItem}>
+      {/* Timeline Line and Dot */}
       <View style={styles.timelineConnector}>
+        {/* Line above dot (only if not first) */}
+        {!isFirst && (
+          <View
+            style={[
+              styles.timelineLine,
+              styles.timelineLineTop,
+              { backgroundColor: colors.border },
+            ]}
+          />
+        )}
+
+        {/* Timeline Dot */}
         <View
           style={[
             styles.timelineDot,
-            { backgroundColor: getStatusColor(transfer.status) },
+            {
+              backgroundColor: isCurrent
+                ? colors.primary
+                : getStatusColor(transfer.status),
+            },
+            isCurrent && styles.currentDot,
           ]}
         >
           <Ionicons
             name={getStatusIcon(transfer.status) as any}
-            size={12}
+            size={isCurrent ? 14 : 12}
             color="#fff"
           />
         </View>
-        {!isLast && <View style={styles.timelineLine} />}
+
+        {/* Line below dot (only if not last) */}
+        {!isLast && (
+          <View
+            style={[
+              styles.timelineLine,
+              styles.timelineLineBottom,
+              { backgroundColor: colors.border },
+            ]}
+          />
+        )}
       </View>
-      <View style={styles.timelineContent}>
+
+      {/* Transfer Content */}
+      <View
+        style={[
+          styles.timelineContent,
+          { backgroundColor: colors.card, borderColor: colors.border },
+          isCurrent && {
+            borderColor: colors.primary,
+            borderWidth: 2,
+          },
+        ]}
+      >
+        {isCurrent && (
+          <View style={[styles.currentBadge, { backgroundColor: colors.primary }]}>
+            <Text variant="muted" style={styles.currentBadgeText}>Current Handler</Text>
+          </View>
+        )}
+
         <View style={styles.transferHeader}>
-          <Text style={[styles.transferTitle, { color: colors.foreground }]}>
-            Transfer to {transfer.toHandler.firstName} {transfer.toHandler.lastName}
-          </Text>
+          <View style={styles.handlerInfo}>
+            <View style={[styles.handlerAvatar, { backgroundColor: isCurrent ? colors.primary : colors.surface }]}>
+              <Ionicons
+                name="person"
+                size={20}
+                color={isCurrent ? "#fff" : colors.foregroundMuted}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                variant="default"
+                style={[
+                  { color: colors.foreground },
+                  isCurrent && { fontWeight: "700", color: colors.primary },
+                ]}
+              >
+                {transfer.toHandler.firstName} {transfer.toHandler.lastName}
+              </Text>
+              <Text
+                variant="muted"
+                style={{ color: colors.foregroundMuted, marginTop: 2 }}
+              >
+                {transfer.toHandler.role?.replace(/_/g, " ") || "Handler"}
+              </Text>
+            </View>
+          </View>
           <Badge
-            variant="default"
+            variant={isCurrent ? "default" : "secondary"}
             style={{
-              backgroundColor: getStatusColor(transfer.status),
+              backgroundColor: isCurrent ? colors.primary : getStatusColor(transfer.status),
             }}
           >
-            <Text style={{ color: "#fff", fontSize: 10, fontWeight: "600" }}>
-              {transfer.status.replace("_", " ")}
-            </Text>
+            {transfer.status.replace("_", " ")}
           </Badge>
         </View>
 
-        <Text style={[styles.transferTime, { color: colors.foregroundMuted }]}>
-          Requested: {formatDateTime(transfer.requestedAt)}
-        </Text>
-
-        {transfer.confirmedAt && (
-          <Text style={[styles.transferTime, { color: colors.foregroundMuted }]}>
-            Confirmed: {formatDateTime(transfer.confirmedAt)}
-          </Text>
-        )}
-
         <View style={styles.transferDetails}>
-          <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
-            From: {transfer.fromHandler.firstName} {transfer.fromHandler.lastName}
-          </Text>
-          <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
-            Expected: {transfer.examsExpected} scripts
-          </Text>
+          <DetailRow
+            icon="calendar"
+            label="Requested"
+            value={formatDateTime(transfer.requestedAt)}
+          />
+          {transfer.confirmedAt && (
+            <DetailRow
+              icon="checkmark-circle"
+              label="Confirmed"
+              value={formatDateTime(transfer.confirmedAt)}
+            />
+          )}
+          <DetailRow
+            icon="document-text"
+            label="Expected Scripts"
+            value={`${transfer.examsExpected}`}
+          />
           {transfer.examsReceived !== null && (
-            <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
-              Received: {transfer.examsReceived} scripts
-            </Text>
+            <DetailRow
+              icon="checkbox"
+              label="Received Scripts"
+              value={`${transfer.examsReceived}`}
+            />
           )}
           {transfer.location && (
-            <Text style={[styles.transferDetail, { color: colors.foregroundMuted }]}>
-              Location: {transfer.location}
-            </Text>
+            <DetailRow
+              icon="location"
+              label="Location"
+              value={transfer.location}
+            />
           )}
         </View>
 
         {transfer.discrepancyNote && (
-          <View style={styles.discrepancyNote}>
-            <Ionicons name="warning" size={14} color="#ef4444" />
-            <Text style={[styles.discrepancyText, { color: "#ef4444" }]}>
-              {transfer.discrepancyNote}
-            </Text>
+          <View style={[styles.discrepancyNote, { backgroundColor: colors.error + "10", borderLeftColor: colors.error }]}>
+            <Ionicons name="warning" size={16} color={colors.error} />
+            <View style={{ flex: 1 }}>
+              <Text
+                variant="muted"
+                style={{ color: colors.error, fontWeight: "600", marginBottom: 4 }}
+              >
+                Discrepancy Reported
+              </Text>
+              <Text variant="muted" style={{ color: colors.error }}>
+                {transfer.discrepancyNote}
+              </Text>
+            </View>
           </View>
         )}
       </View>
     </View>
   );
 }
+
+function DetailRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+}) {
+  const colors = useThemeColors();
+  return (
+    <View style={styles.detailRow}>
+      <Ionicons name={icon} size={14} color={colors.foregroundMuted} />
+      <Text variant="muted" style={{ color: colors.foregroundMuted, marginRight: 4 }}>
+        {label}:
+      </Text>
+      <Text
+        variant="muted"
+        style={{ color: colors.foreground, flex: 1 }}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function StudentItem({
+  student,
+  isLast,
+}: {
+  student: any;
+  isLast: boolean;
+}) {
   const colors = useThemeColors();
   const isSubmitted = student.attendance?.submissionTime;
   const isPresent = student.attendance && !student.attendance.submissionTime;
   const isAbsent = !student.attendance;
 
   return (
-    <View style={[styles.studentItem, { borderBottomColor: colors.border }]}>
+    <View
+      style={[
+        styles.studentItem,
+        { borderBottomColor: colors.border },
+        isLast && { borderBottomWidth: 0 },
+      ]}
+    >
       <View style={styles.studentHeader}>
         <Text style={[styles.studentName, { color: colors.foreground }]}>
           {student.firstName || "Unknown"} {student.lastName || ""}
@@ -841,14 +1046,6 @@ function TransferTimelineItem({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
   },
   scrollView: {
     flex: 1,
@@ -993,14 +1190,19 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 12,
   },
-  statusDropdown: {
+  showMoreButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "transparent",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 8,
+  },
+  showMoreText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   statusBadge: {
     flexDirection: "row",
@@ -1010,7 +1212,8 @@ const styles = StyleSheet.create({
   },
   dropdownContainer: {
     marginHorizontal: 16,
-    marginTop: 8,
+    marginTop: -8,
+    marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
     shadowColor: "#000",
@@ -1081,66 +1284,145 @@ const styles = StyleSheet.create({
   invigilatorStats: {
     fontSize: 12,
   },
+  timelineContainer: {
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
   timelineItem: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 24,
   },
   timelineConnector: {
-    width: 20,
+    width: 40,
     alignItems: "center",
-    marginRight: 12,
-  },
-  timelineDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    position: "relative",
   },
   timelineLine: {
     width: 2,
-    height: 40,
-    backgroundColor: "#e5e7eb",
-    marginTop: 8,
+    position: "absolute",
+    left: 11, // Center of the 22px dot (22/2 = 11)
+  },
+  timelineLineTop: {
+    top: 0,
+    bottom: 16, // Stop before the dot (22/2 + 5 = 16)
+  },
+  timelineLineBottom: {
+    top: 16, // Start after the dot (22/2 + 5 = 16)
+    bottom: 0,
+  },
+  timelineDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  currentDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
   },
   timelineContent: {
     flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingTop: 16,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  currentBadge: {
+    position: "absolute",
+    top: -10,
+    left: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  currentBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   transferHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 12,
   },
-  transferTitle: {
-    fontSize: 15,
-    fontWeight: "600",
+  handlerInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     flex: 1,
   },
-  transferTime: {
+  handlerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  handlerName: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  handlerRole: {
     fontSize: 12,
-    marginBottom: 2,
+    textTransform: "capitalize",
+    marginTop: 2,
   },
   transferDetails: {
-    marginTop: 8,
+    gap: 8,
+    marginTop: 12,
   },
-  transferDetail: {
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  detailLabel: {
     fontSize: 12,
-    marginBottom: 2,
+    fontWeight: "500",
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
   },
   discrepancyNote: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 8,
-    padding: 8,
+    gap: 8,
+    marginTop: 12,
+    padding: 12,
     backgroundColor: "#fef2f2",
-    borderRadius: 6,
+    borderRadius: 8,
     borderLeftWidth: 3,
     borderLeftColor: "#ef4444",
   },
+  discrepancyTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
   discrepancyText: {
     fontSize: 12,
-    marginLeft: 6,
-    flex: 1,
+    lineHeight: 16,
   },
 });
