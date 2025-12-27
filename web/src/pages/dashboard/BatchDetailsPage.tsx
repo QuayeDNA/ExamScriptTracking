@@ -10,7 +10,6 @@ import {
   Users,
   CheckCircle2,
   UserCheck,
-  UserX,
   AlertCircle,
   Trash2,
   Clock,
@@ -43,6 +42,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import {
   downloadExpectedStudentsTemplate,
@@ -172,13 +178,6 @@ export default function BatchDetailsPage() {
   const { data: expectedStudentsData } = useQuery({
     queryKey: ["expectedStudents", id],
     queryFn: () => examSessionsApi.getExpectedStudents(id!),
-    enabled: !!id,
-  });
-
-  // Fetch attendance summary
-  const { data: summaryData } = useQuery({
-    queryKey: ["attendanceSummary", id],
-    queryFn: () => examSessionsApi.getAttendanceSummary(id!),
     enabled: !!id,
   });
 
@@ -336,7 +335,6 @@ export default function BatchDetailsPage() {
 
   const expectedStudents = expectedStudentsData?.expectedStudents || [];
   const attendances = session.attendances || [];
-  const notYetArrived = summaryData?.summary?.notYetArrived || [];
 
   return (
     <div className="space-y-6">
@@ -725,99 +723,111 @@ export default function BatchDetailsPage() {
                   <p>No expected students yet. Upload a CSV to add students.</p>
                 </div>
               ) : (
-                <div className="max-h-[600px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Index Number</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {expectedStudents.map((item) => {
-                        const hasAttended = attendances.some(
-                          (a) => a.student.indexNumber === item.indexNumber
-                        );
-                        return (
-                          <TableRow key={item.id}>
-                            <TableCell className="font-mono text-xs">
-                              {item.indexNumber}
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">
-                                  {item.firstName && item.lastName
-                                    ? `${item.firstName} ${item.lastName}`
-                                    : "N/A"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {item.program && item.level
-                                    ? `${item.program} - L${item.level}`
-                                    : ""}
-                                </p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {hasAttended ? (
-                                <Badge variant="default">Present</Badge>
-                              ) : (
-                                <Badge variant="secondary">Not Arrived</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                onClick={() =>
-                                  removeStudentMutation.mutate(item.id)
-                                }
-                                variant="ghost"
-                                size="icon"
-                                disabled={removeStudentMutation.isPending}
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+                <TooltipProvider>
+                  <div className="max-h-[600px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Index Number</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {expectedStudents.map((item) => {
+                          const hasAttended = attendances.some(
+                            (a) => a.student.indexNumber === item.indexNumber
+                          );
+                          return (
+                            <TableRow key={item.id}>
+                              <TableCell className="font-mono text-xs">
+                                {item.indexNumber}
+                              </TableCell>
+                              <TableCell>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="cursor-pointer">
+                                      <p className="font-medium">
+                                        {item.firstName && item.lastName
+                                          ? `${item.firstName} ${item.lastName}`
+                                          : "N/A"}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {item.program && item.level
+                                          ? `${item.program} - L${item.level}`
+                                          : ""}
+                                      </p>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="p-3">
+                                    <div className="flex items-center space-x-3 min-w-[250px]">
+                                      <Avatar className="w-16 h-16">
+                                        <AvatarImage
+                                          src={
+                                            item.profilePicture
+                                              ? `http://localhost:5000${item.profilePicture}`
+                                              : ""
+                                          }
+                                          alt={`${item.firstName} ${item.lastName}`}
+                                        />
+                                        <AvatarFallback>
+                                          {item.firstName && item.lastName
+                                            ? `${item.firstName.charAt(
+                                                0
+                                              )}${item.lastName.charAt(0)}`
+                                            : "N/A"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex flex-col space-y-1">
+                                        <p className="font-medium text-sm">
+                                          {item.firstName && item.lastName
+                                            ? `${item.firstName} ${item.lastName}`
+                                            : "N/A"}
+                                        </p>
+                                        <p className="font-mono text-xs text-muted-foreground">
+                                          {item.indexNumber}
+                                        </p>
+                                        <p className="text-xs">
+                                          {item.program}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Level {item.level}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>
+                                {hasAttended ? (
+                                  <Badge variant="default">Present</Badge>
+                                ) : (
+                                  <Badge variant="secondary">Not Arrived</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  onClick={() =>
+                                    removeStudentMutation.mutate(item.id)
+                                  }
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={removeStudentMutation.isPending}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </TooltipProvider>
               )}
             </CardContent>
           </Card>
-
-          {/* Not Yet Arrived */}
-          {notYetArrived.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserX className="w-5 h-5 text-muted-foreground" />
-                  Not Yet Arrived ({notYetArrived.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
-                  {notYetArrived.map((student) => (
-                    <Card key={student.id}>
-                      <CardContent className="p-4">
-                        <p className="font-mono text-sm font-medium">
-                          {student.indexNumber}
-                        </p>
-                        <p className="text-sm">
-                          {student.firstName} {student.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {student.program} - Level {student.level}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Right Column - Attendances */}

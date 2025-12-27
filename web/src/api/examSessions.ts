@@ -278,6 +278,7 @@ export const examSessionsApi = {
       lastName?: string | null;
       program?: string | null;
       level?: number | null;
+      profilePicture?: string | null;
       expectedAt: string;
       attendance?: {
         id: string;

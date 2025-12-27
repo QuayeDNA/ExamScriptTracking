@@ -330,10 +330,13 @@ export const getExpectedStudents = async (req: Request, res: Response) => {
     // Get attendance status for each student by matching index numbers
     const studentsWithAttendance = await Promise.all(
       expectedStudents.map(async (expected) => {
-        // Find attendance by matching student's index number
+        // Find student with profile picture
         const student = await prisma.student.findUnique({
           where: { indexNumber: expected.indexNumber },
-          select: { id: true },
+          select: {
+            id: true,
+            profilePicture: true,
+          },
         });
 
         let attendance = null;
@@ -363,6 +366,7 @@ export const getExpectedStudents = async (req: Request, res: Response) => {
           lastName: expected.lastName,
           program: expected.program,
           level: expected.level,
+          profilePicture: student?.profilePicture || null,
           expectedAt: expected.createdAt,
           attendance: attendance || null,
         };
