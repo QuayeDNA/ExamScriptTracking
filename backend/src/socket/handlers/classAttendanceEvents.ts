@@ -16,6 +16,7 @@ export function emitClassAttendanceScanned(
     totalStudents: number;
     courseCode?: string;
     courseName?: string;
+    verificationMethod?: string;
   }
 ) {
   // Emit to admins and class reps
@@ -29,6 +30,7 @@ export function emitClassAttendanceScanned(
     totalStudents: data.totalStudents,
     courseCode: data.courseCode,
     courseName: data.courseName,
+    verificationMethod: data.verificationMethod,
   });
 }
 

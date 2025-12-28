@@ -6,6 +6,11 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { storageService } from "../services/storageService";
+import {
+  hashBiometricTemplate,
+  generateBiometricSalt,
+  isValidBiometricProvider
+} from "../utils/biometricHash";
 
 const prisma = new PrismaClient();
 
@@ -27,7 +32,7 @@ const getFileUrl = (relativePath: string): string => {
     : relativePath;
 
   const API_URL =
-    process.env.API_URL || `http://localhost:${process.env.PORT || 3001}`;
+    process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
   return `${API_URL}/${cleanPath}`;
 };
 
@@ -92,7 +97,22 @@ const createStudentSchema = z.object({
       (val) => !isNaN(val) && val > 0,
       "Level must be a positive integer"
     ),
-});
+  // Optional biometric enrollment during creation
+  biometricTemplate: z.string().optional(),
+  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT']).optional(),
+  biometricDeviceId: z.string().optional(),
+}).refine(
+  (data) => {
+    // If any biometric field is provided, all must be provided
+    const biometricFields = ['biometricTemplate', 'biometricProvider', 'biometricDeviceId'];
+    const providedFields = biometricFields.filter(field => data[field as keyof typeof data]);
+    return providedFields.length === 0 || providedFields.length === biometricFields.length;
+  },
+  {
+    message: "All biometric fields (template, provider, deviceId) must be provided together",
+    path: ["biometricTemplate"]
+  }
+);
 
 const updateStudentSchema = z.object({
   indexNumber: z.string().min(1).optional(),
@@ -183,12 +203,38 @@ export const createStudent = async (
       indexNumber: validatedData.indexNumber,
     });
 
+    // Prepare biometric data if provided
+    let biometricData = {};
+    if (validatedData.biometricTemplate && validatedData.biometricProvider && validatedData.biometricDeviceId) {
+      // Validate biometric provider
+      if (!isValidBiometricProvider(validatedData.biometricProvider)) {
+        res.status(400).json({ error: "Invalid biometric provider" });
+        return;
+      }
+
+      // Generate salt and hash the template
+      const biometricSalt = generateBiometricSalt();
+      const biometricTemplateHash = hashBiometricTemplate(validatedData.biometricTemplate, biometricSalt);
+
+      biometricData = {
+        biometricTemplateHash,
+        biometricEnrolledAt: new Date(),
+        biometricDeviceId: validatedData.biometricDeviceId,
+        biometricProvider: validatedData.biometricProvider,
+      };
+    }
+
     // Create student
     const student = await prisma.student.create({
       data: {
-        ...validatedData,
+        indexNumber: validatedData.indexNumber,
+        firstName: validatedData.firstName,
+        lastName: validatedData.lastName,
+        program: validatedData.program,
+        level: validatedData.level,
         profilePicture: profilePictureUrl,
         qrCode: qrData, // Temporary, will regenerate with ID
+        ...biometricData,
       },
     });
 
@@ -205,18 +251,25 @@ export const createStudent = async (
     });
 
     // Log audit
+    const auditDetails: any = {
+      indexNumber: student.indexNumber,
+      name: `${student.firstName} ${student.lastName}`,
+      program: student.program,
+      profilePicture: profilePictureUrl,
+    };
+
+    if (student.biometricEnrolledAt) {
+      auditDetails.biometricEnrolled = true;
+      auditDetails.biometricProvider = student.biometricProvider;
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: req.user!.userId,
         action: "CREATE_STUDENT",
         entity: "Student",
         entityId: student.id,
-        details: {
-          indexNumber: student.indexNumber,
-          name: `${student.firstName} ${student.lastName}`,
-          program: student.program,
-          profilePicture: profilePictureUrl,
-        },
+        details: auditDetails,
         ipAddress: req.ip,
       },
     });
@@ -975,6 +1028,214 @@ export const exportStudentsPDF = async (
     res.send(pdfBuffer);
   } catch (error) {
     console.error("Export students PDF error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Generate biometric enrollment link for student
+export const generateBiometricEnrollmentLink = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { expiresInHours = 24 } = req.body; // Default 24 hours
+
+    console.log("[GENERATE_BIOMETRIC_LINK] Request for student:", id);
+
+    // Verify student exists
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        biometricEnrolledAt: true,
+      },
+    });
+
+    if (!student) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+
+    // Check if student already has biometric enrolled
+    if (student.biometricEnrolledAt) {
+      res.status(400).json({ error: "Student already has biometric enrolled" });
+      return;
+    }
+
+    // Generate secure token
+    const crypto = require('crypto');
+    const enrollmentToken = crypto.randomBytes(32).toString('hex');
+
+    // Calculate expiration
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + parseInt(expiresInHours.toString()));
+
+    // Create enrollment link record
+    const enrollmentLink = await prisma.attendanceLink.create({
+      data: {
+        studentId: id,
+        enrollmentToken,
+        linkType: 'BIOMETRIC_ENROLLMENT',
+        maxUses: 1, // One-time use
+        usesCount: 0,
+        createdBy: req.user!.userId,
+        expiresAt,
+        linkToken: `enrollment_${enrollmentToken}`, // Provide required linkToken
+      },
+    });
+
+    // Generate enrollment URL
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const enrollmentUrl = `${baseUrl}/enroll-biometric?token=${enrollmentToken}`;
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: "GENERATE_BIOMETRIC_ENROLLMENT_LINK",
+        entity: "Student",
+        entityId: id,
+        details: {
+          indexNumber: student.indexNumber,
+          name: `${student.firstName} ${student.lastName}`,
+          expiresAt: expiresAt.toISOString(),
+          enrollmentUrl,
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    console.log("[GENERATE_BIOMETRIC_LINK] Link generated for:", student.indexNumber);
+
+    res.status(201).json({
+      message: "Biometric enrollment link generated successfully",
+      enrollmentLink: {
+        token: enrollmentToken,
+        url: enrollmentUrl,
+        expiresAt: expiresAt.toISOString(),
+        studentId: id,
+        studentName: `${student.firstName} ${student.lastName}`,
+      },
+    });
+  } catch (error) {
+    console.error("Generate biometric enrollment link error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Submit biometric enrollment data
+export const enrollBiometric = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { token, biometricTemplate, biometricProvider, biometricDeviceId } = req.body;
+
+    console.log("[ENROLL_BIOMETRIC] Enrollment attempt with token");
+
+    // Validate required fields
+    if (!token || !biometricTemplate || !biometricProvider || !biometricDeviceId) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    // Validate biometric provider
+    if (!isValidBiometricProvider(biometricProvider)) {
+      res.status(400).json({ error: "Invalid biometric provider" });
+      return;
+    }
+
+    // Find and validate enrollment link
+    const enrollmentLink = await prisma.attendanceLink.findFirst({
+      where: {
+        enrollmentToken: token,
+        linkType: 'BIOMETRIC_ENROLLMENT',
+        expiresAt: { gt: new Date() },
+        usesCount: { lt: prisma.attendanceLink.fields.maxUses },
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            indexNumber: true,
+            firstName: true,
+            lastName: true,
+            biometricEnrolledAt: true,
+          },
+        },
+      },
+    });
+
+    if (!enrollmentLink) {
+      res.status(400).json({ error: "Invalid or expired enrollment token" });
+      return;
+    }
+
+    if (!enrollmentLink.student) {
+      res.status(400).json({ error: "Invalid enrollment link - student not found" });
+      return;
+    }
+
+    // Check if student already has biometric enrolled
+    if (enrollmentLink.student.biometricEnrolledAt) {
+      res.status(400).json({ error: "Student already has biometric enrolled" });
+      return;
+    }
+
+    // Generate salt and hash the template
+    const biometricSalt = generateBiometricSalt();
+    const biometricTemplateHash = hashBiometricTemplate(biometricTemplate, biometricSalt);
+
+    // Update student with biometric data
+    const updatedStudent = await prisma.student.update({
+      where: { id: enrollmentLink.student!.id },
+      data: {
+        biometricTemplateHash,
+        biometricEnrolledAt: new Date(),
+        biometricDeviceId,
+        biometricProvider,
+      },
+    });
+
+    // Mark link as used
+    await prisma.attendanceLink.update({
+      where: { id: enrollmentLink.id },
+      data: { usesCount: { increment: 1 } },
+    });
+
+    // Log audit (no user context for public endpoint)
+    await prisma.auditLog.create({
+      data: {
+        action: "BIOMETRIC_ENROLLMENT_COMPLETED",
+        entity: "Student",
+        entityId: enrollmentLink.student!.id,
+        details: {
+          indexNumber: enrollmentLink.student!.indexNumber,
+          name: `${enrollmentLink.student!.firstName} ${enrollmentLink.student!.lastName}`,
+          biometricProvider,
+          enrollmentMethod: "SELF_SERVICE_LINK",
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    console.log("[ENROLL_BIOMETRIC] Enrollment completed for:", enrollmentLink.student!.indexNumber);
+
+    res.status(200).json({
+      message: "Biometric enrollment completed successfully",
+      student: {
+        id: updatedStudent.id,
+        indexNumber: updatedStudent.indexNumber,
+        name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+        biometricEnrolledAt: updatedStudent.biometricEnrolledAt,
+      },
+    });
+  } catch (error) {
+    console.error("Biometric enrollment error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

@@ -50,6 +50,7 @@ model User {
   
   // Class Attendance relations
   classAttendanceRecords ClassAttendanceRecord[]
+  createdAttendanceLinks AttendanceLink[]
 }
 
 // Password Reset Tokens
@@ -113,11 +114,54 @@ model Student {
   level       Int
   qrCode      String   @unique
   profilePicture String // Path to profile picture file
+
+  // NEW: Biometric Fields
+  biometricTemplateHash String?  @unique  // Hashed biometric template
+  biometricEnrolledAt   DateTime?          // When biometrics were enrolled
+  biometricDeviceId     String?            // Device used for enrollment
+  biometricProvider     String?            // 'TOUCHID', 'FACEID', 'FINGERPRINT'
+
   createdAt   DateTime @default(now())
   
   attendances       ExamAttendance[]
   classAttendances  ClassAttendance[]
   incidents         Incident[]
+  enrollmentLinks   AttendanceLink[] @relation("enrollmentLinks")
+
+  @@index([biometricTemplateHash])
+}
+
+// Attendance Link for Self-Service Biometric Enrollment
+model AttendanceLink {
+  id                String   @id @default(uuid())
+  recordId          String?  // Links to ClassAttendanceRecord (optional for enrollment)
+  linkToken         String   @unique  // Short-lived unique token
+  createdBy         String   // User who created the link
+  createdByUser     User     @relation(fields: [createdBy], references: [id])
+
+  // NEW: Enrollment Support
+  studentId         String?  // For biometric enrollment links
+  student           Student? @relation("enrollmentLinks", fields: [studentId], references: [id])
+  enrollmentToken   String?  @unique  // Separate token for enrollment
+  linkType          String   @default("ATTENDANCE") // "ATTENDANCE" or "BIOMETRIC_ENROLLMENT"
+
+  // Security Constraints
+  geolocation       Json?    // {lat, lng, radius} - origin device location
+  networkIdentifier String?  // IP/subnet for local network validation
+  expiresAt         DateTime // Link validity (e.g., 30 mins)
+  maxUses           Int?     // Optional: limit total uses
+  usesCount         Int      @default(0)
+
+  // Status
+  isActive          Boolean  @default(true)
+  deactivatedAt     DateTime?
+
+  createdAt         DateTime @default(now())
+
+  @@index([linkToken])
+  @@index([recordId, isActive])
+  @@index([enrollmentToken])
+  @@index([studentId, linkType])
 }
 
 // Exam Sessions
@@ -258,7 +302,7 @@ enum TransferStatus {
 // Audit Trail
 model AuditLog {
   id        String   @id @default(uuid())
-  userId    String
+  userId    String?  // Optional for public actions
   action    String
   entity    String
   entityId  String
@@ -266,7 +310,7 @@ model AuditLog {
   ipAddress String?
   timestamp DateTime @default(now())
   
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
   
   @@index([entityId])
   @@index([timestamp])
@@ -326,6 +370,12 @@ model ClassAttendance {
   lecturerConfirmed Boolean               @default(true) // Auto-confirmed for QR scans, manual for manual entries
   confirmedAt      DateTime?
 
+  // NEW: Method tracking
+  verificationMethod   AttendanceMethod?  @default(QR_CODE)
+  deviceId             String?           // Device used for verification
+  linkTokenUsed        String?           // If via self-service link
+  biometricConfidence  Float?            // Quality score (0-1)
+
   record           ClassAttendanceRecord   @relation(fields: [recordId], references: [id], onDelete: Cascade)
   student          Student                 @relation(fields: [studentId], references: [id])
 
@@ -345,6 +395,13 @@ enum ClassAttendanceStatus {
   PRESENT
   LATE
   EXCUSED
+}
+
+enum AttendanceMethod {
+  QR_CODE
+  MANUAL_INDEX
+  BIOMETRIC_FINGERPRINT
+  BIOMETRIC_FACE
 }
 
 // Refresh Tokens

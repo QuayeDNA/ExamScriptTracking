@@ -6,6 +6,7 @@ import {
   updateAttendanceSession,
   createAttendanceRecord,
   recordStudentAttendance,
+  recordBiometricAttendance,
   confirmAttendance,
   endAttendanceRecord,
   getAttendanceRecords,
@@ -43,6 +44,13 @@ router.post(
   "/records/attendance",
   authorize(Role.ADMIN, Role.CLASS_REP),
   recordStudentAttendance
+);
+
+// Record biometric attendance
+router.post(
+  "/records/attendance/biometric",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  recordBiometricAttendance
 );
 
 // Confirm manual attendance entry

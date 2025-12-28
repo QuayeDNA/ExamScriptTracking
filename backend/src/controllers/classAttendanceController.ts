@@ -7,6 +7,10 @@ import {
   emitClassAttendanceStarted,
   emitClassAttendanceEnded,
 } from "../socket/handlers/classAttendanceEvents";
+import {
+  hashBiometricTemplate,
+  verifyBiometricTemplate
+} from "../utils/biometricHash";
 
 const prisma = new PrismaClient();
 
@@ -32,6 +36,16 @@ const createAttendanceRecordSchema = z.object({
 const recordStudentAttendanceSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
   studentId: z.string().min(1, "Student ID is required"), // Index number or QR data
+});
+
+const recordBiometricAttendanceSchema = z.object({
+  recordId: z.string().uuid("Invalid record ID"),
+  biometricTemplate: z.string().min(1, "Biometric template is required"),
+  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT'], {
+    errorMap: () => ({ message: "Invalid biometric provider" })
+  }),
+  deviceId: z.string().min(1, "Device ID is required"),
+  linkToken: z.string().optional(), // For self-service mode
 });
 
 const confirmAttendanceSchema = z.object({
@@ -362,6 +376,7 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
         recordId: validatedData.recordId,
         studentId: student.id,
         lecturerConfirmed: isQrScan, // Auto-confirm QR scans, manual entries need confirmation
+        verificationMethod: isQrScan ? 'QR_CODE' : 'MANUAL_INDEX',
       },
       include: {
         student: {
@@ -396,6 +411,7 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
       totalStudents: updatedRecord.totalStudents,
       courseCode: record.courseCode ?? undefined,
       courseName: record.courseName ?? undefined,
+      verificationMethod: isQrScan ? 'QR_CODE' : 'MANUAL_INDEX',
     });
 
     res.json({
@@ -405,6 +421,163 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Record student attendance error:", error);
     res.status(500).json({ error: "Failed to record student attendance" });
+  }
+};
+
+/**
+ * Record biometric attendance
+ */
+export const recordBiometricAttendance = async (req: Request, res: Response) => {
+  try {
+    const validatedData = recordBiometricAttendanceSchema.parse(req.body);
+
+    console.log("[BIOMETRIC_ATTENDANCE] Attempting biometric verification");
+
+    // Verify record exists and is in progress
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id: validatedData.recordId },
+    });
+
+    if (!record || record.status !== "IN_PROGRESS") {
+      return res
+        .status(400)
+        .json({ error: "Invalid or completed attendance record" });
+    }
+
+    // Validate link token if provided (self-service mode)
+    if (validatedData.linkToken) {
+      const link = await prisma.attendanceLink.findUnique({
+        where: { linkToken: validatedData.linkToken },
+      });
+
+      if (!link || !link.isActive || link.expiresAt < new Date()) {
+        return res.status(400).json({ error: "Invalid or expired link token" });
+      }
+
+      // Check if link has remaining uses
+      if (link.maxUses && link.usesCount >= link.maxUses) {
+        return res.status(400).json({ error: "Link usage limit exceeded" });
+      }
+    }
+
+    // Find student by biometric template match
+    // Generate hash of the provided template to match against stored hashes
+    const biometricSalt = "system_salt"; // In production, this should be configurable
+    const templateHash = hashBiometricTemplate(validatedData.biometricTemplate, biometricSalt);
+
+    const student = await prisma.student.findFirst({
+      where: {
+        biometricTemplateHash: templateHash,
+        biometricProvider: validatedData.biometricProvider,
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({
+        error: "Biometric verification failed. Student not found or not enrolled.",
+      });
+    }
+
+    // Check if student already recorded
+    const existingAttendance = await prisma.classAttendance.findUnique({
+      where: {
+        recordId_studentId: {
+          recordId: validatedData.recordId,
+          studentId: student.id,
+        },
+      },
+    });
+
+    if (existingAttendance) {
+      return res
+        .status(400)
+        .json({ error: "Student already recorded for this session" });
+    }
+
+    // Determine verification method based on link token
+    const verificationMethod = validatedData.linkToken ? 'BIOMETRIC_FINGERPRINT' : 'BIOMETRIC_FINGERPRINT';
+
+    const attendance = await prisma.classAttendance.create({
+      data: {
+        recordId: validatedData.recordId,
+        studentId: student.id,
+        lecturerConfirmed: true, // Biometric verification is auto-confirmed
+        verificationMethod,
+        deviceId: validatedData.deviceId,
+        linkTokenUsed: validatedData.linkToken,
+        biometricConfidence: 1.0, // Full confidence for successful match
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            indexNumber: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    // Update total students count
+    const updatedRecord = await prisma.classAttendanceRecord.update({
+      where: { id: validatedData.recordId },
+      data: {
+        totalStudents: {
+          increment: 1,
+        },
+      },
+    });
+
+    // Update link usage count if link token was used
+    if (validatedData.linkToken) {
+      await prisma.attendanceLink.update({
+        where: { linkToken: validatedData.linkToken },
+        data: { usesCount: { increment: 1 } },
+      });
+    }
+
+    // Emit socket event for student scanned
+    emitClassAttendanceScanned(io, {
+      recordId: validatedData.recordId,
+      sessionId: record.sessionId,
+      studentId: student.id,
+      studentName: `${student.firstName} ${student.lastName}`,
+      indexNumber: student.indexNumber,
+      scanTime: attendance.scanTime.toISOString(),
+      totalStudents: updatedRecord.totalStudents,
+      courseCode: record.courseCode ?? undefined,
+      courseName: record.courseName ?? undefined,
+      verificationMethod,
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        action: "BIOMETRIC_ATTENDANCE_RECORDED",
+        entity: "ClassAttendance",
+        entityId: attendance.id,
+        details: {
+          recordId: validatedData.recordId,
+          studentId: student.id,
+          indexNumber: student.indexNumber,
+          verificationMethod,
+          deviceId: validatedData.deviceId,
+          linkTokenUsed: validatedData.linkToken ? true : false,
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    console.log("[BIOMETRIC_ATTENDANCE] Successfully recorded for:", student.indexNumber);
+
+    res.json({
+      attendance,
+      message: "Biometric attendance recorded successfully",
+    });
+  } catch (error) {
+    console.error("Record biometric attendance error:", error);
+    res.status(500).json({ error: "Failed to record biometric attendance" });
   }
 };
 
