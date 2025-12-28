@@ -50,7 +50,6 @@ import { MobileAttendancePage } from "@/pages/mobile/MobileAttendancePage";
 import { MobileBatchDetailsPage } from "@/pages/mobile/MobileBatchDetailsPage";
 import { MobileReportIncidentPage } from "@/pages/mobile/MobileReportIncidentPage";
 import { MobileIncidentDetailsPage } from "@/pages/mobile/MobileIncidentDetailsPage";
-import { MobileStudentAttendancePage } from "@/pages/mobile/MobileStudentAttendancePage";
 import { MobileRecentActivityPage } from "@/pages/mobile/MobileRecentActivityPage";
 import { MobileInitiateTransferPage } from "@/pages/mobile/MobileInitiateTransferPage";
 import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferPage";
@@ -187,10 +186,6 @@ function App() {
                     <Route
                       path="incident-details/:id"
                       element={<MobileIncidentDetailsPage />}
-                    />
-                    <Route
-                      path="student-attendance"
-                      element={<MobileStudentAttendancePage />}
                     />
                     <Route
                       path="recent-activity"

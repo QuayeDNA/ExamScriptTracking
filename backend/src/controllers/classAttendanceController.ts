@@ -687,8 +687,6 @@ export const getAttendanceRecordById = async (req: Request, res: Response) => {
             scanTime: true,
             lecturerConfirmed: true,
             confirmedAt: true,
-          },
-          include: {
             student: {
               select: {
                 id: true,

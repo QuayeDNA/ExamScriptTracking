@@ -195,9 +195,7 @@ export const MobileAttendancePage = () => {
                     key={session.id}
                     className="cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() =>
-                      navigate(
-                        `/mobile/student-attendance?sessionId=${session.id}`
-                      )
+                      navigate('/mobile/attendance')
                     }
                   >
                     <CardContent className="p-4">

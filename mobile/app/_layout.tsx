@@ -170,14 +170,6 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
-            name="student-attendance"
-            options={{
-              headerShown: true,
-              title: "Student Attendance",
-              presentation: "card",
-            }}
-          />
-          <Stack.Screen
             name="initiate-transfer"
             options={{
               headerShown: true,

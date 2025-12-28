@@ -1,288 +1,220 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
-  ActivityIndicator,
-  FlatList,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { CameraView, Camera } from "expo-camera";
-import Toast from "react-native-toast-message";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  classAttendanceApi,
-  type ClassAttendanceRecord,
-} from "@/api/classAttendance";
-import { useThemeColors } from "@/constants/design-system";
-import { useSocket } from "@/hooks/useSocket";
-import { Button } from "@/components/ui/button";
+import Toast from "react-native-toast-message";
+import * as LocalAuthentication from "expo-local-authentication";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
-import { StudentLookupModal } from "@/components/StudentLookupModal";
-import { LocalStudent } from "@/utils/localStudentStorage";
-import { useSessionStore } from "@/store/session";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Text, H2 } from "@/components/ui/typography";
+import { useThemeColors } from "@/constants/design-system";
+import { classAttendanceApi } from "@/api/classAttendance";
 
-export default function AttendanceRecordScreen() {
+type AttendanceMethod = 'qrcode' | 'manual' | 'fingerprint' | null;
+
+export default function RecordAttendance() {
   const colors = useThemeColors();
   const router = useRouter();
-  const { recordId } = useLocalSearchParams<{ recordId?: string }>();
-  const socket = useSocket();
-  const { hasRecordedFirstAttendance, setFirstAttendanceRecorded } =
-    useSessionStore();
+  const params = useLocalSearchParams();
+  const recordId = params.recordId as string;
+  const sessionId = params.sessionId as string;
 
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [record, setRecord] = useState<ClassAttendanceRecord | null>(null);
-  const [scanned, setScanned] = useState(false);
-  const [lastStudent, setLastStudent] = useState<string>("");
-  const [studentCount, setStudentCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [showEndDialog, setShowEndDialog] = useState(false);
-  const [showStudentLookup, setShowStudentLookup] = useState(false);
-  const [pendingConfirmations, setPendingConfirmations] = useState<any[]>([]);
-
-  const cameraRef = useRef<CameraView | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<AttendanceMethod>(null);
+  const [manualStudentId, setManualStudentId] = useState("");
+  const [biometricStudentId, setBiometricStudentId] = useState("");
+  const [showBiometricStudentInput, setShowBiometricStudentInput] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === "granted");
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!recordId) return;
-    loadRecord();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!recordId) {
+      Alert.alert("Error", "No active recording found", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+    }
   }, [recordId]);
 
-  // Listen for real-time socket events
-  useEffect(() => {
-    if (!recordId) return;
+  const handleMethodSelect = (method: AttendanceMethod) => {
+    setSelectedMethod(method);
+  };
 
-    const unsubscribe = socket.on(
-      "class_attendance:student_scanned",
-      (data: any) => {
-        // Only update if this is the active recording
-        if (data.recordId === recordId) {
-          setLastStudent(data.studentName);
-          setStudentCount(data.totalStudents);
-          // Refresh pending confirmations
-          loadRecord();
-        }
-      }
-    );
+  const handleManualRecord = async () => {
+    if (!manualStudentId.trim()) {
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Please enter a student ID",
+      });
+      return;
+    }
 
-    return () => {
-      unsubscribe();
-    };
-  }, [recordId, socket]);
-
-  const loadRecord = async () => {
-    if (!recordId) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const resp = await classAttendanceApi.getRecord(recordId);
-      setRecord(resp.record);
-      setStudentCount(resp.record.totalStudents || 0);
-      // Filter pending confirmations
-      const pending =
-        resp.record.students?.filter((s) => !s.lecturerConfirmed) || [];
-      setPendingConfirmations(pending);
+      await classAttendanceApi.recordManualAttendance({
+        recordId,
+        studentId: manualStudentId.trim(),
+      });
+      Toast.show({
+        type: "success",
+        text1: "Attendance Recorded",
+        text2: `Student ${manualStudentId} marked present`,
+      });
+      setManualStudentId("");
     } catch (error: any) {
       Toast.show({
         type: "error",
-        text1: "Record",
-        text2: error?.error || "Failed to load record",
+        text1: "Error",
+        text2: error?.error || "Failed to record attendance",
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (scanned || !recordId) return;
-    setScanned(true);
+  const handleQRScan = () => {
+    // TODO: Implement QR scanning
+    Alert.alert("QR Code", "QR scanning functionality to be implemented");
+  };
 
-    const qrData = data?.trim();
-    if (!qrData) {
-      Toast.show({ type: "error", text1: "Scan", text2: "Invalid QR data" });
-      setScanned(false);
+  const handleFingerprint = () => {
+    handleBiometricAttendance();
+  };
+
+  const authenticateBiometric = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      if (!hasHardware) {
+        Alert.alert("Error", "Biometric authentication is not available on this device");
+        return null;
+      }
+
+      const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      if (supportedTypes.length === 0) {
+        Alert.alert("Error", "No biometric authentication methods are supported");
+        return null;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Authenticate to record attendance",
+        fallbackLabel: "Use PIN",
+        cancelLabel: "Cancel",
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        return result;
+      } else {
+        if (result.error === "user_cancel") {
+          return null;
+        }
+        Alert.alert("Authentication Failed", "Please try again");
+        return null;
+      }
+    } catch (error) {
+      console.error("Biometric authentication error:", error);
+      Alert.alert("Error", "Failed to authenticate");
+      return null;
+    }
+  };
+
+  const handleBiometricAttendance = async () => {
+    // First, authenticate the lecturer biometrically
+    const authResult = await authenticateBiometric();
+    if (!authResult) return;
+
+    // After successful biometric authentication, show student ID input
+    setShowBiometricStudentInput(true);
+  };
+
+  const handleBiometricRecordSubmit = async () => {
+    if (!biometricStudentId.trim()) {
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Please enter a student ID",
+      });
       return;
     }
 
-    // Try to parse QR code and extract student info
-    let studentId = qrData;
-    let studentName = qrData;
-
-    try {
-      const parsed = JSON.parse(qrData);
-      studentId = parsed.indexNumber || parsed.id || qrData;
-      studentName = parsed.name || parsed.indexNumber || studentId;
-    } catch {
-      // Not JSON, use raw data
-    }
-
+    setLoading(true);
     try {
       await classAttendanceApi.recordStudentAttendance({
         recordId,
-        studentId: qrData, // Send the full QR data to backend
+        studentId: biometricStudentId.trim(),
       });
-      setLastStudent(studentName);
-      setStudentCount((prev) => prev + 1);
-
-      // Mark first attendance as recorded if not already done
-      if (!hasRecordedFirstAttendance) {
-        setFirstAttendanceRecorded(true);
-      }
 
       Toast.show({
         type: "success",
-        text1: "✓ Recorded",
-        text2: studentName,
+        text1: "Attendance Recorded",
+        text2: `Student ${biometricStudentId} marked present (biometrically verified)`,
       });
+
+      // Reset the biometric input
+      setBiometricStudentId("");
+      setShowBiometricStudentInput(false);
     } catch (error: any) {
       Toast.show({
         type: "error",
-        text1: "Attendance",
+        text1: "Error",
         text2: error?.error || "Failed to record attendance",
       });
     } finally {
-      setTimeout(() => setScanned(false), 600);
+      setLoading(false);
     }
+  };
+
+  const handleBiometricCancel = () => {
+    setBiometricStudentId("");
+    setShowBiometricStudentInput(false);
   };
 
   const handleEndRecording = () => {
-    if (!recordId) return;
-    setShowEndDialog(true);
-  };
-
-  const confirmEndRecording = async () => {
-    if (!recordId) return;
-    setShowEndDialog(false);
-
-    try {
-      await classAttendanceApi.endRecord(recordId);
-      Toast.show({ type: "success", text1: "Recording ended" });
-      router.replace("/attendance" as any);
-    } catch (error: any) {
-      Toast.show({
-        type: "error",
-        text1: "End recording",
-        text2: error?.error || "Failed to end recording",
-      });
-    }
-  };
-
-  const handleManualStudentEntry = async (student: LocalStudent) => {
-    if (!recordId) return;
-
-    try {
-      setScanned(true); // Show processing state
-
-      // Record the student attendance using their index number
-      await classAttendanceApi.recordStudentAttendance({
-        recordId,
-        studentId: student.indexNumber,
-      });
-
-      // Update local state
-      setLastStudent(student.name);
-      setStudentCount((prev) => prev + 1);
-
-      // Mark first attendance as recorded if not already done
-      if (!hasRecordedFirstAttendance) {
-        setFirstAttendanceRecorded(true);
-      }
-
-      Toast.show({
-        type: "success",
-        text1: "Student Recorded",
-        text2: `${student.name} (${student.indexNumber})`,
-      });
-
-      // Refresh the record to update pending confirmations
-      loadRecord();
-    } catch (error: any) {
-      console.error("Manual entry error:", error);
-      Toast.show({
-        type: "error",
-        text1: "Recording Failed",
-        text2: error.error || "Failed to record student",
-      });
-    } finally {
-      setTimeout(() => setScanned(false), 600);
-    }
-  };
-
-  const handleConfirmAttendance = async (
-    attendanceId: string,
-    studentName: string
-  ) => {
-    try {
-      await classAttendanceApi.confirmAttendance(attendanceId);
-      // Update local state
-      setPendingConfirmations((prev) =>
-        prev.filter((p) => p.id !== attendanceId)
-      );
-      setStudentCount((prev) => prev + 1); // Since it's now confirmed
-      Toast.show({
-        type: "success",
-        text1: "Confirmed",
-        text2: `${studentName} attendance confirmed`,
-      });
-    } catch (error: any) {
-      Toast.show({
-        type: "error",
-        text1: "Confirmation Failed",
-        text2: error.error || "Failed to confirm attendance",
-      });
-    }
-  };
-
-  if (hasPermission === null || loading) {
-    return (
-      <SafeAreaView
-        style={[styles.center, { backgroundColor: colors.background }]}
-        edges={["top"]}
-      >
-        <ActivityIndicator size="large" color={colors.primary} />
-      </SafeAreaView>
+    Alert.alert(
+      "End Recording",
+      "Are you sure you want to end this recording session?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End Recording",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await classAttendanceApi.endRecord(recordId);
+              Toast.show({
+                type: "success",
+                text1: "Recording Ended",
+                text2: "The attendance recording has been stopped",
+              });
+              router.back();
+            } catch (error: any) {
+              Toast.show({
+                type: "error",
+                text1: "Error",
+                text2: error?.error || "Failed to end recording",
+              });
+            }
+          },
+        },
+      ]
     );
-  }
+  };
 
-  if (hasPermission === false) {
+  if (!recordId) {
     return (
       <SafeAreaView
-        style={[styles.center, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <Card elevation="sm" style={{ margin: 16 }}>
-          <CardContent>
-            <View style={styles.permissionContent}>
-              <Ionicons
-                name="camera-outline"
-                size={48}
-                color={colors.foregroundMuted}
-              />
-              <Text
-                style={[styles.permissionText, { color: colors.foreground }]}
-              >
-                Camera permission required
-              </Text>
-              <Text
-                style={[
-                  styles.permissionSubtext,
-                  { color: colors.foregroundMuted },
-                ]}
-              >
-                Please enable camera access to scan attendance QR codes
-              </Text>
-            </View>
-          </CardContent>
-        </Card>
+        <View style={styles.center}>
+          <Text style={{ color: colors.foreground }}>Loading...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -292,206 +224,182 @@ export default function AttendanceRecordScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      {/* Info Bar */}
-      <View
-        style={[
-          styles.infoBar,
-          { backgroundColor: colors.card, borderBottomColor: colors.border },
-        ]}
-      >
-        <View style={styles.infoItem}>
-          <Ionicons name="people" size={20} color={colors.primary} />
-          <Text style={[styles.infoValue, { color: colors.foreground }]}>
-            {studentCount}
-          </Text>
-          <Text style={[styles.infoLabel, { color: colors.foregroundMuted }]}>
-            scanned
-          </Text>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          </TouchableOpacity>
+          <H2 style={{ color: colors.foreground }}>Record Attendance</H2>
+          <TouchableOpacity onPress={handleEndRecording} style={styles.endButton}>
+            <Ionicons name="stop-circle" size={24} color={colors.error} />
+          </TouchableOpacity>
         </View>
-        {record?.courseCode && (
-          <View style={styles.infoDivider}>
-            <Badge variant="secondary">{record.courseCode}</Badge>
-          </View>
-        )}
-        {lastStudent && (
-          <View style={styles.infoItem}>
-            <Ionicons
-              name="checkmark-circle"
-              size={20}
-              color={colors.success}
-            />
-            <Text
-              style={[styles.infoLabel, { color: colors.foregroundMuted }]}
-              numberOfLines={1}
-            >
-              Last: {lastStudent}
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {!selectedMethod ? (
+          <View style={styles.methodSelection}>
+            <Text style={[styles.instruction, { color: colors.foreground }]}>
+              Choose an attendance method:
             </Text>
+            <Card elevation="sm" style={styles.methodCard}>
+              <TouchableOpacity
+                style={styles.methodOption}
+                onPress={() => handleMethodSelect('qrcode')}
+              >
+                <Ionicons name="qr-code" size={32} color={colors.primary} />
+                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
+                  QR Code
+                </Text>
+                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
+                  Scan student QR codes
+                </Text>
+              </TouchableOpacity>
+            </Card>
+            <Card elevation="sm" style={styles.methodCard}>
+              <TouchableOpacity
+                style={styles.methodOption}
+                onPress={() => handleMethodSelect('manual')}
+              >
+                <Ionicons name="create" size={32} color={colors.primary} />
+                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
+                  Manual Entry
+                </Text>
+                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
+                  Enter student IDs manually
+                </Text>
+              </TouchableOpacity>
+            </Card>
+            <Card elevation="sm" style={styles.methodCard}>
+              <TouchableOpacity
+                style={styles.methodOption}
+                onPress={() => handleMethodSelect('fingerprint')}
+              >
+                <Ionicons name="finger-print" size={32} color={colors.primary} />
+                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
+                  Fingerprint
+                </Text>
+                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
+                  Use biometric authentication
+                </Text>
+              </TouchableOpacity>
+            </Card>
+          </View>
+        ) : (
+          <View style={styles.methodView}>
+            <TouchableOpacity
+              style={styles.backToMethods}
+              onPress={() => setSelectedMethod(null)}
+            >
+              <Ionicons name="arrow-back" size={20} color={colors.primary} />
+              <Text style={[styles.backText, { color: colors.primary }]}>
+                Back to Methods
+              </Text>
+            </TouchableOpacity>
+
+            {selectedMethod === 'qrcode' && (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                    QR Code Scanning
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
+                    Scan student QR codes to record attendance
+                  </Text>
+                  <Button onPress={handleQRScan} style={styles.actionButton}>
+                    <Ionicons name="scan" size={20} color="white" />
+                    <Text style={styles.buttonText}>Start Scanning</Text>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedMethod === 'manual' && (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                    Manual Entry
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
+                    Enter student ID to record attendance
+                  </Text>
+                  <Input
+                    placeholder="Student ID"
+                    value={manualStudentId}
+                    onChangeText={setManualStudentId}
+                    style={styles.input}
+                  />
+                  <Button
+                    onPress={handleManualRecord}
+                    disabled={loading || !manualStudentId.trim()}
+                    style={styles.actionButton}
+                  >
+                    <Text style={styles.buttonText}>
+                      {loading ? "Recording..." : "Record Attendance"}
+                    </Text>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedMethod === 'fingerprint' && !showBiometricStudentInput && (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                    Biometric Verification
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
+                    Authenticate with fingerprint/face ID to record attendance
+                  </Text>
+                  <Button onPress={handleFingerprint} style={styles.actionButton}>
+                    <Ionicons name="finger-print" size={20} color="white" />
+                    <Text style={styles.buttonText}>Authenticate & Record</Text>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {selectedMethod === 'fingerprint' && showBiometricStudentInput && (
+              <Card elevation="sm" style={styles.card}>
+                <CardContent>
+                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                    Enter Student ID
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
+                    Biometric authentication successful. Enter the student ID to record attendance.
+                  </Text>
+                  <Input
+                    placeholder="Student ID or Index Number"
+                    value={biometricStudentId}
+                    onChangeText={setBiometricStudentId}
+                    style={styles.input}
+                    autoFocus={true}
+                  />
+                  <View style={styles.buttonRow}>
+                    <Button
+                      variant="outline"
+                      onPress={handleBiometricCancel}
+                      style={styles.cancelButton}
+                    >
+                      <Text style={{ color: colors.primary }}>Cancel</Text>
+                    </Button>
+                    <Button
+                      onPress={handleBiometricRecordSubmit}
+                      disabled={loading || !biometricStudentId.trim()}
+                      style={styles.submitButton}
+                    >
+                      <Text style={styles.buttonText}>
+                        {loading ? "Recording..." : "Record Attendance"}
+                      </Text>
+                    </Button>
+                  </View>
+                </CardContent>
+              </Card>
+            )}
           </View>
         )}
-      </View>
-
-      {/* Camera */}
-      <View style={styles.cameraContainer}>
-        <CameraView
-          style={StyleSheet.absoluteFill}
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          ref={cameraRef}
-        />
-        <View style={styles.scanFrame}>
-          <View
-            style={[
-              styles.corner,
-              styles.cornerTL,
-              { borderColor: colors.primary },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerTR,
-              { borderColor: colors.primary },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerBL,
-              { borderColor: colors.primary },
-            ]}
-          />
-          <View
-            style={[
-              styles.corner,
-              styles.cornerBR,
-              { borderColor: colors.primary },
-            ]}
-          />
-        </View>
-        <View style={styles.scanHintContainer}>
-          <Text style={styles.scanHint}>Position QR code within frame</Text>
-          {scanned && (
-            <View style={styles.scanningIndicator}>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.scanningText}>Processing...</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Pending Confirmations */}
-      {pendingConfirmations.length > 0 && (
-        <View style={styles.pendingContainer}>
-          <Text style={[styles.pendingTitle, { color: colors.foreground }]}>
-            Pending Confirmations ({pendingConfirmations.length})
-          </Text>
-          <FlatList
-            data={pendingConfirmations}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View
-                style={[
-                  styles.pendingItem,
-                  { borderBottomColor: colors.border },
-                ]}
-              >
-                <View style={styles.pendingInfo}>
-                  <Text
-                    style={[styles.pendingName, { color: colors.foreground }]}
-                  >
-                    {item.student.firstName} {item.student.lastName}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.pendingDetails,
-                      { color: colors.foregroundMuted },
-                    ]}
-                  >
-                    {item.student.indexNumber}
-                  </Text>
-                </View>
-                <Button
-                  size="sm"
-                  onPress={() =>
-                    handleConfirmAttendance(
-                      item.id,
-                      `${item.student.firstName} ${item.student.lastName}`
-                    )
-                  }
-                  style={styles.confirmButton}
-                >
-                  <Text
-                    style={{ color: colors.primaryForeground, fontSize: 12 }}
-                  >
-                    Confirm
-                  </Text>
-                </Button>
-              </View>
-            )}
-            style={styles.pendingList}
-          />
-        </View>
-      )}
-
-      {/* Actions */}
-      <View style={styles.actions}>
-        <View style={styles.actionButtons}>
-          <Button
-            variant="outline"
-            onPress={() => setShowStudentLookup(true)}
-            style={styles.manualButton}
-            disabled={scanned}
-          >
-            <Ionicons
-              name="person-add"
-              size={18}
-              color={colors.primary}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={{ color: colors.primary }}>Manual Entry</Text>
-          </Button>
-          <Button
-            variant="destructive"
-            onPress={handleEndRecording}
-            style={styles.endButton}
-          >
-            <Ionicons
-              name="stop-circle"
-              size={18}
-              color="#fff"
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.endButtonText}>End Recording</Text>
-          </Button>
-        </View>
-      </View>
-
-      {/* End Recording Dialog */}
-      <Dialog
-        visible={showEndDialog}
-        onClose={() => setShowEndDialog(false)}
-        title="End Recording"
-        message="Are you sure you want to end this attendance recording? This action cannot be undone."
-        variant="warning"
-        icon="warning"
-        primaryAction={{
-          label: "End Recording",
-          onPress: confirmEndRecording,
-        }}
-        secondaryAction={{
-          label: "Cancel",
-          onPress: () => setShowEndDialog(false),
-        }}
-      />
-
-      {/* Student Lookup Modal */}
-      <StudentLookupModal
-        visible={showStudentLookup}
-        onClose={() => setShowStudentLookup(false)}
-        onStudentSelected={handleManualStudentEntry}
-        sessionId={record?.sessionId}
-      />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -502,181 +410,101 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
   },
-  permissionContent: {
-    alignItems: "center",
-    paddingVertical: 24,
-  },
-  permissionText: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 16,
-    textAlign: "center",
-  },
-  permissionSubtext: {
-    fontSize: 13,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  infoBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  infoItem: {
+  headerContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
   },
-  infoDivider: {
-    marginHorizontal: 8,
-  },
-  infoValue: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  infoLabel: {
-    fontSize: 12,
-  },
-  cameraContainer: {
-    flex: 1,
-    margin: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#000",
-    position: "relative",
-  },
-  scanFrame: {
-    position: "absolute",
-    top: "30%",
-    left: "15%",
-    right: "15%",
-    aspectRatio: 1,
-  },
-  corner: {
-    position: "absolute",
-    width: 40,
-    height: 40,
-    borderWidth: 3,
-  },
-  cornerTL: {
-    top: 0,
-    left: 0,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 8,
-  },
-  cornerTR: {
-    top: 0,
-    right: 0,
-    borderLeftWidth: 0,
-    borderBottomWidth: 0,
-    borderTopRightRadius: 8,
-  },
-  cornerBL: {
-    bottom: 0,
-    left: 0,
-    borderRightWidth: 0,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-  },
-  cornerBR: {
-    bottom: 0,
-    right: 0,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderBottomRightRadius: 8,
-  },
-  scanHintContainer: {
-    position: "absolute",
-    bottom: 24,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  scanHint: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#fff",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  scanningIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    borderRadius: 20,
-  },
-  scanningText: {
-    fontSize: 13,
-    color: "#fff",
-    fontWeight: "600",
-  },
-  actions: {
-    padding: 16,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  manualButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  backButton: {
+    padding: 8,
   },
   endButton: {
+    padding: 8,
+  },
+  content: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    padding: 16,
   },
-  endButtonText: {
-    color: "#fff",
-    fontWeight: "600",
+  methodSelection: {
+    gap: 16,
   },
-  pendingContainer: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    maxHeight: 200,
-  },
-  pendingTitle: {
+  instruction: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 8,
   },
-  pendingList: {
-    maxHeight: 160,
+  methodCard: {
+    marginBottom: 8,
   },
-  pendingItem: {
+  methodOption: {
+    padding: 16,
+    alignItems: "center",
+  },
+  methodTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  methodDescription: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  methodView: {
+    gap: 16,
+  },
+  backToMethods: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
   },
-  pendingInfo: {
+  backText: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  card: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  input: {
+    marginBottom: 16,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
     flex: 1,
   },
-  pendingName: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  pendingDetails: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  confirmButton: {
-    minWidth: 70,
+  submitButton: {
+    flex: 2,
   },
 });

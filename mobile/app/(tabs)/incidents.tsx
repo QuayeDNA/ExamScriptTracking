@@ -17,7 +17,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
-import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { IncidentCard, StatsCard } from "@/components/IncidentComponents";

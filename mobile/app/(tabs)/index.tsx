@@ -16,7 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth";
 import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
-import { H1, H2, H3, Text } from "@/components/ui/typography";
+import { H1, H3, Text } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import {
   getUserActivity,
