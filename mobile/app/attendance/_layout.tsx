@@ -1,19 +1,40 @@
 import { Tabs } from 'expo-router';
 import { useThemeColors } from '@/constants/design-system';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, View, Text as RNText } from 'react-native';
 import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/api/auth';
 import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
+
+const DEVICE_NAME_KEY = "attendance_device_name";
 
 export default function AttendanceLayout() {
   const colors = useThemeColors();
   const router = useRouter();
+  const { logout: storeLogout } = useAuthStore();
+  const [deviceName, setDeviceName] = useState<string>('');
+
+  useEffect(() => {
+    const loadDeviceName = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(DEVICE_NAME_KEY);
+        if (stored) {
+          setDeviceName(stored);
+        }
+      } catch (error) {
+        console.warn('Failed to load device name:', error);
+      }
+    };
+    loadDeviceName();
+  }, []);
 
   const handleLogout = async () => {
     try {
       await authApi.logout();
+      storeLogout();
       router.replace('/login');
       Toast.show({
         type: 'success',
@@ -28,6 +49,27 @@ export default function AttendanceLayout() {
       });
     }
   };
+
+  const DashboardHeaderTitle = () => (
+    <View style={{ alignItems: 'center' }}>
+      <RNText style={{ 
+        color: colors.foreground, 
+        fontSize: 17, 
+        fontWeight: '600' 
+      }}>
+        Dashboard
+      </RNText>
+      {deviceName ? (
+        <RNText style={{ 
+          color: colors.foregroundMuted, 
+          fontSize: 12, 
+          marginTop: 2 
+        }}>
+          {deviceName}
+        </RNText>
+      ) : null}
+    </View>
+  );
 
   return (
     <Tabs
@@ -51,6 +93,7 @@ export default function AttendanceLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
+          headerTitle: () => <DashboardHeaderTitle />,
           headerRight: () => (
             <TouchableOpacity
               onPress={handleLogout}
@@ -76,6 +119,15 @@ export default function AttendanceLayout() {
           title: 'History',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="file-tray-full-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />

@@ -11,9 +11,9 @@
  * npm run seed:prod
  *
  * Environment Variables:
- * - SUPER_ADMIN_EMAIL (default: superadmin@examtrack.com)
+ * - SUPER_ADMIN_EMAIL (default: superadmin@elms.com)
  * - SUPER_ADMIN_PASSWORD (default: SuperAdmin@123)
- * - CLASS_REP_EMAIL (default: attendance@examtrack.com)
+ * - CLASS_REP_EMAIL (default: attendance@elms.com)
  * - CLASS_REP_PASSWORD (default: Attendance@123)
  */
 

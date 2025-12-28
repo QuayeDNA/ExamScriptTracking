@@ -1,164 +1,239 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   View,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
+  TextInput,
+  ActivityIndicator,
+  Modal,
+  FlatList,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { CameraView, Camera } from "expo-camera";
 import Toast from "react-native-toast-message";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Text, H2 } from "@/components/ui/typography";
-import { useThemeColors } from "@/constants/design-system";
+import { Text } from "@/components/ui/typography";
+import { useThemeColors, BorderRadius, Spacing, Typography, Shadows } from "@/constants/design-system";
 import { classAttendanceApi } from "@/api/classAttendance";
+import type { ClassAttendanceRecord } from "@/api/classAttendance";
 
-type AttendanceMethod = 'qrcode' | 'manual' | 'fingerprint' | null;
+type AttendanceMethod = "qrcode" | "manual" | "biometric";
+
+interface RecordedStudent {
+  id: string;
+  indexNumber: string;
+  name: string;
+  scanTime: string;
+  method: AttendanceMethod;
+  confirmed: boolean;
+}
 
 export default function RecordAttendance() {
   const colors = useThemeColors();
   const router = useRouter();
   const params = useLocalSearchParams();
   const recordId = params.recordId as string;
-  const sessionId = params.sessionId as string;
 
-  const [selectedMethod, setSelectedMethod] = useState<AttendanceMethod>(null);
-  const [manualStudentId, setManualStudentId] = useState("");
-  const [biometricStudentId, setBiometricStudentId] = useState("");
-  const [showBiometricStudentInput, setShowBiometricStudentInput] = useState(false);
+  const [activeMethod, setActiveMethod] = useState<AttendanceMethod | null>(null);
+  const [record, setRecord] = useState<ClassAttendanceRecord | null>(null);
+  const [recordedStudents, setRecordedStudents] = useState<RecordedStudent[]>([]);
+  const [showStudentsList, setShowStudentsList] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Manual entry state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Biometric state
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  // QR Scanner state
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     if (!recordId) {
       Alert.alert("Error", "No active recording found", [
-        { text: "OK", onPress: () => router.back() }
+        { text: "OK", onPress: () => router.back() },
       ]);
-    }
-  }, [recordId]);
-
-  const handleMethodSelect = (method: AttendanceMethod) => {
-    setSelectedMethod(method);
-  };
-
-  const handleManualRecord = async () => {
-    if (!manualStudentId.trim()) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please enter a student ID",
-      });
       return;
     }
+    loadRecord();
+    checkBiometricSupport();
+    requestCameraPermission();
+  }, [recordId]);
 
-    setLoading(true);
+  const loadRecord = useCallback(async () => {
     try {
-      await classAttendanceApi.recordManualAttendance({
-        recordId,
-        studentId: manualStudentId.trim(),
-      });
-      Toast.show({
-        type: "success",
-        text1: "Attendance Recorded",
-        text2: `Student ${manualStudentId} marked present`,
-      });
-      setManualStudentId("");
+      const { record: fetchedRecord } = await classAttendanceApi.getRecord(recordId);
+      setRecord(fetchedRecord);
+      
+      // Transform students to RecordedStudent format
+      if (fetchedRecord.students) {
+        const students = fetchedRecord.students.map((s) => ({
+          id: s.id,
+          indexNumber: s.student.indexNumber,
+          name: `${s.student.firstName} ${s.student.lastName}`,
+          scanTime: s.scanTime,
+          method: "manual" as AttendanceMethod, // Default, would come from backend
+          confirmed: s.lecturerConfirmed,
+        }));
+        setRecordedStudents(students);
+      }
     } catch (error: any) {
       Toast.show({
         type: "error",
         text1: "Error",
-        text2: error?.error || "Failed to record attendance",
+        text2: error?.error || "Failed to load record",
+      });
+    }
+  }, [recordId]);
+
+  const checkBiometricSupport = async () => {
+    const hasHardware = await LocalAuthentication.hasHardwareAsync();
+    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+    setBiometricAvailable(hasHardware && isEnrolled);
+  };
+
+  const requestCameraPermission = async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    setHasCameraPermission(status === 'granted');
+  };
+
+  // QR Code Scanning
+  const handleQRScan = async (qrData: string) => {
+    setLoading(true);
+    try {
+      // Validate QR data is not empty
+      if (!qrData || qrData.trim() === '') {
+        throw new Error("Empty QR code data");
+      }
+
+      // The QR data should be a JSON string containing student information
+      let data;
+      try {
+        data = JSON.parse(qrData);
+      } catch (parseError) {
+        throw new Error("Invalid QR code format");
+      }
+      
+      // Extract student identifier (index number is required)
+      const studentIdentifier = data.indexNumber || data.id;
+      
+      if (!studentIdentifier) {
+        throw new Error("Invalid QR code: missing student identifier");
+      }
+
+      await classAttendanceApi.recordStudentAttendance({
+        recordId,
+        studentId: qrData, // Send the full JSON string, backend will parse it
+      });
+
+      // Add to recorded students with data from QR
+      const newStudent: RecordedStudent = {
+        id: data.id || studentIdentifier,
+        indexNumber: data.indexNumber || studentIdentifier,
+        name: data.name || 'Student',
+        scanTime: new Date().toISOString(),
+        method: "qrcode",
+        confirmed: true,
+      };
+      setRecordedStudents((prev) => [newStudent, ...prev]);
+
+      Toast.show({
+        type: "success",
+        text1: "Attendance Recorded",
+        text2: `${newStudent.name} marked present`,
+      });
+      
+      // Close scanner after successful scan
+      setShowQRScanner(false);
+    } catch (error: any) {
+      console.error('QR Scan error:', error);
+      Toast.show({
+        type: "error",
+        text1: "Scan Failed",
+        text2: error.message || "Failed to record attendance",
       });
     } finally {
       setLoading(false);
+      setIsScanning(false);
     }
   };
 
-  const handleQRScan = () => {
-    // TODO: Implement QR scanning
-    Alert.alert("QR Code", "QR scanning functionality to be implemented");
-  };
-
-  const handleFingerprint = () => {
-    handleBiometricAttendance();
-  };
-
-  const authenticateBiometric = async () => {
-    try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      if (!hasHardware) {
-        Alert.alert("Error", "Biometric authentication is not available on this device");
-        return null;
-      }
-
-      const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      if (supportedTypes.length === 0) {
-        Alert.alert("Error", "No biometric authentication methods are supported");
-        return null;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Authenticate to record attendance",
-        fallbackLabel: "Use PIN",
-        cancelLabel: "Cancel",
-        disableDeviceFallback: false,
-      });
-
-      if (result.success) {
-        return result;
-      } else {
-        if (result.error === "user_cancel") {
-          return null;
-        }
-        Alert.alert("Authentication Failed", "Please try again");
-        return null;
-      }
-    } catch (error) {
-      console.error("Biometric authentication error:", error);
-      Alert.alert("Error", "Failed to authenticate");
-      return null;
-    }
-  };
-
-  const handleBiometricAttendance = async () => {
-    // First, authenticate the lecturer biometrically
-    const authResult = await authenticateBiometric();
-    if (!authResult) return;
-
-    // After successful biometric authentication, show student ID input
-    setShowBiometricStudentInput(true);
-  };
-
-  const handleBiometricRecordSubmit = async () => {
-    if (!biometricStudentId.trim()) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please enter a student ID",
-      });
+  // Manual Search
+  const searchStudents = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
       return;
     }
 
+    setSearching(true);
+    try {
+      // TODO: Implement backend search endpoint
+      // const results = await classAttendanceApi.searchStudents(query);
+      // setSearchResults(results);
+      
+      // Mock implementation for now
+      setTimeout(() => {
+        setSearchResults([
+          {
+            id: "1",
+            indexNumber: "20230001",
+            firstName: "John",
+            lastName: "Doe",
+            program: "Computer Science",
+            level: 300,
+          },
+        ]);
+        setSearching(false);
+      }, 500);
+    } catch (error) {
+      setSearching(false);
+      setSearchResults([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      searchStudents(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(debounce);
+  }, [searchQuery, searchStudents]);
+
+  const handleManualRecord = async (student: any) => {
     setLoading(true);
     try {
       await classAttendanceApi.recordStudentAttendance({
         recordId,
-        studentId: biometricStudentId.trim(),
+        studentId: student.id,
       });
+
+      const newStudent: RecordedStudent = {
+        id: student.id,
+        indexNumber: student.indexNumber,
+        name: `${student.firstName} ${student.lastName}`,
+        scanTime: new Date().toISOString(),
+        method: "manual",
+        confirmed: false, // Requires confirmation
+      };
+      setRecordedStudents((prev) => [newStudent, ...prev]);
 
       Toast.show({
         type: "success",
         text1: "Attendance Recorded",
-        text2: `Student ${biometricStudentId} marked present (biometrically verified)`,
+        text2: `${newStudent.name} marked present (pending confirmation)`,
       });
 
-      // Reset the biometric input
-      setBiometricStudentId("");
-      setShowBiometricStudentInput(false);
+      setSearchQuery("");
+      setSearchResults([]);
     } catch (error: any) {
       Toast.show({
         type: "error",
@@ -170,9 +245,74 @@ export default function RecordAttendance() {
     }
   };
 
-  const handleBiometricCancel = () => {
-    setBiometricStudentId("");
-    setShowBiometricStudentInput(false);
+  // Biometric Attendance
+  const handleBiometricScan = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Scan fingerprint to mark attendance",
+        cancelLabel: "Cancel",
+        disableDeviceFallback: false,
+      });
+
+      if (!result.success) {
+        if (result.error !== "user_cancel") {
+          Toast.show({
+            type: "error",
+            text1: "Authentication Failed",
+            text2: "Please try again",
+          });
+        }
+        return;
+      }
+
+      // TODO: Get biometric hash and send to backend
+      // For now, prompt for student ID
+      Alert.prompt(
+        "Student ID",
+        "Enter student index number",
+        async (indexNumber) => {
+          if (!indexNumber) return;
+
+          setLoading(true);
+          try {
+            await classAttendanceApi.recordStudentAttendance({
+              recordId,
+              studentId: indexNumber,
+            });
+
+            const newStudent: RecordedStudent = {
+              id: indexNumber,
+              indexNumber,
+              name: "Student", // Would come from backend
+              scanTime: new Date().toISOString(),
+              method: "biometric",
+              confirmed: true,
+            };
+            setRecordedStudents((prev) => [newStudent, ...prev]);
+
+            Toast.show({
+              type: "success",
+              text1: "Attendance Recorded",
+              text2: "Biometric verification successful",
+            });
+          } catch (error: any) {
+            Toast.show({
+              type: "error",
+              text1: "Error",
+              text2: error?.error || "Failed to record attendance",
+            });
+          } finally {
+            setLoading(false);
+          }
+        }
+      );
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Biometric authentication failed",
+      });
+    }
   };
 
   const handleEndRecording = () => {
@@ -190,7 +330,7 @@ export default function RecordAttendance() {
               Toast.show({
                 type: "success",
                 text1: "Recording Ended",
-                text2: "The attendance recording has been stopped",
+                text2: "Attendance recording has been stopped",
               });
               router.back();
             } catch (error: any) {
@@ -206,305 +346,861 @@ export default function RecordAttendance() {
     );
   };
 
+  const getMethodIcon = (method: AttendanceMethod) => {
+    switch (method) {
+      case "qrcode":
+        return "qr-code";
+      case "manual":
+        return "create";
+      case "biometric":
+        return "finger-print";
+    }
+  };
+
+  const getMethodColor = (method: AttendanceMethod) => {
+    switch (method) {
+      case "qrcode":
+        return "#3b82f6";
+      case "manual":
+        return "#f59e0b";
+      case "biometric":
+        return "#10b981";
+    }
+  };
+
   if (!recordId) {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        edges={["top"]}
-      >
-        <View style={styles.center}>
-          <Text style={{ color: colors.foreground }}>Loading...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      edges={["top"]}
-    >
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Stats Bar */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: Spacing[4],
+          paddingVertical: Spacing[3],
+          borderBottomWidth: 1,
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[2] }}>
+          <Ionicons name="people" size={20} color={colors.primary} />
+          <Text style={{
+            fontSize: Typography.fontSize.base,
+            fontWeight: Typography.fontWeight.semibold,
+            color: colors.foreground
+          }}>
+            {recordedStudents.length} Students
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", gap: Spacing[3] }}>
+          <TouchableOpacity
+            onPress={() => setShowStudentsList(true)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: Spacing[2],
+              paddingHorizontal: Spacing[3],
+              paddingVertical: Spacing[2],
+              borderRadius: BorderRadius.lg,
+              backgroundColor: colors.muted,
+            }}
+          >
+            <Ionicons name="list" size={18} color={colors.primary} />
+            <Text style={{
+              fontSize: Typography.fontSize.sm,
+              fontWeight: Typography.fontWeight.medium,
+              color: colors.primary
+            }}>
+              View List
+            </Text>
           </TouchableOpacity>
-          <H2 style={{ color: colors.foreground }}>Record Attendance</H2>
-          <TouchableOpacity onPress={handleEndRecording} style={styles.endButton}>
-            <Ionicons name="stop-circle" size={24} color={colors.error} />
+          <TouchableOpacity
+            onPress={handleEndRecording}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: Spacing[2],
+              paddingHorizontal: Spacing[3],
+              paddingVertical: Spacing[2],
+              borderRadius: BorderRadius.lg,
+              backgroundColor: colors.error,
+            }}
+          >
+            <Ionicons name="stop-circle" size={18} color="white" />
+            <Text style={{
+              fontSize: Typography.fontSize.sm,
+              fontWeight: Typography.fontWeight.semibold,
+              color: "white"
+            }}>End</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {!selectedMethod ? (
-          <View style={styles.methodSelection}>
-            <Text style={[styles.instruction, { color: colors.foreground }]}>
-              Choose an attendance method:
-            </Text>
-            <Card elevation="sm" style={styles.methodCard}>
-              <TouchableOpacity
-                style={styles.methodOption}
-                onPress={() => handleMethodSelect('qrcode')}
-              >
-                <Ionicons name="qr-code" size={32} color={colors.primary} />
-                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
-                  QR Code
+      <ScrollView
+        style={{ flex: 1, padding: Spacing[4] }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Spacing[6] }}
+      >
+        {/* Recording Info */}
+        {record && (
+          <Card style={{
+            marginBottom: Spacing[4],
+            padding: Spacing[4],
+            backgroundColor: colors.card,
+            ...Shadows.sm
+          }}>
+            <View style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              marginBottom: Spacing[2]
+            }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: Typography.fontSize.lg,
+                  fontWeight: Typography.fontWeight.bold,
+                  marginBottom: Spacing[1],
+                  color: colors.foreground
+                }}>
+                  {record.courseName || "Attendance Recording"}
                 </Text>
-                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
+                {record.courseCode && (
+                  <Text style={{
+                    fontSize: Typography.fontSize.sm,
+                    marginBottom: Spacing[1],
+                    color: colors.foregroundMuted
+                  }}>
+                    {record.courseCode}
+                  </Text>
+                )}
+                {record.lecturerName && (
+                  <Text style={{
+                    fontSize: Typography.fontSize.sm,
+                    color: colors.foregroundMuted
+                  }}>
+                    Lecturer: {record.lecturerName}
+                  </Text>
+                )}
+              </View>
+              <View
+                style={{
+                  paddingHorizontal: Spacing[3],
+                  paddingVertical: Spacing[1],
+                  borderRadius: BorderRadius.full,
+                  backgroundColor: colors.success
+                }}
+              >
+                <Text style={{
+                  fontSize: Typography.fontSize.xs,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: "white"
+                }}>IN PROGRESS</Text>
+              </View>
+            </View>
+            <Text style={{
+              fontSize: Typography.fontSize.xs,
+              marginTop: Spacing[2],
+              color: colors.foregroundMuted
+            }}>
+              Started: {new Date(record.startTime).toLocaleString()}
+            </Text>
+          </Card>
+        )}
+
+        {/* Method Selection */}
+        <Text style={{
+          fontSize: Typography.fontSize.base,
+          fontWeight: Typography.fontWeight.semibold,
+          marginBottom: Spacing[3],
+          color: colors.foreground
+        }}>
+          Recording Methods
+        </Text>
+
+        <View style={{ gap: Spacing[3], marginBottom: Spacing[6] }}>
+          {/* QR Code Method */}
+          <TouchableOpacity
+            onPress={() => setActiveMethod(activeMethod === "qrcode" ? null : "qrcode")}
+            style={{
+              overflow: "hidden",
+              borderRadius: BorderRadius.xl,
+              borderWidth: 2,
+              backgroundColor: activeMethod === "qrcode" ? colors.primary + "10" : colors.card,
+              borderColor: activeMethod === "qrcode" ? colors.primary : colors.border,
+            }}
+          >
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              padding: Spacing[4]
+            }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: BorderRadius.full,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: Spacing[3],
+                  backgroundColor: colors.primary + "15",
+                }}
+              >
+                <Ionicons name="qr-code" size={24} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: Typography.fontSize.base,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: colors.foreground
+                }}>
+                  QR Code Scan
+                </Text>
+                <Text style={{
+                  fontSize: Typography.fontSize.sm,
+                  color: colors.foregroundMuted
+                }}>
                   Scan student QR codes
                 </Text>
-              </TouchableOpacity>
-            </Card>
-            <Card elevation="sm" style={styles.methodCard}>
-              <TouchableOpacity
-                style={styles.methodOption}
-                onPress={() => handleMethodSelect('manual')}
+              </View>
+              <Ionicons
+                name={activeMethod === "qrcode" ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={colors.foregroundMuted}
+              />
+            </View>
+
+            {activeMethod === "qrcode" && (
+              <View style={{
+                paddingHorizontal: Spacing[4],
+                paddingBottom: Spacing[4],
+                borderTopWidth: 1,
+                borderColor: colors.border
+              }}>
+                <Button
+                  onPress={() => {
+                    if (hasCameraPermission) {
+                      setShowQRScanner(true);
+                    } else {
+                      Alert.alert(
+                        "Camera Permission Required",
+                        "Please enable camera permissions to scan QR codes",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Settings", onPress: () => requestCameraPermission() }
+                        ]
+                      );
+                    }
+                  }}
+                  style={{ marginTop: Spacing[3] }}
+                  disabled={loading}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[2] }}>
+                    <Ionicons name="scan" size={18} color="white" />
+                    <Text style={{
+                      color: "white",
+                      fontWeight: Typography.fontWeight.semibold
+                    }}>
+                      {loading ? "Processing..." : "Open Scanner"}
+                    </Text>
+                  </View>
+                </Button>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Manual Entry Method */}
+          <TouchableOpacity
+            onPress={() => setActiveMethod(activeMethod === "manual" ? null : "manual")}
+            style={{
+              overflow: "hidden",
+              borderRadius: BorderRadius.xl,
+              borderWidth: 2,
+              backgroundColor: activeMethod === "manual" ? "#fef3c715" : colors.card,
+              borderColor: activeMethod === "manual" ? "#f59e0b" : colors.border,
+            }}
+          >
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              padding: Spacing[4]
+            }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: BorderRadius.full,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: Spacing[3],
+                  backgroundColor: "#fef3c7",
+                }}
               >
-                <Ionicons name="create" size={32} color={colors.primary} />
-                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
+                <Ionicons name="create" size={24} color="#f59e0b" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: Typography.fontSize.base,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: colors.foreground
+                }}>
                   Manual Entry
                 </Text>
-                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
-                  Enter student IDs manually
+                <Text style={{
+                  fontSize: Typography.fontSize.sm,
+                  color: colors.foregroundMuted
+                }}>
+                  Search and select students
                 </Text>
-              </TouchableOpacity>
-            </Card>
-            <Card elevation="sm" style={styles.methodCard}>
-              <TouchableOpacity
-                style={styles.methodOption}
-                onPress={() => handleMethodSelect('fingerprint')}
-              >
-                <Ionicons name="finger-print" size={32} color={colors.primary} />
-                <Text style={[styles.methodTitle, { color: colors.foreground }]}>
-                  Fingerprint
-                </Text>
-                <Text style={[styles.methodDescription, { color: colors.foregroundMuted }]}>
-                  Use biometric authentication
-                </Text>
-              </TouchableOpacity>
-            </Card>
-          </View>
-        ) : (
-          <View style={styles.methodView}>
-            <TouchableOpacity
-              style={styles.backToMethods}
-              onPress={() => setSelectedMethod(null)}
-            >
-              <Ionicons name="arrow-back" size={20} color={colors.primary} />
-              <Text style={[styles.backText, { color: colors.primary }]}>
-                Back to Methods
-              </Text>
-            </TouchableOpacity>
+              </View>
+              <Ionicons
+                name={activeMethod === "manual" ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={colors.foregroundMuted}
+              />
+            </View>
 
-            {selectedMethod === 'qrcode' && (
-              <Card elevation="sm" style={styles.card}>
-                <CardContent>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    QR Code Scanning
-                  </Text>
-                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
-                    Scan student QR codes to record attendance
-                  </Text>
-                  <Button onPress={handleQRScan} style={styles.actionButton}>
-                    <Ionicons name="scan" size={20} color="white" />
-                    <Text style={styles.buttonText}>Start Scanning</Text>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {selectedMethod === 'manual' && (
-              <Card elevation="sm" style={styles.card}>
-                <CardContent>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    Manual Entry
-                  </Text>
-                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
-                    Enter student ID to record attendance
-                  </Text>
-                  <Input
-                    placeholder="Student ID"
-                    value={manualStudentId}
-                    onChangeText={setManualStudentId}
-                    style={styles.input}
+            {activeMethod === "manual" && (
+              <View style={{
+                paddingHorizontal: Spacing[4],
+                paddingBottom: Spacing[4],
+                borderTopWidth: 1,
+                borderColor: colors.border
+              }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginTop: Spacing[3],
+                    paddingHorizontal: Spacing[3],
+                    paddingVertical: Spacing[2],
+                    borderRadius: BorderRadius.lg,
+                    borderWidth: 1,
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Ionicons name="search" size={18} color={colors.foregroundMuted} />
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      marginLeft: Spacing[2],
+                      fontSize: Typography.fontSize.base,
+                      color: colors.foreground
+                    }}
+                    placeholder="Search by name or index number..."
+                    placeholderTextColor={colors.foregroundMuted}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCapitalize="none"
                   />
-                  <Button
-                    onPress={handleManualRecord}
-                    disabled={loading || !manualStudentId.trim()}
-                    style={styles.actionButton}
-                  >
-                    <Text style={styles.buttonText}>
-                      {loading ? "Recording..." : "Record Attendance"}
-                    </Text>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+                  {searching && <ActivityIndicator size="small" color={colors.primary} />}
+                </View>
 
-            {selectedMethod === 'fingerprint' && !showBiometricStudentInput && (
-              <Card elevation="sm" style={styles.card}>
-                <CardContent>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    Biometric Verification
-                  </Text>
-                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
-                    Authenticate with fingerprint/face ID to record attendance
-                  </Text>
-                  <Button onPress={handleFingerprint} style={styles.actionButton}>
-                    <Ionicons name="finger-print" size={20} color="white" />
-                    <Text style={styles.buttonText}>Authenticate & Record</Text>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {selectedMethod === 'fingerprint' && showBiometricStudentInput && (
-              <Card elevation="sm" style={styles.card}>
-                <CardContent>
-                  <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    Enter Student ID
-                  </Text>
-                  <Text style={[styles.sectionDescription, { color: colors.foregroundMuted }]}>
-                    Biometric authentication successful. Enter the student ID to record attendance.
-                  </Text>
-                  <Input
-                    placeholder="Student ID or Index Number"
-                    value={biometricStudentId}
-                    onChangeText={setBiometricStudentId}
-                    style={styles.input}
-                    autoFocus={true}
-                  />
-                  <View style={styles.buttonRow}>
-                    <Button
-                      variant="outline"
-                      onPress={handleBiometricCancel}
-                      style={styles.cancelButton}
-                    >
-                      <Text style={{ color: colors.primary }}>Cancel</Text>
-                    </Button>
-                    <Button
-                      onPress={handleBiometricRecordSubmit}
-                      disabled={loading || !biometricStudentId.trim()}
-                      style={styles.submitButton}
-                    >
-                      <Text style={styles.buttonText}>
-                        {loading ? "Recording..." : "Record Attendance"}
-                      </Text>
-                    </Button>
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <View style={{
+                    marginTop: Spacing[2],
+                    borderRadius: BorderRadius.lg,
+                    borderWidth: 1,
+                    borderColor: colors.border
+                  }}>
+                    {searchResults.map((student, index) => (
+                      <TouchableOpacity
+                        key={student.id}
+                        onPress={() => handleManualRecord(student)}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          padding: Spacing[3],
+                          backgroundColor: colors.card,
+                          borderBottomWidth: index === searchResults.length - 1 ? 0 : 1,
+                          borderColor: colors.border,
+                        }}
+                        disabled={loading}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{
+                            fontSize: Typography.fontSize.sm,
+                            fontWeight: Typography.fontWeight.semibold,
+                            color: colors.foreground
+                          }}>
+                            {student.firstName} {student.lastName}
+                          </Text>
+                          <Text style={{
+                            fontSize: Typography.fontSize.xs,
+                            color: colors.foregroundMuted
+                          }}>
+                            {student.indexNumber} • {student.program}
+                          </Text>
+                        </View>
+                        <Ionicons name="add-circle" size={24} color={colors.primary} />
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                </CardContent>
-              </Card>
+                )}
+              </View>
             )}
+          </TouchableOpacity>
+
+          {/* Biometric Method */}
+          <TouchableOpacity
+            onPress={() =>
+              biometricAvailable
+                ? setActiveMethod(activeMethod === "biometric" ? null : "biometric")
+                : Alert.alert("Not Available", "Biometric authentication is not set up on this device")
+            }
+            style={{
+              overflow: "hidden",
+              borderRadius: BorderRadius.xl,
+              borderWidth: 2,
+              backgroundColor: activeMethod === "biometric" ? "#d1fae515" : colors.card,
+              borderColor: activeMethod === "biometric" ? "#10b981" : colors.border,
+              opacity: biometricAvailable ? 1 : 0.5,
+            }}
+          >
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              padding: Spacing[4]
+            }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: BorderRadius.full,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: Spacing[3],
+                  backgroundColor: "#d1fae5",
+                }}
+              >
+                <Ionicons name="finger-print" size={24} color="#10b981" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: Typography.fontSize.base,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: colors.foreground
+                }}>
+                  Biometric Scan
+                </Text>
+                <Text style={{
+                  fontSize: Typography.fontSize.sm,
+                  color: colors.foregroundMuted
+                }}>
+                  {biometricAvailable ? "Use fingerprint/face ID" : "Not available"}
+                </Text>
+              </View>
+              <Ionicons
+                name={activeMethod === "biometric" ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={colors.foregroundMuted}
+              />
+            </View>
+
+            {activeMethod === "biometric" && biometricAvailable && (
+              <View style={{
+                paddingHorizontal: Spacing[4],
+                paddingBottom: Spacing[4],
+                borderTopWidth: 1,
+                borderColor: colors.border
+              }}>
+                <Button
+                  onPress={handleBiometricScan}
+                  style={{
+                    marginTop: Spacing[3],
+                    backgroundColor: "#10b981"
+                  }}
+                  disabled={loading}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[2] }}>
+                    <Ionicons name="finger-print" size={18} color="white" />
+                    <Text style={{
+                      color: "white",
+                      fontWeight: Typography.fontWeight.semibold
+                    }}>
+                      {loading ? "Processing..." : "Scan Fingerprint"}
+                    </Text>
+                  </View>
+                </Button>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Recent Recordings Preview */}
+        {recordedStudents.length > 0 && (
+          <View>
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: Spacing[3]
+            }}>
+              <Text style={{
+                fontSize: Typography.fontSize.base,
+                fontWeight: Typography.fontWeight.semibold,
+                color: colors.foreground
+              }}>
+                Recent Recordings
+              </Text>
+              <TouchableOpacity onPress={() => setShowStudentsList(true)}>
+                <Text style={{
+                  fontSize: Typography.fontSize.sm,
+                  fontWeight: Typography.fontWeight.medium,
+                  color: colors.primary
+                }}>
+                  View All ({recordedStudents.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ gap: Spacing[2] }}>
+              {recordedStudents.slice(0, 3).map((student) => (
+                <View
+                  key={student.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    padding: Spacing[3],
+                    borderRadius: BorderRadius.lg,
+                    backgroundColor: colors.card,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: BorderRadius.full,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: Spacing[3],
+                      backgroundColor: getMethodColor(student.method) + "15",
+                    }}
+                  >
+                    <Ionicons
+                      name={getMethodIcon(student.method)}
+                      size={18}
+                      color={getMethodColor(student.method)}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                      color: colors.foreground
+                    }}>
+                      {student.name}
+                    </Text>
+                    <Text style={{
+                      fontSize: Typography.fontSize.xs,
+                      color: colors.foregroundMuted
+                    }}>
+                      {student.indexNumber} • {new Date(student.scanTime).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                  {student.confirmed ? (
+                    <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                  ) : (
+                    <View
+                      style={{
+                        paddingHorizontal: Spacing[2],
+                        paddingVertical: Spacing[1],
+                        borderRadius: BorderRadius.full,
+                        backgroundColor: "#fef3c7",
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: Typography.fontSize.xs,
+                        fontWeight: Typography.fontWeight.medium,
+                        color: "#f59e0b"
+                      }}>
+                        Pending
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+
+      {/* QR Scanner Modal */}
+      <Modal
+        visible={showQRScanner}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          setShowQRScanner(false);
+          setIsScanning(false);
+        }}
+      >
+        <View style={{ flex: 1, backgroundColor: "black" }}>
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: Spacing[4],
+            paddingTop: Spacing[6],
+            backgroundColor: "black"
+          }}>
+            <Text style={{
+              fontSize: Typography.fontSize.lg,
+              fontWeight: Typography.fontWeight.bold,
+              color: "white"
+            }}>
+              Scan Student QR Code
+            </Text>
+            <TouchableOpacity 
+              onPress={() => {
+                setShowQRScanner(false);
+                setIsScanning(false);
+              }}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {hasCameraPermission && (
+            <CameraView
+              style={{ flex: 1 }}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={({ data }) => {
+                if (isScanning) return; // Prevent multiple scans
+                setIsScanning(true);
+                handleQRScan(data);
+              }}
+            >
+              <View style={{
+                flex: 1,
+                backgroundColor: "transparent",
+                justifyContent: "center",
+                alignItems: "center"
+              }}>
+                <View style={{
+                  width: 250,
+                  height: 250,
+                  borderWidth: 2,
+                  borderColor: "white",
+                  borderRadius: BorderRadius.lg,
+                  backgroundColor: "transparent"
+                }} />
+                <Text style={{
+                  color: "white",
+                  fontSize: Typography.fontSize.sm,
+                  marginTop: Spacing[4],
+                  textAlign: "center",
+                  paddingHorizontal: Spacing[4]
+                }}>
+                  Position the QR code within the frame to scan
+                </Text>
+              </View>
+            </CameraView>
+          )}
+
+          {!hasCameraPermission && (
+            <View style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              padding: Spacing[4]
+            }}>
+              <Ionicons name="camera" size={64} color="white" />
+              <Text style={{
+                color: "white",
+                fontSize: Typography.fontSize.lg,
+                fontWeight: Typography.fontWeight.semibold,
+                marginTop: Spacing[4],
+                textAlign: "center"
+              }}>
+                Camera Permission Required
+              </Text>
+              <Text style={{
+                color: "white",
+                fontSize: Typography.fontSize.base,
+                marginTop: Spacing[2],
+                textAlign: "center"
+              }}>
+                Please enable camera permissions to scan QR codes
+              </Text>
+              <Button
+                onPress={requestCameraPermission}
+                style={{ marginTop: Spacing[4] }}
+              >
+                <Text style={{ color: "white", fontWeight: Typography.fontWeight.semibold }}>
+                  Grant Permission
+                </Text>
+              </Button>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* Students List Drawer */}
+      <Modal
+        visible={showStudentsList}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowStudentsList(false)}
+      >
+        <View style={{
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.5)"
+        }}>
+          <View
+            style={{
+              height: "75%",
+              borderTopLeftRadius: BorderRadius["3xl"],
+              borderTopRightRadius: BorderRadius["3xl"],
+              backgroundColor: colors.background,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: Spacing[4],
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text style={{
+                fontSize: Typography.fontSize.lg,
+                fontWeight: Typography.fontWeight.bold,
+                color: colors.foreground
+              }}>
+                Recorded Students ({recordedStudents.length})
+              </Text>
+              <TouchableOpacity onPress={() => setShowStudentsList(false)}>
+                <Ionicons name="close" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={recordedStudents}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{
+                padding: Spacing[4],
+                paddingBottom: Spacing[8]
+              }}
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    padding: Spacing[4],
+                    marginBottom: Spacing[2],
+                    borderRadius: BorderRadius.xl,
+                    backgroundColor: colors.card,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: BorderRadius.full,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: Spacing[3],
+                      backgroundColor: getMethodColor(item.method) + "15",
+                    }}
+                  >
+                    <Ionicons
+                      name={getMethodIcon(item.method)}
+                      size={20}
+                      color={getMethodColor(item.method)}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{
+                      fontSize: Typography.fontSize.base,
+                      fontWeight: Typography.fontWeight.semibold,
+                      marginBottom: Spacing[1],
+                      color: colors.foreground
+                    }}>
+                      {item.name}
+                    </Text>
+                    <Text style={{
+                      fontSize: Typography.fontSize.sm,
+                      marginBottom: Spacing[1],
+                      color: colors.foregroundMuted
+                    }}>
+                      {item.indexNumber}
+                    </Text>
+                    <Text style={{
+                      fontSize: Typography.fontSize.xs,
+                      color: colors.foregroundMuted
+                    }}>
+                      {new Date(item.scanTime).toLocaleString()}
+                    </Text>
+                  </View>
+                  {item.confirmed ? (
+                    <View style={{ alignItems: "center" }}>
+                      <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+                      <Text style={{
+                        fontSize: Typography.fontSize.xs,
+                        marginTop: Spacing[1],
+                        color: "#10b981"
+                      }}>
+                        Confirmed
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ alignItems: "center" }}>
+                      <View
+                        style={{
+                          paddingHorizontal: Spacing[3],
+                          paddingVertical: Spacing[1],
+                          borderRadius: BorderRadius.full,
+                          backgroundColor: "#fef3c7",
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: Typography.fontSize.xs,
+                          fontWeight: Typography.fontWeight.medium,
+                          color: "#f59e0b"
+                        }}>
+                          Pending
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={{
+                  alignItems: "center",
+                  paddingVertical: Spacing[12]
+                }}>
+                  <Ionicons name="people-outline" size={64} color={colors.foregroundMuted} />
+                  <Text style={{
+                    fontSize: Typography.fontSize.base,
+                    marginTop: Spacing[4],
+                    color: colors.foregroundMuted
+                  }}>
+                    No students recorded yet
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    padding: 8,
-  },
-  endButton: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  methodSelection: {
-    gap: 16,
-  },
-  instruction: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  methodCard: {
-    marginBottom: 8,
-  },
-  methodOption: {
-    padding: 16,
-    alignItems: "center",
-  },
-  methodTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  methodDescription: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  methodView: {
-    gap: 16,
-  },
-  backToMethods: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  backText: {
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  card: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  sectionDescription: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  submitButton: {
-    flex: 2,
-  },
-});
