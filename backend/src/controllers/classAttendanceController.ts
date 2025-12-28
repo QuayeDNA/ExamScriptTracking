@@ -31,15 +31,7 @@ const createAttendanceRecordSchema = z.object({
 
 const recordStudentAttendanceSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
-  studentId: z.string().min(1, "Student ID is required"), // Accept any string (UUID or index number)
-  studentData: z
-    .object({
-      indexNumber: z.string(),
-      name: z.string(),
-      program: z.string().optional(),
-      level: z.string().optional(),
-    })
-    .optional(),
+  studentId: z.string().min(1, "Student ID is required"), // Index number or QR data
 });
 
 const confirmAttendanceSchema = z.object({
@@ -325,118 +317,28 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
         .json({ error: "Invalid or completed attendance record" });
     }
 
-    // Try to parse QR code data if it's JSON
-    let studentIdentifier = validatedData.studentId;
+    // Determine if this is a QR scan or manual entry
+    let indexNumber = validatedData.studentId;
+    let isQrScan = false;
+
     try {
       const qrData = JSON.parse(validatedData.studentId);
-      studentIdentifier =
-        qrData.id || qrData.indexNumber || validatedData.studentId;
+      indexNumber = qrData.indexNumber || validatedData.studentId;
+      isQrScan = true;
     } catch {
-      // Not JSON, use as-is
+      // Not JSON, treat as manual entry with index number
+      isQrScan = false;
     }
 
-    // Find student by UUID or index number
-    let student = await prisma.student.findFirst({
-      where: {
-        OR: [{ id: studentIdentifier }, { indexNumber: studentIdentifier }],
-      },
+    // Find student by index number only
+    const student = await prisma.student.findUnique({
+      where: { indexNumber },
     });
 
-    // If student not found and studentData provided, create the student
-    if (!student && validatedData.studentData) {
-      // Split name into first and last name
-      const nameParts = validatedData.studentData.name.trim().split(" ");
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || "";
-
-      // Validate required fields
-      if (!validatedData.studentData.indexNumber || !firstName) {
-        return res
-          .status(400)
-          .json({ error: "Invalid student data: missing required fields" });
-      }
-
-      // Parse level safely
-      let level: number | null = null;
-      if (validatedData.studentData.level) {
-        const parsedLevel = parseInt(validatedData.studentData.level);
-        if (!isNaN(parsedLevel) && parsedLevel > 0) {
-          level = parsedLevel;
-        }
-      }
-
-      try {
-        // Generate QR code data first
-        const tempQrData = JSON.stringify({
-          type: "STUDENT",
-          id: "", // Will be updated after creation
-          indexNumber: validatedData.studentData.indexNumber,
-          firstName,
-          lastName,
-          program: validatedData.studentData.program || "Unknown",
-          level: level || 100,
-          timestamp: new Date().toISOString(),
-        });
-
-        student = await prisma.student.create({
-          data: {
-            indexNumber: validatedData.studentData.indexNumber,
-            firstName,
-            lastName,
-            program: validatedData.studentData.program || "Unknown",
-            level: level || 100,
-            qrCode: tempQrData, // Temporary, will regenerate with ID
-            profilePicture: "/uploads/students/default-avatar.png", // Default avatar for auto-created students
-          },
-        });
-
-        // Regenerate QR code with actual ID
-        const updatedQrData = JSON.stringify({
-          type: "STUDENT",
-          id: student.id,
-          indexNumber: student.indexNumber,
-          firstName: student.firstName,
-          lastName: student.lastName,
-          program: student.program,
-          level: student.level,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Update the student with the correct QR code
-        student = await prisma.student.update({
-          where: { id: student.id },
-          data: { qrCode: updatedQrData },
-        });
-      } catch (createError: any) {
-        console.error("Student creation failed:", createError);
-        // If creation fails due to duplicate index number, find the existing student
-        if (
-          createError.code === "P2002" &&
-          createError.meta?.target?.includes("indexNumber")
-        ) {
-          student = await prisma.student.findUnique({
-            where: { indexNumber: validatedData.studentData.indexNumber },
-          });
-          if (!student) {
-            console.error(
-              "Failed to find existing student with index number:",
-              validatedData.studentData.indexNumber
-            );
-            return res
-              .status(400)
-              .json({ error: "Failed to create or find student" });
-          }
-        } else {
-          // Other creation error
-          return res.status(400).json({
-            error: `Failed to create student: ${createError.message}`,
-          });
-        }
-      }
-    }
-
     if (!student) {
-      return res.status(404).json({ error: "Student not found" });
+      return res.status(404).json({
+        error: "Student not found. Please register the student first.",
+      });
     }
 
     // Check if student already recorded
@@ -458,8 +360,8 @@ export const recordStudentAttendance = async (req: Request, res: Response) => {
     const attendance = await prisma.classAttendance.create({
       data: {
         recordId: validatedData.recordId,
-        studentId: student.id, // Use the found student's UUID
-        lecturerConfirmed: !validatedData.studentData, // Auto-confirm QR scans, manual entries need confirmation
+        studentId: student.id,
+        lecturerConfirmed: isQrScan, // Auto-confirm QR scans, manual entries need confirmation
       },
       include: {
         student: {

@@ -80,12 +80,6 @@ export const classAttendanceApi = {
   recordStudentAttendance: async (data: {
     recordId: string;
     studentId: string;
-    studentData?: {
-      indexNumber: string;
-      name: string;
-      program?: string;
-      level?: string;
-    };
   }): Promise<{ attendance: any; message: string }> => {
     return apiClient.post("/class-attendance/records/attendance", data);
   },

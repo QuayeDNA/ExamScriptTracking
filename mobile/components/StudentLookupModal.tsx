@@ -8,7 +8,6 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text, H3 } from "@/components/ui/typography";
@@ -16,7 +15,6 @@ import { useThemeColors } from "@/constants/design-system";
 import {
   LocalStudent,
   findStudent,
-  saveStudent,
   searchStudents,
   getAllStudents,
 } from "@/utils/localStudentStorage";
@@ -28,13 +26,6 @@ interface StudentLookupModalProps {
   sessionId?: string;
 }
 
-interface StudentFormData {
-  indexNumber: string;
-  name: string;
-  program: string;
-  level: string;
-}
-
 export function StudentLookupModal({
   visible,
   onClose,
@@ -44,29 +35,19 @@ export function StudentLookupModal({
   const colors = useThemeColors();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LocalStudent[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState<StudentFormData>({
-    indexNumber: "",
-    name: "",
-    program: "",
-    level: "",
-  });
   const [isSearching, setIsSearching] = useState(false);
+  const [noResultsMessage, setNoResultsMessage] = useState("");
 
   const [recentStudents, setRecentStudents] = useState<LocalStudent[]>([]);
+
+  const showForm = false;
 
   useEffect(() => {
     if (visible) {
       // Reset state when modal opens
       setSearchQuery("");
       setSearchResults([]);
-      setShowForm(false);
-      setFormData({
-        indexNumber: "",
-        name: "",
-        program: "",
-        level: "",
-      });
+      setNoResultsMessage("");
       // Load recent students
       loadRecentStudents();
     }
@@ -90,13 +71,18 @@ export function StudentLookupModal({
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
+      setNoResultsMessage("");
       return;
     }
 
     setIsSearching(true);
+    setNoResultsMessage("");
     try {
       const results = await searchStudents(query, sessionId);
       setSearchResults(results);
+      if (results.length === 0) {
+        setNoResultsMessage("Student not found. Please register the student first.");
+      }
     } catch (error) {
       console.error("Search failed:", error);
       Alert.alert("Error", "Failed to search students");
@@ -106,63 +92,16 @@ export function StudentLookupModal({
   };
 
   const handleStudentSelect = (student: LocalStudent) => {
-    Alert.alert(
-      "Use Saved Student?",
-      `Use saved data for ${student.name} (${student.indexNumber})?`,
-      [
-        {
-          text: "Use Saved",
-          onPress: () => {
-            onStudentSelected(student);
-            onClose();
-          },
-        },
-        {
-          text: "Enter New",
-          onPress: () => {
-            setFormData({
-              indexNumber: student.indexNumber,
-              name: student.name,
-              program: student.program || "",
-              level: student.level || "",
-            });
-            setShowForm(true);
-          },
-        },
-      ]
-    );
+    onStudentSelected(student);
+    onClose();
   };
 
   const handleManualEntry = () => {
-    setShowForm(true);
-  };
-
-  const handleFormSubmit = async () => {
-    if (!formData.indexNumber.trim() || !formData.name.trim()) {
-      Alert.alert("Error", "Index number and name are required");
-      return;
-    }
-
-    try {
-      const student: LocalStudent = {
-        indexNumber: formData.indexNumber.trim(),
-        name: formData.name.trim(),
-        program: formData.program.trim() || undefined,
-        level: formData.level.trim() || undefined,
-        lastUsed: new Date(),
-        sessionId,
-      };
-
-      // Save to local storage
-      await saveStudent(student, sessionId);
-
-      // Return the student
-      onStudentSelected(student);
-      onClose();
-    } catch (error) {
-      console.error("Failed to save student:", error);
-      Alert.alert("Error", "Failed to save student data");
-    }
+    Alert.alert(
+      "Student Not Found",
+      "Student not found. Please register the student first.",
+      [{ text: "OK" }]
+    );
   };
 
   const renderStudentItem = ({ item }: { item: LocalStudent }) => (
@@ -256,6 +195,19 @@ export function StudentLookupModal({
                   style={styles.resultsList}
                 />
               </View>
+            ) : noResultsMessage ? (
+              <View style={styles.noResultsContainer}>
+                <Ionicons
+                  name="person-remove-outline"
+                  size={48}
+                  color={colors.foregroundMuted}
+                />
+                <Text
+                  style={[styles.noResultsText, { color: colors.foreground }]}
+                >
+                  {noResultsMessage}
+                </Text>
+              </View>
             ) : null}
 
             <View style={styles.actions}>
@@ -264,67 +216,14 @@ export function StudentLookupModal({
                 onPress={handleManualEntry}
                 style={styles.manualButton}
               >
-                <Text style={{ color: colors.foreground }}>Enter Manually</Text>
+                <Text style={{ color: colors.foreground }}>Register Student</Text>
               </Button>
             </View>
           </View>
         ) : (
-          /* Manual Entry Form */
+          /* This should not be reached, but keeping for safety */
           <View style={styles.content}>
-            <Input
-              label="Index Number *"
-              placeholder="e.g., 12345678"
-              value={formData.indexNumber}
-              onChangeText={(text) =>
-                setFormData((prev) => ({ ...prev, indexNumber: text }))
-              }
-              autoCapitalize="none"
-            />
-
-            <Input
-              label="Full Name *"
-              placeholder="e.g., John Doe"
-              value={formData.name}
-              onChangeText={(text) =>
-                setFormData((prev) => ({ ...prev, name: text }))
-              }
-              autoCapitalize="words"
-            />
-
-            <Input
-              label="Program"
-              placeholder="e.g., Computer Science"
-              value={formData.program}
-              onChangeText={(text) =>
-                setFormData((prev) => ({ ...prev, program: text }))
-              }
-              autoCapitalize="words"
-            />
-
-            <Input
-              label="Level"
-              placeholder="e.g., 300"
-              value={formData.level}
-              onChangeText={(text) =>
-                setFormData((prev) => ({ ...prev, level: text }))
-              }
-              keyboardType="numeric"
-            />
-
-            <View style={styles.formActions}>
-              <Button
-                variant="outline"
-                onPress={() => setShowForm(false)}
-                style={styles.backButton}
-              >
-                <Text style={{ color: colors.foreground }}>Back</Text>
-              </Button>
-              <Button onPress={handleFormSubmit} style={styles.submitButton}>
-                <Text style={{ color: colors.primaryForeground }}>
-                  Save & Continue
-                </Text>
-              </Button>
-            </View>
+            <Text>Form disabled</Text>
           </View>
         )}
       </View>
@@ -389,6 +288,18 @@ const styles = StyleSheet.create({
   },
   manualButton: {
     width: "100%",
+  },
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  noResultsText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 16,
+    paddingHorizontal: 20,
   },
   formActions: {
     flexDirection: "row",
