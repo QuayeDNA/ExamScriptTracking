@@ -36,7 +36,7 @@ Mobile devices DO NOT expose raw biometric data. Instead, they provide:
 
 | Mode | Use Case | Implementation |
 |------|----------|----------------|
-| Mode 1: Direct Scanning | Invigilator-controlled, high-security | Mobile app on scanning device |
+| Mode 1: Direct Scanning | Lecturer-controlled, high-security | Mobile app on scanning device |
 | Mode 2: Self-Service Link | Large classes, distributed attendance | Temporary secure web portal |
 
 #### Why Hybrid?
@@ -317,7 +317,7 @@ Response:
 ```
 
 #### STEP 1: Invigilator Starts Recording Session
-Mobile App (Invigilator):
+Mobile App (Lecturer/Class Rep):
 - Login as CLASS_REP/ADMIN
 - Navigate to "Class Attendance"
 - Tap "Start New Recording"
@@ -335,7 +335,7 @@ Mobile App (Invigilator):
 └─────────────────────────────────────────────┘
 ```
 1. Student shows QR code (printed/digital)
-2. Invigilator scans with camera
+2. Lecturer/Class Rep scans with camera
 3. App parses QR: {id, indexNumber}
 4. POST /api/attendance/verify-qr
 5. Backend: Lookup student → Record attendance
@@ -348,7 +348,7 @@ Mobile App (Invigilator):
 └─────────────────────────────────────────────┘
 ```
 1. Student states index number verbally
-2. Invigilator types in search box
+2. Lecturer/Class Rep types in search box
 3. App fetches student details
 4. Confirm identity (show photo)
 5. POST /api/attendance/verify-manual
@@ -361,7 +361,7 @@ Mobile App (Invigilator):
 │  METHOD 3: BIOMETRIC FINGERPRINT ⭐          │
 └─────────────────────────────────────────────┘
 ```
-1. Invigilator taps "Biometric Scan"
+1. Lecturer/Class Rep taps "Biometric Scan"
 2. Student places finger on device sensor
 3. Device authenticates (on-device matching)
 4. App captures biometric challenge response
@@ -385,48 +385,7 @@ Mobile App (Invigilator):
   - Web dashboard shows live updates
 
 #### STEP 4: End Recording
-- Invigilator taps "End Recording"
-- POST /api/attendance/records/:id/end
-- Status: IN_PROGRESS → COMPLETED
-- Emit "recording_ended"
-3. App fetches student details
-4. Confirm identity (show photo)
-5. POST /api/attendance/verify-manual
-6. Backend: Record attendance (needs confirmation)
-7. Display: "John Doe - Pending Confirmation"
-
-┌─────────────────────────────────────────────┐
-│  METHOD 3: BIOMETRIC FINGERPRINT ⭐          │
-└─────────────────────────────────────────────┘
-1. Invigilator taps "Biometric Scan"
-2. Student places finger on device sensor
-3. Device authenticates (on-device matching)
-4. App captures biometric challenge response
-5. POST /api/attendance/verify-biometric
-   Body: {
-     recordId: "uuid",
-     biometricChallengeToken: "device-signed-token",
-     deviceId: "device-123"
-   }
-6. Backend:
-   ├─ Verify challenge token signature
-   ├─ Lookup student by biometric match
-   ├─ Record attendance
-   └─ Return student details
-7. Display: "John Doe - Biometric Verified ✓"
-
-
-STEP 3: Real-Time Updates
-─────────────────────────────────────────────
-- Each successful verification:
-  ├─ Emits Socket.IO event "student_scanned"
-  ├─ Updates totalStudents count
-  └─ Web dashboard shows live updates
-
-
-STEP 4: End Recording
-─────────────────────────────────────────────
-- Invigilator taps "End Recording"
+- Lecturer/Class Rep taps "End Recording"
 - POST /api/attendance/records/:id/end
 - Status: IN_PROGRESS → COMPLETED
 - Emit "recording_ended"
@@ -440,9 +399,9 @@ STEP 4: End Recording
 │      ATTENDANCE RECORDING - SELF-SERVICE LINK MODE           │
 └─────────────────────────────────────────────────────────────┘
 
-STEP 1: Invigilator Creates Shareable Link
+STEP 1: Lecturer/Class Rep Creates Shareable Link
 ─────────────────────────────────────────────
-Mobile App (Invigilator):
+Mobile App (Lecturer/Class Rep):
 ├─ Start recording session (same as Mode 1)
 ├─ Tap "Generate Self-Service Link"
 ├─ Configure:
@@ -545,7 +504,7 @@ STEP 5: Real-Time Updates
 ─────────────────────────────────────────────
 - Each self-verification:
   ├─ Emits Socket.IO "student_scanned"
-  ├─ Invigilator device shows live updates
+  ├─ Lecturer/Class Rep device shows live updates
   └─ Web dashboard updates count
 
 6. Security Implementation Details
@@ -738,7 +697,7 @@ A: System automatically falls back to QR code or manual index number entry.
 Q: Can students fake biometric scans?
 A: No. Device-level authentication uses secure hardware that cannot be spoofed. Challenge-response tokens ensure authenticity.
 Q: What about students without smartphones (self-service mode)?
-A: They use the direct scanning mode on the invigilator's device.
+A: They use the direct scanning mode on the lecturer's/class representative's device.
 Q: How accurate is geolocation on mobile devices?
 A: GPS accuracy is typically 5-10 meters outdoors. We use a 50-meter radius to account for signal variation and multi-story buildings.
 Q: What if the external biometric data source changes format?

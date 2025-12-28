@@ -132,4 +132,36 @@ export const classAttendanceApi = {
       attendanceId,
     });
   },
+
+  // Biometric attendance methods
+  getAvailableSessionsForStudent: async (): Promise<{
+    sessions: Array<{
+      id: string;
+      deviceName: string;
+      courseName?: string;
+      courseCode?: string;
+      lecturerName?: string;
+      startTime: string;
+      recordId: string;
+    }>;
+  }> => {
+    return apiClient.get("/class-attendance/sessions/available-for-student");
+  },
+
+  recordBiometricAttendance: async (data: {
+    recordId: string;
+    biometricData: string; // SHA-256 hash of biometric template
+    studentId?: string; // Optional student identification
+  }): Promise<{
+    success: boolean;
+    message: string;
+    attendance?: {
+      id: string;
+      studentId: string;
+      scanTime: string;
+      verificationMethod: string;
+    };
+  }> => {
+    return apiClient.post("/class-attendance/records/attendance/biometric", data);
+  },
 };

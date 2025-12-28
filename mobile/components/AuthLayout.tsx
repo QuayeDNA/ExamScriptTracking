@@ -64,7 +64,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
               <Text
                 style={[styles.footerText, { color: colors.foregroundMuted }]}
               >
-                © {new Date().getFullYear()} Exam Script Tracking System
+                © {new Date().getFullYear()} Exam Logisitics System
               </Text>
             </View>
           </View>

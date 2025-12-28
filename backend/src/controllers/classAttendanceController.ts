@@ -40,12 +40,8 @@ const recordStudentAttendanceSchema = z.object({
 
 const recordBiometricAttendanceSchema = z.object({
   recordId: z.string().uuid("Invalid record ID"),
-  biometricTemplate: z.string().min(1, "Biometric template is required"),
-  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT'], {
-    errorMap: () => ({ message: "Invalid biometric provider" })
-  }),
-  deviceId: z.string().min(1, "Device ID is required"),
-  linkToken: z.string().optional(), // For self-service mode
+  biometricData: z.string().min(1, "Biometric data is required"), // SHA-256 hash from mobile app
+  studentId: z.string().optional(), // Student identification (index number or ID)
 });
 
 const confirmAttendanceSchema = z.object({
@@ -444,38 +440,40 @@ export const recordBiometricAttendance = async (req: Request, res: Response) => 
         .json({ error: "Invalid or completed attendance record" });
     }
 
-    // Validate link token if provided (self-service mode)
-    if (validatedData.linkToken) {
-      const link = await prisma.attendanceLink.findUnique({
-        where: { linkToken: validatedData.linkToken },
+    // Identify the student for biometric attendance
+    let student;
+
+    if (validatedData.studentId) {
+      // If student ID is provided, find the specific student
+      student = await prisma.student.findFirst({
+        where: {
+          OR: [
+            { id: validatedData.studentId },
+            { indexNumber: validatedData.studentId }
+          ],
+          biometricTemplateHash: { not: null }, // Must have biometric enrolled
+        },
       });
 
-      if (!link || !link.isActive || link.expiresAt < new Date()) {
-        return res.status(400).json({ error: "Invalid or expired link token" });
+      if (!student) {
+        return res.status(404).json({
+          error: "Student not found or not enrolled for biometric attendance",
+        });
       }
-
-      // Check if link has remaining uses
-      if (link.maxUses && link.usesCount >= link.maxUses) {
-        return res.status(400).json({ error: "Link usage limit exceeded" });
-      }
-    }
-
-    // Find student by biometric template match
-    // Generate hash of the provided template to match against stored hashes
-    const biometricSalt = "system_salt"; // In production, this should be configurable
-    const templateHash = hashBiometricTemplate(validatedData.biometricTemplate, biometricSalt);
-
-    const student = await prisma.student.findFirst({
-      where: {
-        biometricTemplateHash: templateHash,
-        biometricProvider: validatedData.biometricProvider,
-      },
-    });
-
-    if (!student) {
-      return res.status(404).json({
-        error: "Biometric verification failed. Student not found or not enrolled.",
+    } else {
+      // Fallback: find student by biometric hash match (for enrolled students)
+      // This is less secure and should be avoided in production
+      student = await prisma.student.findFirst({
+        where: {
+          biometricTemplateHash: validatedData.biometricData,
+        },
       });
+
+      if (!student) {
+        return res.status(404).json({
+          error: "Biometric verification failed. Please provide student identification or ensure biometric enrollment is complete.",
+        });
+      }
     }
 
     // Check if student already recorded
@@ -494,18 +492,14 @@ export const recordBiometricAttendance = async (req: Request, res: Response) => 
         .json({ error: "Student already recorded for this session" });
     }
 
-    // Determine verification method based on link token
-    const verificationMethod = validatedData.linkToken ? 'BIOMETRIC_FINGERPRINT' : 'BIOMETRIC_FINGERPRINT';
-
+    // Create attendance record
     const attendance = await prisma.classAttendance.create({
       data: {
         recordId: validatedData.recordId,
         studentId: student.id,
-        lecturerConfirmed: true, // Biometric verification is auto-confirmed
-        verificationMethod,
-        deviceId: validatedData.deviceId,
-        linkTokenUsed: validatedData.linkToken,
-        biometricConfidence: 1.0, // Full confidence for successful match
+        scanTime: new Date(),
+        lecturerConfirmed: true, // Auto-confirm biometric attendance
+        verificationMethod: "BIOMETRIC_FINGERPRINT",
       },
       include: {
         student: {
@@ -519,8 +513,8 @@ export const recordBiometricAttendance = async (req: Request, res: Response) => 
       },
     });
 
-    // Update total students count
-    const updatedRecord = await prisma.classAttendanceRecord.update({
+    // Update record student count
+    await prisma.classAttendanceRecord.update({
       where: { id: validatedData.recordId },
       data: {
         totalStudents: {
@@ -529,15 +523,7 @@ export const recordBiometricAttendance = async (req: Request, res: Response) => 
       },
     });
 
-    // Update link usage count if link token was used
-    if (validatedData.linkToken) {
-      await prisma.attendanceLink.update({
-        where: { linkToken: validatedData.linkToken },
-        data: { usesCount: { increment: 1 } },
-      });
-    }
-
-    // Emit socket event for student scanned
+    // Emit socket event for biometric attendance
     emitClassAttendanceScanned(io, {
       recordId: validatedData.recordId,
       sessionId: record.sessionId,
@@ -545,38 +531,27 @@ export const recordBiometricAttendance = async (req: Request, res: Response) => 
       studentName: `${student.firstName} ${student.lastName}`,
       indexNumber: student.indexNumber,
       scanTime: attendance.scanTime.toISOString(),
-      totalStudents: updatedRecord.totalStudents,
+      totalStudents: (record.totalStudents || 0) + 1,
       courseCode: record.courseCode ?? undefined,
       courseName: record.courseName ?? undefined,
-      verificationMethod,
+      verificationMethod: "BIOMETRIC_FINGERPRINT",
     });
-
-    // Log audit
-    await prisma.auditLog.create({
-      data: {
-        action: "BIOMETRIC_ATTENDANCE_RECORDED",
-        entity: "ClassAttendance",
-        entityId: attendance.id,
-        details: {
-          recordId: validatedData.recordId,
-          studentId: student.id,
-          indexNumber: student.indexNumber,
-          verificationMethod,
-          deviceId: validatedData.deviceId,
-          linkTokenUsed: validatedData.linkToken ? true : false,
-        },
-        ipAddress: req.ip,
-      },
-    });
-
-    console.log("[BIOMETRIC_ATTENDANCE] Successfully recorded for:", student.indexNumber);
 
     res.json({
-      attendance,
+      success: true,
       message: "Biometric attendance recorded successfully",
+      attendance: {
+        id: attendance.id,
+        studentId: student.id,
+        scanTime: attendance.scanTime.toISOString(),
+        verificationMethod: attendance.verificationMethod,
+      },
     });
   } catch (error) {
     console.error("Record biometric attendance error:", error);
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0].message });
+    }
     res.status(500).json({ error: "Failed to record biometric attendance" });
   }
 };
@@ -983,5 +958,51 @@ export const confirmAttendance = async (req: Request, res: Response) => {
       return res.status(400).json({ error: error.issues[0].message });
     }
     res.status(500).json({ error: "Failed to confirm attendance" });
+  }
+};
+
+/**
+ * Get available attendance sessions for students (biometric self-service)
+ */
+export const getAvailableSessionsForStudent = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    // Get all active attendance records (IN_PROGRESS status)
+    const activeRecords = await prisma.classAttendanceRecord.findMany({
+      where: {
+        status: "IN_PROGRESS",
+      },
+      include: {
+        session: {
+          select: {
+            id: true,
+            deviceName: true,
+          },
+        },
+      },
+      orderBy: {
+        startTime: "desc",
+      },
+    });
+
+    // Format for mobile app
+    const sessions = activeRecords.map((record: any) => ({
+      id: record.session.id,
+      deviceName: record.session.deviceName || "Unknown Device",
+      courseName: record.courseName,
+      courseCode: record.courseCode,
+      lecturerName: record.lecturerName,
+      startTime: record.startTime.toISOString(),
+      recordId: record.id,
+    }));
+
+    res.json({
+      sessions,
+    });
+  } catch (error) {
+    console.error("Get available sessions for student error:", error);
+    res.status(500).json({ error: "Failed to get available sessions" });
   }
 };

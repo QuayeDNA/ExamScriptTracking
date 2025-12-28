@@ -33,11 +33,11 @@ async function seedProduction() {
   try {
     // Get credentials from environment variables or use defaults
     const superAdminEmail =
-      process.env.SUPER_ADMIN_EMAIL || "superadmin@examtrack.com";
+      process.env.SUPER_ADMIN_EMAIL || "superadmin@elms.com";
     const superAdminPassword =
       process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin@123";
     const classRepEmail =
-      process.env.CLASS_REP_EMAIL || "attendance@examtrack.com";
+      process.env.CLASS_REP_EMAIL || "attendance@elms.com";
     const classRepPassword = process.env.CLASS_REP_PASSWORD || "Attendance@123";
 
     console.log("\n👤 Creating Super Admin...");
@@ -61,7 +61,7 @@ async function seedProduction() {
         phone: "+1234567890",
         isSuperAdmin: true,
         isActive: true,
-        passwordChanged: false, // Will be forced to change on first login
+        passwordChanged: false,
       },
     });
 
@@ -91,7 +91,7 @@ async function seedProduction() {
         phone: "+1234567891",
         isSuperAdmin: false,
         isActive: true,
-        passwordChanged: true, // Set to true so they can use it immediately
+        passwordChanged: true,
       },
     });
 

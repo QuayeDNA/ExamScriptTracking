@@ -339,9 +339,20 @@ export default function AttendanceDashboard() {
       <View style={[styles.header, { backgroundColor: colors.card }]}>
         <View style={styles.headerContent}>
           <H2 style={{ color: colors.foreground }}>Attendance</H2>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-            <Ionicons name="log-out-outline" size={24} color={colors.primary} />
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              onPress={() => router.push("/attendance/student-attendance")}
+              style={styles.studentButton}
+            >
+              <Ionicons name="finger-print" size={20} color={colors.primary} />
+              <Text style={[styles.studentButtonText, { color: colors.primary }]}>
+                Student
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.headerMeta}>
           <Badge variant={session?.isActive ? "default" : "secondary"}>
@@ -693,6 +704,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  studentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  studentButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   logoutButton: {
     padding: 8,

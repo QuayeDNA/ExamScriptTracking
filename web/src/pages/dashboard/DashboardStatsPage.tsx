@@ -422,9 +422,9 @@ export default function DashboardStatsPage() {
         return (
           <Card>
             <CardHeader>
-              <CardTitle>Welcome to Exam Script Tracking System</CardTitle>
+              <CardTitle>Welcome to Exam Logistics System</CardTitle>
               <CardDescription>
-                Manage and track exam scripts efficiently
+                Manage and track exam logistics efficiently
               </CardDescription>
             </CardHeader>
             <CardContent>

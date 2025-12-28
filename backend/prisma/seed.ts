@@ -8,11 +8,11 @@ async function main() {
 
   // Get credentials from environment variables or use defaults
   const superAdminEmail =
-    process.env.SUPER_ADMIN_EMAIL || "superadmin@examtrack.com";
+    process.env.SUPER_ADMIN_EMAIL || "superadmin@elms.com";
   const superAdminPassword =
     process.env.SUPER_ADMIN_PASSWORD || "SuperAdmin@123";
   const classRepEmail =
-    process.env.CLASS_REP_EMAIL || "attendance@examtrack.com";
+    process.env.CLASS_REP_EMAIL || "attendance@elms.com";
   const classRepPassword = process.env.CLASS_REP_PASSWORD || "Attendance@123";
 
   // Create Super Admin

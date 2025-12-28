@@ -14,6 +14,7 @@ import {
   getAttendanceRecordById,
   getAutocompleteValues,
   deleteAttendanceRecord,
+  getAvailableSessionsForStudent,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -51,6 +52,13 @@ router.post(
   "/records/attendance/biometric",
   authorize(Role.ADMIN, Role.CLASS_REP),
   recordBiometricAttendance
+);
+
+// Get available sessions for student biometric attendance
+router.get(
+  "/sessions/available-for-student",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  getAvailableSessionsForStudent
 );
 
 // Confirm manual attendance entry

@@ -6,7 +6,7 @@ interface ExamSession {
   courseCode: string;
   courseName: string;
   venue: string;
-  batchQrCode: string;
+  batchQrCode?: string;
   status?: string;
 }
 
