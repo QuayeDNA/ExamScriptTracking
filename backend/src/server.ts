@@ -30,9 +30,6 @@ const app: Express = express();
 const httpServer = createServer(app);
 const PORT = Number(process.env.PORT) || 3000;
 
-// Initialize Socket.io with authentication
-export const io = initializeSocketServer(httpServer);
-
 // Middleware
 // Allow CORS from multiple origins for web and mobile development
 const corsOrigins = process.env.CORS_ORIGIN
@@ -44,6 +41,9 @@ const allowedOrigins = [
   "http://localhost:8081", // Expo dev server
   ...corsOrigins,
 ].filter(Boolean);
+
+// Initialize Socket.io with authentication
+export const io = initializeSocketServer(httpServer, allowedOrigins);
 
 app.use(
   cors({

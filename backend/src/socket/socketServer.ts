@@ -13,10 +13,10 @@ interface AuthenticatedSocket extends Socket {
 /**
  * Initialize Socket.io server with authentication and CORS
  */
-export function initializeSocketServer(httpServer: HTTPServer) {
+export function initializeSocketServer(httpServer: HTTPServer, allowedOrigins: string[] = []) {
   const io = new Server(httpServer, {
     cors: {
-      origin: [
+      origin: allowedOrigins.length > 0 ? allowedOrigins : [
         "http://localhost:5173", // Vite dev server (web)
         "http://localhost:8081", // Expo dev server (mobile)
         "http://localhost:19006", // Expo web
