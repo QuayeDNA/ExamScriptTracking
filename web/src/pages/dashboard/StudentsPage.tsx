@@ -5,6 +5,7 @@ import {
   type Student,
   type CreateStudentData,
   type UpdateStudentData,
+  type BiometricEnrollmentLinkResponse,
 } from "@/api/students";
 import { getFileUrl } from "@/lib/api-client";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
@@ -271,7 +272,11 @@ export default function StudentsPage() {
   });
 
   // Generate biometric enrollment link mutation
-  const generateBiometricLinkMutation = useMutation({
+  const generateBiometricLinkMutation = useMutation<
+    BiometricEnrollmentLinkResponse,
+    Error,
+    string
+  >({
     mutationFn: (studentId: string) =>
       studentsApi.generateBiometricEnrollmentLink(studentId, 24),
     onSuccess: (data) => {
