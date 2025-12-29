@@ -217,6 +217,34 @@ export class StorageService {
 
 // Factory function to create storage service based on environment
 export function createStorageService(): StorageService {
+  // Check for explicit STORAGE_PROVIDER setting first
+  const explicitProvider = process.env.STORAGE_PROVIDER as StorageProvider;
+  if (explicitProvider && ["local", "cloudinary"].includes(explicitProvider)) {
+    console.log(`📁 Using explicitly set ${explicitProvider} storage provider`);
+    const config: StorageConfig = { provider: explicitProvider };
+    // Configure based on explicit provider
+    if (explicitProvider === "local") {
+      config.local = {
+        uploadDir: process.env.UPLOAD_DIR || "uploads",
+      };
+    } else if (explicitProvider === "cloudinary") {
+      if (
+        !process.env.CLOUDINARY_CLOUD_NAME ||
+        !process.env.CLOUDINARY_API_KEY ||
+        !process.env.CLOUDINARY_API_SECRET
+      ) {
+        throw new Error("Cloudinary environment variables not configured");
+      }
+      config.cloudinary = {
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        apiSecret: process.env.CLOUDINARY_API_SECRET,
+        uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET,
+      };
+    }
+    return new StorageService(config);
+  }
+
   // Auto-select provider based on NODE_ENV
   const nodeEnv = process.env.NODE_ENV || "development";
   const provider: StorageProvider =
