@@ -115,6 +115,10 @@ model Student {
   qrCode      String   @unique
   profilePicture String // Path to profile picture file
 
+  // NEW: Program option and department fields
+  option     String?  // Program option (e.g., "Software Option", "Networking Option")
+  department String?  // Student's department
+
   // NEW: Biometric Fields
   biometricTemplateHash String?  @unique  // Hashed biometric template
   biometricEnrolledAt   DateTime?          // When biometrics were enrolled

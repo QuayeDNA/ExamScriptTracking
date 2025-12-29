@@ -15,6 +15,8 @@ export interface Student {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number | null;
   profilePicture?: string;
 }
@@ -30,6 +32,8 @@ export interface CreateStudentData {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number;
 }
 
@@ -89,5 +93,5 @@ export const searchStudents = async (
   });
 
   const response = await apiClient.get(`/students?${params}`);
-  return response;
+  return response as { students: Student[]; pagination: any };
 };

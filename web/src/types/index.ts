@@ -227,6 +227,8 @@ export interface Student {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option (e.g., "Software Option", "Networking Option")
+  department?: string; // Student's department
   level: number;
   qrCode: string;
   profilePicture: string;

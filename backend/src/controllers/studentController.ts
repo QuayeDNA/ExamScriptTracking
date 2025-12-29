@@ -70,6 +70,8 @@ const createStudentSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   program: z.string().min(1, "Program is required"),
+  option: z.string().optional(), // Optional program option
+  department: z.string().optional(), // Optional department
   level: z
     .string()
     .transform((val) => parseInt(val, 10))
@@ -99,6 +101,8 @@ const updateStudentSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   program: z.string().min(1).optional(),
+  option: z.string().optional(), // Optional program option
+  department: z.string().optional(), // Optional department
   level: z
     .string()
     .optional()
@@ -130,6 +134,8 @@ const bulkCreateStudentSchema = z.array(
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     program: z.string().min(1),
+    option: z.string().optional(), // Optional program option
+    department: z.string().optional(), // Optional department
     level: z
       .union([z.number(), z.string().transform((val) => parseInt(val, 10))])
       .refine(
@@ -226,6 +232,8 @@ export const createStudent = async (
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
         program: validatedData.program,
+        option: validatedData.option,
+        department: validatedData.department,
         level: validatedData.level,
         profilePicture: profilePictureUrl,
         qrCode: qrData, // Temporary, will regenerate with ID

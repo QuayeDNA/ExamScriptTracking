@@ -87,6 +87,8 @@ export default function StudentsPage() {
     firstName: "",
     lastName: "",
     program: "",
+    option: "",
+    department: "",
     level: 100,
   });
   const [profilePictureFile, setProfilePictureFile] = useState<File | null>(
@@ -223,6 +225,8 @@ export default function StudentsPage() {
       const firstName = values[headers.indexOf("firstname")] || "";
       const lastName = values[headers.indexOf("lastname")] || "";
       const program = values[headers.indexOf("program")] || "";
+      const option = values[headers.indexOf("option")] || "";
+      const department = values[headers.indexOf("department")] || "";
       const levelStr = values[headers.indexOf("level")] || "";
 
       // Validate required fields
@@ -244,6 +248,8 @@ export default function StudentsPage() {
         firstName,
         lastName,
         program,
+        option: option || undefined,
+        department: department || undefined,
         level,
       });
     }
@@ -330,6 +336,8 @@ export default function StudentsPage() {
       "First Name",
       "Last Name",
       "Program",
+      "Option",
+      "Department",
       "Level",
     ];
     const rows = studentsData.students.map((s) => [
@@ -337,6 +345,8 @@ export default function StudentsPage() {
       s.firstName,
       s.lastName,
       s.program,
+      s.option || "",
+      s.department || "",
       s.level,
     ]);
 
@@ -380,6 +390,8 @@ export default function StudentsPage() {
       firstName: "",
       lastName: "",
       program: "",
+      option: "",
+      department: "",
       level: 100,
     });
     setSelectedStudent(null);
@@ -394,6 +406,8 @@ export default function StudentsPage() {
       firstName: student.firstName,
       lastName: student.lastName,
       program: student.program,
+      option: student.option || "",
+      department: student.department || "",
       level: student.level,
     });
     setProfilePicturePreview(getFileUrl(student.profilePicture));
@@ -463,12 +477,14 @@ export default function StudentsPage() {
       "firstName",
       "lastName",
       "program",
+      "option",
+      "department",
       "level",
     ];
     const exampleRows = [
-      ["2024001", "John", "Doe", "Computer Science", "100"],
-      ["2024002", "Jane", "Smith", "Engineering", "200"],
-      ["2024003", "Mike", "Johnson", "Business", "300"],
+      ["2024001", "John", "Doe", "Information Technology", "Software Option", "Computer Science", "100"],
+      ["2024002", "Jane", "Smith", "Engineering", "Electrical Option", "Engineering", "200"],
+      ["2024003", "Mike", "Johnson", "Business", "", "Business Administration", "300"],
     ];
 
     const csv = [headers, ...exampleRows]
@@ -646,6 +662,8 @@ export default function StudentsPage() {
                     <TableHead>First Name</TableHead>
                     <TableHead>Last Name</TableHead>
                     <TableHead>Program</TableHead>
+                    <TableHead>Option</TableHead>
+                    <TableHead>Department</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Biometric Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -672,6 +690,8 @@ export default function StudentsPage() {
                       <TableCell>{student.firstName}</TableCell>
                       <TableCell>{student.lastName}</TableCell>
                       <TableCell>{student.program}</TableCell>
+                      <TableCell>{student.option || "-"}</TableCell>
+                      <TableCell>{student.department || "-"}</TableCell>
                       <TableCell>{student.level}</TableCell>
                       <TableCell>
                         {student.biometricEnrolledAt ? (
@@ -822,6 +842,26 @@ export default function StudentsPage() {
                                 {student.program}
                               </span>
                             </div>
+                            {student.option && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">
+                                  Option:
+                                </span>
+                                <span className="font-medium text-foreground">
+                                  {student.option}
+                                </span>
+                              </div>
+                            )}
+                            {student.department && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">
+                                  Department:
+                                </span>
+                                <span className="font-medium text-foreground">
+                                  {student.department}
+                                </span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">
                                 Level:
@@ -974,6 +1014,30 @@ export default function StudentsPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="option">Option (Optional)</Label>
+              <Input
+                id="option"
+                type="text"
+                value={formData.option}
+                onChange={(e) =>
+                  setFormData({ ...formData, option: e.target.value })
+                }
+                placeholder="e.g., Software Option, Networking Option"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="department">Department (Optional)</Label>
+              <Input
+                id="department"
+                type="text"
+                value={formData.department}
+                onChange={(e) =>
+                  setFormData({ ...formData, department: e.target.value })
+                }
+                placeholder="e.g., Computer Science, Engineering"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="level">Level</Label>
               <Select
                 value={formData.level.toString()}
@@ -1090,7 +1154,7 @@ export default function StudentsPage() {
             <DialogTitle>Bulk Import Students</DialogTitle>
             <DialogDescription>
               Upload a CSV file with columns: indexNumber, firstName, lastName,
-              program, level. Note: Profile pictures must be uploaded
+              program, option (optional), department (optional), level. Note: Profile pictures must be uploaded
               individually after bulk import.
             </DialogDescription>
           </DialogHeader>

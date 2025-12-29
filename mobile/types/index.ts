@@ -76,6 +76,8 @@ export interface Student {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number;
   qrCode: string;
   profilePicture: string;

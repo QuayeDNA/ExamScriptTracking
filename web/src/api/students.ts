@@ -6,6 +6,8 @@ export interface Student {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number;
   qrCode: string;
   profilePicture: string;
@@ -19,6 +21,8 @@ export interface CreateStudentData {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number;
 }
 
@@ -27,6 +31,8 @@ export interface UpdateStudentData {
   firstName?: string;
   lastName?: string;
   program?: string;
+  option?: string; // Program option
+  department?: string; // Department
   level?: number;
 }
 
@@ -35,6 +41,8 @@ export interface BulkCreateStudent {
   firstName: string;
   lastName: string;
   program: string;
+  option?: string; // Program option
+  department?: string; // Department
   level: number;
 }
 
