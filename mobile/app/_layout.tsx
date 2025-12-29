@@ -156,11 +156,7 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
           <Stack.Screen name="change-password" />
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="attendance/index" />
-          <Stack.Screen
-            name="attendance/record"
-            options={{ headerShown: true, title: "Attendance Recording" }}
-          />
+          <Stack.Screen name="attendance" />
           <Stack.Screen
             name="batch-details"
             options={{

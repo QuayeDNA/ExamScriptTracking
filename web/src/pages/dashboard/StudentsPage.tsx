@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Grid3X3,
   List,
+  Fingerprint,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import {
@@ -76,6 +77,7 @@ export default function StudentsPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isBiometricLinkModalOpen, setIsBiometricLinkModalOpen] = useState(false);
 
   // Form states
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -94,6 +96,12 @@ export default function StudentsPage() {
   >(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [qrCodeData, setQrCodeData] = useState<string>("");
+  const [biometricLinkData, setBiometricLinkData] = useState<{
+    token: string;
+    url: string;
+    expiresAt: string;
+    studentName: string;
+  } | null>(null);
 
   // Fetch students with filters
   const { data: studentsData, isLoading } = useQuery({
@@ -262,6 +270,25 @@ export default function StudentsPage() {
     },
   });
 
+  // Generate biometric enrollment link mutation
+  const generateBiometricLinkMutation = useMutation({
+    mutationFn: (studentId: string) =>
+      studentsApi.generateBiometricEnrollmentLink(studentId, 24),
+    onSuccess: (data) => {
+      setBiometricLinkData({
+        token: data.enrollmentLink.token,
+        url: data.enrollmentLink.url,
+        expiresAt: data.enrollmentLink.expiresAt,
+        studentName: data.enrollmentLink.studentName,
+      });
+      setIsBiometricLinkModalOpen(true);
+      toast.success("Biometric enrollment link generated successfully");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to generate biometric enrollment link");
+    },
+  });
+
   // Get QR code
   const handleShowQRCode = async (student: Student) => {
     try {
@@ -272,6 +299,11 @@ export default function StudentsPage() {
     } catch {
       toast.error("Failed to fetch QR code");
     }
+  };
+
+  // Generate biometric enrollment link
+  const handleGenerateBiometricLink = (student: Student) => {
+    generateBiometricLinkMutation.mutate(student.id);
   };
 
   // Download QR code
@@ -610,6 +642,7 @@ export default function StudentsPage() {
                     <TableHead>Last Name</TableHead>
                     <TableHead>Program</TableHead>
                     <TableHead>Level</TableHead>
+                    <TableHead>Biometric Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -636,6 +669,21 @@ export default function StudentsPage() {
                       <TableCell>{student.lastName}</TableCell>
                       <TableCell>{student.program}</TableCell>
                       <TableCell>{student.level}</TableCell>
+                      <TableCell>
+                        {student.biometricEnrolledAt ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-sm text-green-700">
+                              Enrolled ({student.biometricProvider === 'WEBAUTHN' ? 'Web Auth' : student.biometricProvider})
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                            <span className="text-sm text-gray-600">Not enrolled</span>
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -648,6 +696,16 @@ export default function StudentsPage() {
                           </Button>
                           {isAdmin && (
                             <>
+                              {!student.biometricEnrolledAt && (
+                                <Button
+                                  onClick={() => handleGenerateBiometricLink(student)}
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Generate Biometric Enrollment Link"
+                                >
+                                  <Fingerprint className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 onClick={() => openEditModal(student)}
                                 variant="ghost"
@@ -1112,6 +1170,58 @@ export default function StudentsPage() {
             <Button onClick={handleDownloadQRCode}>
               <Download className="h-4 w-4 mr-2" />
               Download QR Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Biometric Enrollment Link Modal */}
+      <Dialog open={isBiometricLinkModalOpen} onOpenChange={setIsBiometricLinkModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Biometric Enrollment Link</DialogTitle>
+            <DialogDescription>
+              Enrollment link for {biometricLinkData?.studentName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {biometricLinkData && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="enrollment-url">Enrollment URL</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="enrollment-url"
+                      value={biometricLinkData.url}
+                      readOnly
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={() => navigator.clipboard.writeText(biometricLinkData.url)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <Label>Expires At</Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {new Date(biometricLinkData.expiresAt).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Instructions:</strong> Share this link with the student. They can open it on their mobile device to enroll their biometric data (fingerprint, face ID, etc.) for attendance verification.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBiometricLinkModalOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

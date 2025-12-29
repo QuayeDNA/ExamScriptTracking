@@ -10,6 +10,9 @@ export interface Student {
   qrCode: string;
   profilePicture: string;
   createdAt: string;
+  // Biometric fields
+  biometricEnrolledAt?: string;
+  biometricProvider?: string;
 }
 
 export interface CreateStudentData {
@@ -70,12 +73,14 @@ export interface BulkCreateResponse {
   failed: Array<{ indexNumber: string; error: string }>;
 }
 
-export interface QRCodeResponse {
-  qrCode: string;
-  student: {
-    id: string;
-    indexNumber: string;
-    name: string;
+export interface BiometricEnrollmentLinkResponse {
+  message: string;
+  enrollmentLink: {
+    token: string;
+    url: string;
+    expiresAt: string;
+    studentId: string;
+    studentName: string;
   };
 }
 
@@ -204,5 +209,15 @@ export const studentsApi = {
         responseType: "blob",
       });
     return response.data;
+  },
+
+  generateBiometricEnrollmentLink: async (
+    studentId: string,
+    expiresInHours?: number
+  ): Promise<BiometricEnrollmentLinkResponse> => {
+    return apiClient.post<BiometricEnrollmentLinkResponse>(
+      `/students/${studentId}/biometric-enrollment-link`,
+      { expiresInHours }
+    );
   },
 };

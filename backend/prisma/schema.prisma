@@ -122,6 +122,7 @@ model Student {
   biometricProvider     String?            // 'TOUCHID', 'FACEID', 'FINGERPRINT'
 
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   
   attendances       ExamAttendance[]
   classAttendances  ClassAttendance[]

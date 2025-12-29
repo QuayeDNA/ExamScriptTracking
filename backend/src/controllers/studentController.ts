@@ -99,7 +99,7 @@ const createStudentSchema = z.object({
     ),
   // Optional biometric enrollment during creation
   biometricTemplate: z.string().optional(),
-  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT']).optional(),
+  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT', 'WEBAUTHN']).optional(),
   biometricDeviceId: z.string().optional(),
 }).refine(
   (data) => {
@@ -127,7 +127,22 @@ const updateStudentSchema = z.object({
       (val) => val === undefined || (!isNaN(val) && val > 0),
       "Level must be a positive integer"
     ),
-});
+  // Optional biometric update (admin can update/remove biometrics)
+  biometricTemplate: z.string().optional(),
+  biometricProvider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT', 'WEBAUTHN']).optional(),
+  biometricDeviceId: z.string().optional(),
+}).refine(
+  (data) => {
+    // If any biometric field is provided, all must be provided
+    const biometricFields = ['biometricTemplate', 'biometricProvider', 'biometricDeviceId'];
+    const providedFields = biometricFields.filter(field => data[field as keyof typeof data]);
+    return providedFields.length === 0 || providedFields.length === biometricFields.length;
+  },
+  {
+    message: "All biometric fields (template, provider, deviceId) must be provided together",
+    path: ["biometricTemplate"]
+  }
+);
 
 const bulkCreateStudentSchema = z.array(
   z.object({
@@ -464,12 +479,34 @@ export const updateStudent = async (
       }
     }
 
+    // Handle biometric update if provided
+    let biometricData = {};
+    if (validatedData.biometricTemplate && validatedData.biometricProvider && validatedData.biometricDeviceId) {
+      // Validate biometric provider
+      if (!isValidBiometricProvider(validatedData.biometricProvider)) {
+        res.status(400).json({ error: "Invalid biometric provider" });
+        return;
+      }
+
+      // Generate salt and hash the template
+      const biometricSalt = generateBiometricSalt();
+      const biometricTemplateHash = hashBiometricTemplate(validatedData.biometricTemplate, biometricSalt);
+
+      biometricData = {
+        biometricTemplateHash,
+        biometricEnrolledAt: new Date(),
+        biometricDeviceId: validatedData.biometricDeviceId,
+        biometricProvider: validatedData.biometricProvider,
+      };
+    }
+
     // Update student
     const student = await prisma.student.update({
       where: { id },
       data: {
         ...validatedData,
         profilePicture: profilePictureUrl,
+        ...biometricData,
       },
     });
 
@@ -502,16 +539,23 @@ export const updateStudent = async (
     });
 
     // Log audit
+    const auditDetails: any = {
+      changes: validatedData,
+      profilePictureUpdated: !!req.file,
+    };
+
+    if (student.biometricEnrolledAt) {
+      auditDetails.biometricUpdated = true;
+      auditDetails.biometricProvider = student.biometricProvider;
+    }
+
     await prisma.auditLog.create({
       data: {
         userId: req.user!.userId,
         action: "UPDATE_STUDENT",
         entity: "Student",
         entityId: student.id,
-        details: {
-          changes: validatedData,
-          profilePictureUpdated: !!req.file,
-        },
+        details: auditDetails,
         ipAddress: req.ip,
       },
     });
@@ -1138,14 +1182,8 @@ export const enrollBiometric = async (
     console.log("[ENROLL_BIOMETRIC] Enrollment attempt with token");
 
     // Validate required fields
-    if (!token || !biometricTemplate || !biometricProvider || !biometricDeviceId) {
-      res.status(400).json({ error: "Missing required fields" });
-      return;
-    }
-
-    // Validate biometric provider
-    if (!isValidBiometricProvider(biometricProvider)) {
-      res.status(400).json({ error: "Invalid biometric provider" });
+    if (!token) {
+      res.status(400).json({ error: "Token is required" });
       return;
     }
 
@@ -1186,9 +1224,46 @@ export const enrollBiometric = async (
       return;
     }
 
-    // Generate salt and hash the template
-    const biometricSalt = generateBiometricSalt();
-    const biometricTemplateHash = hashBiometricTemplate(biometricTemplate, biometricSalt);
+    let biometricTemplateHash: string;
+    let finalBiometricProvider: string;
+    let finalBiometricDeviceId: string;
+
+    // Handle different enrollment methods
+    if (biometricTemplate && typeof biometricTemplate === 'string') {
+      // Legacy mobile app enrollment
+      if (!biometricProvider || !biometricDeviceId) {
+        res.status(400).json({ error: "Missing biometric provider or device ID" });
+        return;
+      }
+
+      if (!isValidBiometricProvider(biometricProvider)) {
+        res.status(400).json({ error: "Invalid biometric provider" });
+        return;
+      }
+
+      // Generate salt and hash the template
+      const biometricSalt = generateBiometricSalt();
+      biometricTemplateHash = hashBiometricTemplate(biometricTemplate, biometricSalt);
+      finalBiometricProvider = biometricProvider;
+      finalBiometricDeviceId = biometricDeviceId;
+    } else if (biometricTemplate && typeof biometricTemplate === 'object') {
+      // WebAuthn enrollment
+      const { credentialId } = biometricTemplate;
+
+      if (!credentialId) {
+        res.status(400).json({ error: "Invalid WebAuthn credential data" });
+        return;
+      }
+
+      // Use credential ID as the template to hash
+      const biometricSalt = generateBiometricSalt();
+      biometricTemplateHash = hashBiometricTemplate(credentialId, biometricSalt);
+      finalBiometricProvider = "WEBAUTHN"; // Special provider for WebAuthn
+      finalBiometricDeviceId = biometricDeviceId || req.get('User-Agent') || 'web-browser';
+    } else {
+      res.status(400).json({ error: "Invalid biometric data format" });
+      return;
+    }
 
     // Update student with biometric data
     const updatedStudent = await prisma.student.update({
@@ -1196,8 +1271,8 @@ export const enrollBiometric = async (
       data: {
         biometricTemplateHash,
         biometricEnrolledAt: new Date(),
-        biometricDeviceId,
-        biometricProvider,
+        biometricDeviceId: finalBiometricDeviceId,
+        biometricProvider: finalBiometricProvider,
       },
     });
 
@@ -1216,8 +1291,8 @@ export const enrollBiometric = async (
         details: {
           indexNumber: enrollmentLink.student!.indexNumber,
           name: `${enrollmentLink.student!.firstName} ${enrollmentLink.student!.lastName}`,
-          biometricProvider,
-          enrollmentMethod: "SELF_SERVICE_LINK",
+          biometricProvider: finalBiometricProvider,
+          enrollmentMethod: "WEBAUTHN_ENROLLMENT",
         },
         ipAddress: req.ip,
       },

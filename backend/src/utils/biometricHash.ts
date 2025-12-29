@@ -47,7 +47,7 @@ export function verifyBiometricTemplate(
  * @returns True if valid provider
  */
 export function isValidBiometricProvider(provider: string): boolean {
-  const validProviders = ['TOUCHID', 'FACEID', 'FINGERPRINT'];
+  const validProviders = ['TOUCHID', 'FACEID', 'FINGERPRINT', 'WEBAUTHN'];
   return validProviders.includes(provider.toUpperCase());
 }
 

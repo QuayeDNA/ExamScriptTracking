@@ -39,6 +39,7 @@ import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
+import BiometricEnrollmentPage from "@/pages/BiometricEnrollmentPage";
 
 // Mobile pages
 import { MobileHomePage } from "@/pages/mobile/MobileHomePage";
@@ -95,6 +96,7 @@ function App() {
                   element={<DesignSystemDemo />}
                 />
                 <Route path="/student-qr" element={<StudentQRLookup />} />
+                <Route path="/enroll-biometric" element={<BiometricEnrollmentPage />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
                 {/* Desktop Auth routes - shared AuthLayout */}

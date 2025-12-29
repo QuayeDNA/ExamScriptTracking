@@ -231,6 +231,9 @@ export interface Student {
   qrCode: string;
   profilePicture: string;
   createdAt: string;
+  // Biometric fields
+  biometricEnrolledAt?: string;
+  biometricProvider?: string;
 }
 
 // Exam Session Types
