@@ -34,18 +34,11 @@ export default function AttendanceHistory() {
   const loadRecords = async () => {
     try {
       if (!refreshing) setLoading(true);
-      // Assuming we have a way to get session, but for history, perhaps get all records
-      // For now, we'll need to adjust the API or get from current session
-      // Since history is for past records, we might need a different API
-      // For simplicity, using the same as before
-      const sessionResp = await classAttendanceApi.createOrGetSession({
-        deviceId: 'dummy', // TODO: get actual deviceId
+      const response = await classAttendanceApi.getAllRecords({
+        page: 1,
+        limit: 50
       });
-      const recordResp = await classAttendanceApi.getSessionRecords(
-        sessionResp.session.id,
-        { page: 1, limit: 50 }
-      );
-      setRecords(recordResp.records || []);
+      setRecords(response.records || []);
     } catch (error: any) {
       Toast.show({
         type: "error",
@@ -119,7 +112,7 @@ export default function AttendanceHistory() {
               activeOpacity={0.7}
               onPress={() =>
                 router.push(
-                  `/attendance/details?recordId=${record.id}` as any
+                  `/attendance-view?recordId=${record.id}` as any
                 )
               }
             >

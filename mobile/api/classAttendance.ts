@@ -27,6 +27,7 @@ export interface ClassAttendanceRecord {
     scanTime: string;
     lecturerConfirmed: boolean;
     confirmedAt?: string;
+    verificationMethod?: string;
     student: {
       id: string;
       indexNumber: string;
@@ -34,6 +35,7 @@ export interface ClassAttendanceRecord {
       lastName: string;
       program?: string | null;
       level?: number | null;
+      profilePicture?: string;
     };
   }[];
 }
@@ -101,6 +103,16 @@ export const classAttendanceApi = {
     return apiClient.get(
       `/class-attendance/sessions/${sessionId}/records${qs ? `?${qs}` : ""}`
     );
+  },
+
+  getAllRecords: async (
+    params?: { page?: number; limit?: number }
+  ): Promise<AttendanceRecordListResponse> => {
+    const search = new URLSearchParams();
+    if (params?.page) search.append("page", params.page.toString());
+    if (params?.limit) search.append("limit", params.limit.toString());
+    const qs = search.toString();
+    return apiClient.get(`/class-attendance/records${qs ? `?${qs}` : ""}`);
   },
 
   getRecord: async (id: string): Promise<{ record: ClassAttendanceRecord }> => {

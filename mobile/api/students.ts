@@ -75,3 +75,19 @@ export const getStudentByIndexNumber = async (
   );
   return response as Student;
 };
+
+/**
+ * Search students by name or index number
+ */
+export const searchStudents = async (
+  query: string,
+  limit: number = 10
+): Promise<{ students: Student[]; pagination: any }> => {
+  const params = new URLSearchParams({
+    search: query,
+    limit: limit.toString(),
+  });
+
+  const response = await apiClient.get(`/students?${params}`);
+  return response;
+};

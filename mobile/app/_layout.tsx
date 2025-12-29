@@ -158,6 +158,14 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="attendance" />
           <Stack.Screen
+            name="view"
+            options={{
+              headerShown: true,
+              title: "Attendance Record",
+              presentation: "card",
+            }}
+          />
+          <Stack.Screen
             name="batch-details"
             options={{
               headerShown: true,

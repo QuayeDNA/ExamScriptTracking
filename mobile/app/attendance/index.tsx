@@ -447,6 +447,12 @@ export default function AttendanceDashboard() {
                       pathname: "/attendance/record",
                       params: { recordId: record.id, sessionId: session?.id },
                     });
+                  } else {
+                    // For completed/cancelled records, view the details
+                    router.push({
+                      pathname: "/view",
+                      params: { recordId: record.id },
+                    });
                   }
                 }}
               >

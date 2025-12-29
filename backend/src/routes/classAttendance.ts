@@ -12,6 +12,7 @@ import {
   getAttendanceRecords,
   getAttendanceRecord,
   getAttendanceRecordById,
+  getAllAttendanceRecords,
   getAutocompleteValues,
   deleteAttendanceRecord,
   getAvailableSessionsForStudent,
@@ -94,6 +95,13 @@ router.get(
   "/sessions/:sessionId/records",
   authorize(Role.ADMIN, Role.CLASS_REP),
   getAttendanceRecords
+);
+
+// Get all attendance records for current user (history)
+router.get(
+  "/records",
+  authorize(Role.ADMIN, Role.CLASS_REP),
+  getAllAttendanceRecords
 );
 
 // Get specific attendance record with full details

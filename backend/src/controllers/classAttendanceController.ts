@@ -687,12 +687,14 @@ export const getAttendanceRecordById = async (req: Request, res: Response) => {
             scanTime: true,
             lecturerConfirmed: true,
             confirmedAt: true,
+            verificationMethod: true,
             student: {
               select: {
                 id: true,
                 indexNumber: true,
                 firstName: true,
                 lastName: true,
+                profilePicture: true,
               },
             },
           },
@@ -956,6 +958,69 @@ export const confirmAttendance = async (req: Request, res: Response) => {
       return res.status(400).json({ error: error.issues[0].message });
     }
     res.status(500).json({ error: "Failed to confirm attendance" });
+  }
+};
+
+/**
+ * Get all attendance records for the current user (for history page)
+ */
+export const getAllAttendanceRecords = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { page = 1, limit = 20 } = req.query;
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [records, total] = await Promise.all([
+      prisma.classAttendanceRecord.findMany({
+        where: { userId },
+        include: {
+          session: {
+            select: {
+              id: true,
+              deviceId: true,
+              deviceName: true,
+            },
+          },
+          students: {
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  indexNumber: true,
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+            },
+            orderBy: {
+              scanTime: "desc",
+            },
+          },
+        },
+        orderBy: {
+          startTime: "desc",
+        },
+        skip,
+        take: limitNum,
+      }),
+      prisma.classAttendanceRecord.count({ where: { userId } }),
+    ]);
+
+    res.json({
+      records,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error("Get all attendance records error:", error);
+    res.status(500).json({ error: "Failed to get attendance records" });
   }
 };
 

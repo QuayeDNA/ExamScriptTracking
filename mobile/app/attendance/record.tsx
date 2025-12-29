@@ -8,18 +8,24 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, Camera } from "expo-camera";
 import Toast from "react-native-toast-message";
 import * as LocalAuthentication from "expo-local-authentication";
+import Constants from "expo-constants";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/typography";
 import { useThemeColors, BorderRadius, Spacing, Typography, Shadows } from "@/constants/design-system";
 import { classAttendanceApi } from "@/api/classAttendance";
+import { searchStudents } from "@/api/students";
 import type { ClassAttendanceRecord } from "@/api/classAttendance";
+import type { Student } from "@/api/students";
 
 type AttendanceMethod = "qrcode" | "manual" | "biometric";
 
@@ -38,6 +44,26 @@ export default function RecordAttendance() {
   const params = useLocalSearchParams();
   const recordId = params.recordId as string;
 
+  // Get base URL for images
+  const getBaseUrl = () => {
+    let API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+    try {
+      if (API_URL.includes("localhost")) {
+        const debuggerHost =
+          (Constants as any)?.manifest?.debuggerHost ||
+          (Constants as any)?.expoGo?.packagerOpts?.hostUri;
+        if (debuggerHost) {
+          const host = String(debuggerHost).split(":")[0];
+          API_URL = API_URL.replace("localhost", host);
+        }
+      }
+    } catch (e) {
+      // Keep fallback
+    }
+    return API_URL.replace('/api', '');
+  };
+  const baseUrl = getBaseUrl();
+
   const [activeMethod, setActiveMethod] = useState<AttendanceMethod | null>(null);
   const [record, setRecord] = useState<ClassAttendanceRecord | null>(null);
   const [recordedStudents, setRecordedStudents] = useState<RecordedStudent[]>([]);
@@ -46,7 +72,7 @@ export default function RecordAttendance() {
 
   // Manual entry state
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [searching, setSearching] = useState(false);
 
   // Biometric state
@@ -160,7 +186,7 @@ export default function RecordAttendance() {
   };
 
   // Manual Search
-  const searchStudents = useCallback(async (query: string) => {
+  const performStudentSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -168,44 +194,29 @@ export default function RecordAttendance() {
 
     setSearching(true);
     try {
-      // TODO: Implement backend search endpoint
-      // const results = await classAttendanceApi.searchStudents(query);
-      // setSearchResults(results);
-      
-      // Mock implementation for now
-      setTimeout(() => {
-        setSearchResults([
-          {
-            id: "1",
-            indexNumber: "20230001",
-            firstName: "John",
-            lastName: "Doe",
-            program: "Computer Science",
-            level: 300,
-          },
-        ]);
-        setSearching(false);
-      }, 500);
+      console.log("Searching for students with query:", query);
+      const response = await searchStudents(query, 20); // Limit to 20 results
+      console.log("Search response:", response);
+      setSearchResults(response.students);
+      setSearching(false);
     } catch (error) {
+      console.error("Student search error:", error);
       setSearching(false);
       setSearchResults([]);
+      Toast.show({
+        type: "error",
+        text1: "Search Error",
+        text2: error?.error || error?.message || "Failed to search students",
+      });
     }
   }, []);
 
-  useEffect(() => {
-    const debounce = setTimeout(() => {
-      searchStudents(searchQuery);
-    }, 300);
-
-    return () => clearTimeout(debounce);
-  }, [searchQuery, searchStudents]);
-
-  const handleManualRecord = async (student: any) => {
+  const handleManualRecord = async (student: Student) => {
     setLoading(true);
     try {
       await classAttendanceApi.recordStudentAttendance({
         recordId,
-        studentId: student.id,
+        studentId: student.indexNumber,
       });
 
       // Refresh the record to get updated student list with proper names
@@ -224,6 +235,30 @@ export default function RecordAttendance() {
         type: "error",
         text1: "Error",
         text2: error?.error || "Failed to record attendance",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmAttendance = async (attendanceId: string) => {
+    setLoading(true);
+    try {
+      await classAttendanceApi.confirmAttendance(attendanceId);
+      
+      // Refresh the record to update the confirmed status
+      await loadRecord();
+      
+      Toast.show({
+        type: "success",
+        text1: "Attendance Confirmed",
+        text2: "Student attendance has been confirmed",
+      });
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: error?.error || "Failed to confirm attendance",
       });
     } finally {
       setLoading(false);
@@ -305,6 +340,10 @@ export default function RecordAttendance() {
           onPress: async () => {
             try {
               await classAttendanceApi.endRecord(recordId);
+              
+              // Update local record state to reflect ended status
+              setRecord(prev => prev ? { ...prev, status: "COMPLETED" as const } : null);
+              
               Toast.show({
                 type: "success",
                 text1: "Recording Ended",
@@ -401,33 +440,41 @@ export default function RecordAttendance() {
               View List
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleEndRecording}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: Spacing[2],
-              paddingHorizontal: Spacing[3],
-              paddingVertical: Spacing[2],
-              borderRadius: BorderRadius.lg,
-              backgroundColor: colors.error,
-            }}
-          >
-            <Ionicons name="stop-circle" size={18} color="white" />
-            <Text style={{
-              fontSize: Typography.fontSize.sm,
-              fontWeight: Typography.fontWeight.semibold,
-              color: "white"
-            }}>End</Text>
-          </TouchableOpacity>
+          {record?.status === "IN_PROGRESS" && (
+            <TouchableOpacity
+              onPress={handleEndRecording}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: Spacing[2],
+                paddingHorizontal: Spacing[3],
+                paddingVertical: Spacing[2],
+                borderRadius: BorderRadius.lg,
+                backgroundColor: colors.error,
+              }}
+            >
+              <Ionicons name="stop-circle" size={18} color="white" />
+              <Text style={{
+                fontSize: Typography.fontSize.sm,
+                fontWeight: Typography.fontWeight.semibold,
+                color: "white"
+              }}>End</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      <ScrollView
-        style={{ flex: 1, padding: Spacing[4] }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Spacing[6] }}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
       >
+        <ScrollView
+          style={{ flex: 1, padding: Spacing[4] }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: Spacing[6] }}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Recording Info */}
         {record && (
           <Card style={{
@@ -474,23 +521,52 @@ export default function RecordAttendance() {
                   paddingHorizontal: Spacing[3],
                   paddingVertical: Spacing[1],
                   borderRadius: BorderRadius.full,
-                  backgroundColor: colors.success
+                  backgroundColor: record?.status === "COMPLETED" ? colors.success : colors.primary
                 }}
               >
                 <Text style={{
                   fontSize: Typography.fontSize.xs,
                   fontWeight: Typography.fontWeight.semibold,
                   color: "white"
-                }}>IN PROGRESS</Text>
+                }}>
+                  {record?.status === "COMPLETED" ? "COMPLETED" : "IN PROGRESS"}
+                </Text>
               </View>
             </View>
-            <Text style={{
-              fontSize: Typography.fontSize.xs,
-              marginTop: Spacing[2],
-              color: colors.foregroundMuted
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginTop: Spacing[2]
             }}>
-              Started: {new Date(record.startTime).toLocaleString()}
-            </Text>
+              <Text style={{
+                fontSize: Typography.fontSize.xs,
+                color: colors.foregroundMuted
+              }}>
+                Started: {new Date(record.startTime).toLocaleString()}
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/attendance')}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: Spacing[1],
+                  paddingHorizontal: Spacing[2],
+                  paddingVertical: Spacing[1],
+                  borderRadius: BorderRadius.md,
+                  backgroundColor: colors.secondary,
+                }}
+              >
+                <Ionicons name="information-circle-outline" size={14} color={colors.secondaryForeground} />
+                <Text style={{
+                  fontSize: Typography.fontSize.xs,
+                  fontWeight: Typography.fontWeight.medium,
+                  color: colors.secondaryForeground
+                }}>
+                  Details
+                </Text>
+              </TouchableOpacity>
+            </View>
           </Card>
         )}
 
@@ -504,7 +580,8 @@ export default function RecordAttendance() {
           Recording Methods
         </Text>
 
-        <View style={{ gap: Spacing[3], marginBottom: Spacing[6] }}>
+        {record?.status === "IN_PROGRESS" ? (
+          <View style={{ gap: Spacing[3], marginBottom: Spacing[6] }}>
           {/* QR Code Method */}
           <TouchableOpacity
             onPress={() => setActiveMethod(activeMethod === "qrcode" ? null : "qrcode")}
@@ -674,57 +751,89 @@ export default function RecordAttendance() {
                       fontSize: Typography.fontSize.base,
                       color: colors.foreground
                     }}
-                    placeholder="Search by name or index number..."
+                    placeholder="Enter full index number..."
                     placeholderTextColor={colors.foregroundMuted}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
+                    onSubmitEditing={() => performStudentSearch(searchQuery)}
                     autoCapitalize="none"
+                    returnKeyType="search"
                   />
-                  {searching && <ActivityIndicator size="small" color={colors.primary} />}
+                  <TouchableOpacity
+                    onPress={() => performStudentSearch(searchQuery)}
+                    disabled={searching || !searchQuery.trim()}
+                    style={{
+                      marginLeft: Spacing[2],
+                      padding: Spacing[1],
+                    }}
+                  >
+                    {searching ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Ionicons name="search-circle" size={24} color={searchQuery.trim() ? colors.primary : colors.foregroundMuted} />
+                    )}
+                  </TouchableOpacity>
                 </View>
 
                 {/* Search Results */}
-                {searchResults.length > 0 && (
-                  <View style={{
-                    marginTop: Spacing[2],
-                    borderRadius: BorderRadius.lg,
-                    borderWidth: 1,
-                    borderColor: colors.border
-                  }}>
-                    {searchResults.map((student, index) => (
-                      <TouchableOpacity
-                        key={student.id}
-                        onPress={() => handleManualRecord(student)}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          padding: Spacing[3],
-                          backgroundColor: colors.card,
-                          borderBottomWidth: index === searchResults.length - 1 ? 0 : 1,
-                          borderColor: colors.border,
-                        }}
-                        disabled={loading}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={{
-                            fontSize: Typography.fontSize.sm,
-                            fontWeight: Typography.fontWeight.semibold,
-                            color: colors.foreground
-                          }}>
-                            {student.firstName} {student.lastName}
-                          </Text>
-                          <Text style={{
-                            fontSize: Typography.fontSize.xs,
-                            color: colors.foregroundMuted
-                          }}>
-                            {student.indexNumber} • {student.program}
-                          </Text>
-                        </View>
-                        <Ionicons name="add-circle" size={24} color={colors.primary} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                {(() => {
+                  const filteredResults = searchResults.filter(student => !recordedStudents.some(recorded => recorded.id === student.id));
+                  return filteredResults.length > 0 && (
+                    <View style={{
+                      marginTop: Spacing[2],
+                      borderRadius: BorderRadius.lg,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      maxHeight: 200, // Limit height to make it float-like
+                    }}>
+                      <FlatList
+                        data={filteredResults}
+                        keyExtractor={(item) => item.id}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item: student, index }) => (
+                          <TouchableOpacity
+                            onPress={() => handleManualRecord(student)}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              padding: Spacing[3],
+                              backgroundColor: colors.card,
+                              borderBottomWidth: index === filteredResults.length - 1 ? 0 : 1,
+                              borderColor: colors.border,
+                            }}
+                            disabled={loading}
+                          >
+                            <Image
+                              source={{ uri: `${baseUrl}${student.profilePicture}` }}
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 16,
+                                marginRight: Spacing[3],
+                              }}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={{
+                                fontSize: Typography.fontSize.sm,
+                                fontWeight: Typography.fontWeight.semibold,
+                                color: colors.foreground
+                              }}>
+                                {student.firstName} {student.lastName}
+                              </Text>
+                              <Text style={{
+                                fontSize: Typography.fontSize.xs,
+                                color: colors.foregroundMuted
+                              }}>
+                                {student.indexNumber} • {student.program}
+                              </Text>
+                            </View>
+                            <Ionicons name="add-circle" size={24} color={colors.primary} />
+                          </TouchableOpacity>
+                        )}
+                      />
+                    </View>
+                  );
+                })()}
               </View>
             )}
           </TouchableOpacity>
@@ -814,8 +923,32 @@ export default function RecordAttendance() {
             )}
           </TouchableOpacity>
         </View>
-
-        {/* Recent Recordings Preview */}
+        ) : (
+          <View style={{
+            padding: Spacing[4], 
+            backgroundColor: colors.muted, 
+            borderRadius: BorderRadius.lg, 
+            marginBottom: Spacing[6],
+            alignItems: "center"
+          }}>
+            <Ionicons name="checkmark-circle" size={48} color={colors.success} style={{ marginBottom: Spacing[2] }} />
+            <Text style={{
+              fontSize: Typography.fontSize.base,
+              fontWeight: Typography.fontWeight.semibold, 
+              color: colors.foreground,
+              marginBottom: Spacing[1] 
+            }}>
+              Recording Completed
+            </Text>
+            <Text style={{
+              fontSize: Typography.fontSize.sm, 
+              color: colors.foregroundMuted, 
+              textAlign: "center"
+            }}>
+              This attendance session has been ended. You can view the final results below or return to the dashboard.
+            </Text>
+          </View>
+        )}
         {recordedStudents.length > 0 && (
           <View>
             <View style={{
@@ -912,6 +1045,7 @@ export default function RecordAttendance() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* QR Scanner Modal */}
       <Modal
@@ -1140,22 +1274,26 @@ export default function RecordAttendance() {
                     </View>
                   ) : (
                     <View style={{ alignItems: "center" }}>
-                      <View
+                      <TouchableOpacity
+                        onPress={() => handleConfirmAttendance(item.id)}
+                        disabled={loading}
                         style={{
                           paddingHorizontal: Spacing[3],
-                          paddingVertical: Spacing[1],
+                          paddingVertical: Spacing[2],
                           borderRadius: BorderRadius.full,
-                          backgroundColor: "#fef3c7",
+                          backgroundColor: "#10b981",
+                          marginBottom: Spacing[1],
                         }}
                       >
-                        <Text style={{
-                          fontSize: Typography.fontSize.xs,
-                          fontWeight: Typography.fontWeight.medium,
-                          color: "#f59e0b"
-                        }}>
-                          Pending
-                        </Text>
-                      </View>
+                        <Ionicons name="checkmark" size={16} color="white" />
+                      </TouchableOpacity>
+                      <Text style={{
+                        fontSize: Typography.fontSize.xs,
+                        fontWeight: Typography.fontWeight.medium,
+                        color: "#f59e0b"
+                      }}>
+                        Tap to Confirm
+                      </Text>
                     </View>
                   )}
                 </View>
