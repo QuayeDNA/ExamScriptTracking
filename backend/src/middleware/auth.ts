@@ -40,6 +40,17 @@ export const authenticate = async (
 
     const decoded = verifyToken(token);
 
+    // Verify user still exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, isActive: true },
+    });
+
+    if (!user || !user.isActive) {
+      res.status(401).json({ error: "User not found or inactive" });
+      return;
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

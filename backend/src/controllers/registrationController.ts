@@ -13,6 +13,17 @@ const createRegistrationSessionSchema = z.object({
   department: z.string().min(1, "Department is required"),
 });
 
+const bulkCreateSessionsSchema = z.object({
+  sessions: z.array(z.object({
+    expiresInMinutes: z.number().min(1).max(1440).optional().default(60),
+    department: z.string().min(1, "Department is required"),
+  })).min(1, "At least one session is required").max(10, "Maximum 10 sessions at once"),
+});
+
+const extendExpirationSchema = z.object({
+  additionalMinutes: z.number().min(1).max(1440, "Cannot extend more than 24 hours"),
+});
+
 const registerWithQRSchema = z.object({
   qrToken: z.string().min(1, "QR token is required"),
   firstName: z.string().min(1, "First name is required"),
@@ -304,5 +315,280 @@ export const getRegistrationSessions = async (
   } catch (error) {
     console.error("Get registration sessions error:", error);
     res.status(500).json({ error: "Failed to fetch registration sessions" });
+  }
+};
+
+/**
+ * Bulk create multiple registration sessions (Admin only)
+ */
+export const bulkCreateSessions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { sessions: sessionConfigs } = bulkCreateSessionsSchema.parse(req.body);
+    const adminId = req.user!.userId;
+
+    const createdSessions = [];
+
+    for (const config of sessionConfigs) {
+      // Generate unique QR token
+      const qrToken = crypto.randomBytes(32).toString("hex");
+
+      // Calculate expiration time
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + config.expiresInMinutes);
+
+      // Create registration session
+      const session = await prisma.registrationSession.create({
+        data: {
+          qrToken,
+          createdById: adminId,
+          department: config.department,
+          expiresAt,
+        },
+      });
+
+      createdSessions.push({
+        sessionId: session.id,
+        qrToken: session.qrToken,
+        department: session.department,
+        expiresAt: session.expiresAt,
+        qrCodeData: {
+          type: "REGISTRATION",
+          token: session.qrToken,
+          department: session.department,
+          expiresAt: session.expiresAt.toISOString(),
+        },
+      });
+    }
+
+    res.status(201).json({
+      message: `Successfully created ${createdSessions.length} registration sessions`,
+      sessions: createdSessions,
+    });
+  } catch (error) {
+    console.error("Bulk create registration sessions error:", error);
+
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        error: "Validation error",
+        details: error.issues,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: "Failed to create registration sessions",
+    });
+  }
+};
+
+/**
+ * Deactivate a registration session (Admin only)
+ */
+export const deactivateSession = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminId = req.user!.userId;
+
+    // Check if session exists and belongs to admin
+    const session = await prisma.registrationSession.findFirst({
+      where: {
+        id,
+        createdById: adminId,
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: "Registration session not found" });
+      return;
+    }
+
+    if (session.used) {
+      res.status(400).json({ error: "Cannot deactivate a session that has already been used" });
+      return;
+    }
+
+    // Deactivate session by setting expiresAt to now
+    await prisma.registrationSession.update({
+      where: { id },
+      data: {
+        expiresAt: new Date(),
+      },
+    });
+
+    res.json({ message: "Registration session deactivated successfully" });
+  } catch (error) {
+    console.error("Deactivate session error:", error);
+    res.status(500).json({ error: "Failed to deactivate session" });
+  }
+};
+
+/**
+ * Extend expiration of a registration session (Admin only)
+ */
+export const extendSessionExpiration = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { additionalMinutes } = extendExpirationSchema.parse(req.body);
+    const adminId = req.user!.userId;
+
+    // Check if session exists and belongs to admin
+    const session = await prisma.registrationSession.findFirst({
+      where: {
+        id,
+        createdById: adminId,
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: "Registration session not found" });
+      return;
+    }
+
+    if (session.used) {
+      res.status(400).json({ error: "Cannot extend a session that has already been used" });
+      return;
+    }
+
+    // Extend expiration
+    const newExpiresAt = new Date(session.expiresAt);
+    newExpiresAt.setMinutes(newExpiresAt.getMinutes() + additionalMinutes);
+
+    await prisma.registrationSession.update({
+      where: { id },
+      data: {
+        expiresAt: newExpiresAt,
+      },
+    });
+
+    res.json({
+      message: "Session expiration extended successfully",
+      newExpiresAt,
+    });
+  } catch (error) {
+    console.error("Extend session expiration error:", error);
+
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        error: "Validation error",
+        details: error.issues,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: "Failed to extend session expiration" });
+  }
+};
+
+/**
+ * Get registration analytics and statistics (Admin only)
+ */
+export const getSessionAnalytics = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.user!.userId;
+
+    // Get all sessions for this admin
+    const sessions = await prisma.registrationSession.findMany({
+      where: { createdById: adminId },
+      select: {
+        id: true,
+        department: true,
+        used: true,
+        usedAt: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+
+    const now = new Date();
+    const analytics = {
+      total: sessions.length,
+      active: sessions.filter(s => !s.used && s.expiresAt > now).length,
+      used: sessions.filter(s => s.used).length,
+      expired: sessions.filter(s => !s.used && s.expiresAt <= now).length,
+      departments: {} as Record<string, {
+        total: number;
+        active: number;
+        used: number;
+        expired: number;
+      }>,
+      recentActivity: sessions
+        .filter(s => s.used || s.expiresAt <= now)
+        .sort((a, b) => (b.usedAt || b.expiresAt).getTime() - (a.usedAt || a.expiresAt).getTime())
+        .slice(0, 10)
+        .map(s => ({
+          id: s.id,
+          department: s.department,
+          status: s.used ? 'used' : 'expired',
+          timestamp: s.usedAt || s.expiresAt,
+        })),
+    };
+
+    // Group by department
+    sessions.forEach(session => {
+      const dept = session.department;
+      if (!analytics.departments[dept]) {
+        analytics.departments[dept] = { total: 0, active: 0, used: 0, expired: 0 };
+      }
+
+      analytics.departments[dept].total++;
+      if (session.used) {
+        analytics.departments[dept].used++;
+      } else if (session.expiresAt <= now) {
+        analytics.departments[dept].expired++;
+      } else {
+        analytics.departments[dept].active++;
+      }
+    });
+
+    res.json(analytics);
+  } catch (error) {
+    console.error("Get session analytics error:", error);
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+};
+
+/**
+ * Clean up expired and unused registration sessions (Admin only)
+ */
+export const cleanupExpiredSessions = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.user!.userId;
+    const now = new Date();
+
+    // Delete expired sessions that haven't been used and are older than 24 hours
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - 24);
+
+    const result = await prisma.registrationSession.deleteMany({
+      where: {
+        createdById: adminId,
+        used: false,
+        expiresAt: { lte: now },
+        createdAt: { lte: cutoffDate }, // Only delete if expired for more than 24 hours
+      },
+    });
+
+    res.json({
+      message: `Cleaned up ${result.count} expired registration sessions`,
+      deletedCount: result.count,
+    });
+  } catch (error) {
+    console.error("Cleanup expired sessions error:", error);
+    res.status(500).json({ error: "Failed to cleanup sessions" });
   }
 };
