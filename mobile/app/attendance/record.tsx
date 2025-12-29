@@ -135,21 +135,13 @@ export default function RecordAttendance() {
         studentId: qrData, // Send the full JSON string, backend will parse it
       });
 
-      // Add to recorded students with data from QR
-      const newStudent: RecordedStudent = {
-        id: data.id || studentIdentifier,
-        indexNumber: data.indexNumber || studentIdentifier,
-        name: data.name || 'Student',
-        scanTime: new Date().toISOString(),
-        method: "qrcode",
-        confirmed: true,
-      };
-      setRecordedStudents((prev) => [newStudent, ...prev]);
+      // Refresh the record to get updated student list with proper names
+      await loadRecord();
 
       Toast.show({
         type: "success",
         text1: "Attendance Recorded",
-        text2: `${newStudent.name} marked present`,
+        text2: `${data.name || data.indexNumber || 'Student'} marked present`,
       });
       
       // Close scanner after successful scan
@@ -216,20 +208,13 @@ export default function RecordAttendance() {
         studentId: student.id,
       });
 
-      const newStudent: RecordedStudent = {
-        id: student.id,
-        indexNumber: student.indexNumber,
-        name: `${student.firstName} ${student.lastName}`,
-        scanTime: new Date().toISOString(),
-        method: "manual",
-        confirmed: false, // Requires confirmation
-      };
-      setRecordedStudents((prev) => [newStudent, ...prev]);
+      // Refresh the record to get updated student list with proper names
+      await loadRecord();
 
       Toast.show({
         type: "success",
         text1: "Attendance Recorded",
-        text2: `${newStudent.name} marked present (pending confirmation)`,
+        text2: `${student.firstName} ${student.lastName} marked present (pending confirmation)`,
       });
 
       setSearchQuery("");
@@ -280,15 +265,8 @@ export default function RecordAttendance() {
               studentId: indexNumber,
             });
 
-            const newStudent: RecordedStudent = {
-              id: indexNumber,
-              indexNumber,
-              name: "Student", // Would come from backend
-              scanTime: new Date().toISOString(),
-              method: "biometric",
-              confirmed: true,
-            };
-            setRecordedStudents((prev) => [newStudent, ...prev]);
+            // Refresh the record to get updated student list with proper names
+            await loadRecord();
 
             Toast.show({
               type: "success",
