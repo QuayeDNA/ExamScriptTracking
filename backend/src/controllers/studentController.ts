@@ -11,30 +11,10 @@ import {
   generateBiometricSalt,
   isValidBiometricProvider
 } from "../utils/biometricHash";
+import { getFileUrl } from "../utils/fileUtils";
+import { getDefaultAvatarUrl } from "../utils/avatarUtils";
 
 const prisma = new PrismaClient();
-
-// Utility function to construct full URLs for uploaded files
-const getFileUrl = (relativePath: string): string => {
-  if (!relativePath) return "";
-
-  // If it's already a full URL (e.g., from Cloudinary), return as-is
-  if (
-    relativePath.startsWith("http://") ||
-    relativePath.startsWith("https://")
-  ) {
-    return relativePath;
-  }
-
-  // Remove leading slash if present and construct full URL
-  const cleanPath = relativePath.startsWith("/")
-    ? relativePath.substring(1)
-    : relativePath;
-
-  const API_URL =
-    process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-  return `${API_URL}/${cleanPath}`;
-};
 
 // Configure multer for profile picture uploads
 const getStorageConfig = () => {
@@ -707,7 +687,7 @@ export const bulkCreateStudents = async (
         const student = await prisma.student.create({
           data: {
             ...studentData,
-            profilePicture: "/uploads/students/default-avatar.png", // Placeholder - requires manual upload
+            profilePicture: getDefaultAvatarUrl(), // Use environment-appropriate default avatar
             qrCode: qrData,
           },
         });

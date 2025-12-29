@@ -166,9 +166,8 @@ export default function StudentQRLookup() {
                     className="w-24 h-24 rounded-lg object-cover border-2 border-border shadow-md"
                     onError={(e) => {
                       // Fallback to default avatar if image fails to load
-                      (e.target as HTMLImageElement).src = getFileUrl(
-                        "/uploads/students/default-avatar.png"
-                      );
+                      (e.target as HTMLImageElement).src =
+                        "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
                     }}
                   />
                 </div>

@@ -661,9 +661,8 @@ export default function StudentsPage() {
                           className="w-10 h-10 rounded-lg object-cover"
                           onError={(e) => {
                             // Fallback to default avatar if image fails to load
-                            (e.target as HTMLImageElement).src = getFileUrl(
-                              "/uploads/students/default-avatar.png"
-                            );
+                            (e.target as HTMLImageElement).src =
+                              "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
                           }}
                         />
                       </TableCell>
@@ -787,9 +786,8 @@ export default function StudentsPage() {
                             className="w-20 h-20 rounded-lg object-cover border-2 border-white shadow-lg"
                             onError={(e) => {
                               // Fallback to default avatar if image fails to load
-                              (e.target as HTMLImageElement).src = getFileUrl(
-                                "/uploads/students/default-avatar.png"
-                              );
+                              (e.target as HTMLImageElement).src =
+                                "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
                             }}
                           />
                           {/* QR Code Button */}
