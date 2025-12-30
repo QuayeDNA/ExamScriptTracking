@@ -22,6 +22,7 @@ import {
   Grid3X3,
   List,
   Fingerprint,
+  MoreHorizontal,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import {
@@ -47,6 +48,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -709,46 +717,44 @@ export default function StudentsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            onClick={() => handleShowQRCode(student)}
-                            variant="ghost"
-                            size="icon"
-                            title="View QR Code"
-                          >
-                            <QrCode className="h-4 w-4" />
-                          </Button>
-                          {isAdmin && (
-                            <>
-                              {!student.biometricEnrolledAt && (
-                                <Button
-                                  onClick={() => handleGenerateBiometricLink(student)}
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Generate Biometric Enrollment Link"
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleShowQRCode(student)}>
+                              <QrCode className="h-4 w-4 mr-2" />
+                              View QR Code
+                            </DropdownMenuItem>
+                            {isAdmin && (
+                              <>
+                                {!student.biometricEnrolledAt && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => handleGenerateBiometricLink(student)}>
+                                      <Fingerprint className="h-4 w-4 mr-2" />
+                                      Generate Biometric Link
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => openEditModal(student)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit Student
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => openDeleteModal(student)}
+                                  className="text-destructive focus:text-destructive"
                                 >
-                                  <Fingerprint className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                onClick={() => openEditModal(student)}
-                                variant="ghost"
-                                size="icon"
-                                title="Edit"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                onClick={() => openDeleteModal(student)}
-                                variant="ghost"
-                                size="icon"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Student
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -876,24 +882,28 @@ export default function StudentsPage() {
                         {/* Actions */}
                         {isAdmin && (
                           <div className="p-4 border-t border-border bg-muted/30">
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => openEditModal(student)}
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 border-border hover:bg-accent hover:text-accent-foreground"
-                              >
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Edit
-                              </Button>
-                              <Button
-                                onClick={() => openDeleteModal(student)}
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 border-border hover:bg-destructive hover:text-destructive-foreground"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                              </Button>
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <MoreHorizontal className="h-4 w-4 mr-2" />
+                                    Actions
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openEditModal(student)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Edit Student
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => openDeleteModal(student)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Student
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         )}
