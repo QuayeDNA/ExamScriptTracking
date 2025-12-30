@@ -14,14 +14,22 @@ const createRegistrationSessionSchema = z.object({
 });
 
 const bulkCreateSessionsSchema = z.object({
-  sessions: z.array(z.object({
-    expiresInMinutes: z.number().min(1).max(1440).optional().default(60),
-    department: z.string().min(1, "Department is required"),
-  })).min(1, "At least one session is required").max(10, "Maximum 10 sessions at once"),
+  sessions: z
+    .array(
+      z.object({
+        expiresInMinutes: z.number().min(1).max(1440).optional().default(60),
+        department: z.string().min(1, "Department is required"),
+      })
+    )
+    .min(1, "At least one session is required")
+    .max(10, "Maximum 10 sessions at once"),
 });
 
 const extendExpirationSchema = z.object({
-  additionalMinutes: z.number().min(1).max(1440, "Cannot extend more than 24 hours"),
+  additionalMinutes: z
+    .number()
+    .min(1)
+    .max(1440, "Cannot extend more than 24 hours"),
 });
 
 const registerWithQRSchema = z.object({
@@ -41,9 +49,8 @@ export const createRegistrationSession = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { expiresInMinutes, department } = createRegistrationSessionSchema.parse(
-      req.body
-    );
+    const { expiresInMinutes, department } =
+      createRegistrationSessionSchema.parse(req.body);
     const adminId = req.user!.userId;
 
     // Generate unique QR token
@@ -326,7 +333,9 @@ export const bulkCreateSessions = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { sessions: sessionConfigs } = bulkCreateSessionsSchema.parse(req.body);
+    const { sessions: sessionConfigs } = bulkCreateSessionsSchema.parse(
+      req.body
+    );
     const adminId = req.user!.userId;
 
     const createdSessions = [];
@@ -409,7 +418,11 @@ export const deactivateSession = async (
     }
 
     if (session.used) {
-      res.status(400).json({ error: "Cannot deactivate a session that has already been used" });
+      res
+        .status(400)
+        .json({
+          error: "Cannot deactivate a session that has already been used",
+        });
       return;
     }
 
@@ -454,7 +467,9 @@ export const extendSessionExpiration = async (
     }
 
     if (session.used) {
-      res.status(400).json({ error: "Cannot extend a session that has already been used" });
+      res
+        .status(400)
+        .json({ error: "Cannot extend a session that has already been used" });
       return;
     }
 
@@ -514,32 +529,44 @@ export const getSessionAnalytics = async (
     const now = new Date();
     const analytics = {
       total: sessions.length,
-      active: sessions.filter(s => !s.used && s.expiresAt > now).length,
-      used: sessions.filter(s => s.used).length,
-      expired: sessions.filter(s => !s.used && s.expiresAt <= now).length,
-      departments: {} as Record<string, {
-        total: number;
-        active: number;
-        used: number;
-        expired: number;
-      }>,
+      active: sessions.filter((s) => !s.used && s.expiresAt > now).length,
+      used: sessions.filter((s) => s.used).length,
+      expired: sessions.filter((s) => !s.used && s.expiresAt <= now).length,
+      departments: {} as Record<
+        string,
+        {
+          total: number;
+          active: number;
+          used: number;
+          expired: number;
+        }
+      >,
       recentActivity: sessions
-        .filter(s => s.used || s.expiresAt <= now)
-        .sort((a, b) => (b.usedAt || b.expiresAt).getTime() - (a.usedAt || a.expiresAt).getTime())
+        .filter((s) => s.used || s.expiresAt <= now)
+        .sort(
+          (a, b) =>
+            (b.usedAt || b.expiresAt).getTime() -
+            (a.usedAt || a.expiresAt).getTime()
+        )
         .slice(0, 10)
-        .map(s => ({
+        .map((s) => ({
           id: s.id,
           department: s.department,
-          status: s.used ? 'used' : 'expired',
+          status: s.used ? "used" : "expired",
           timestamp: s.usedAt || s.expiresAt,
         })),
     };
 
     // Group by department
-    sessions.forEach(session => {
-      const dept = session.department;
+    sessions.forEach((session) => {
+      const dept = session.department || 'Unknown';
       if (!analytics.departments[dept]) {
-        analytics.departments[dept] = { total: 0, active: 0, used: 0, expired: 0 };
+        analytics.departments[dept] = {
+          total: 0,
+          active: 0,
+          used: 0,
+          expired: 0,
+        };
       }
 
       analytics.departments[dept].total++;
