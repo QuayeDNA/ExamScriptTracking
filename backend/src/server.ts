@@ -11,7 +11,6 @@ import attendanceRoutes from "./routes/attendance";
 import batchTransferRoutes from "./routes/batchTransfer";
 import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
-import classAttendanceRoutes from "./routes/classAttendance";
 import incidentRoutes from "./routes/incident";
 import registrationRoutes from "./routes/registration";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
@@ -495,7 +494,6 @@ app.get("/api", (req: Request, res: Response) => {
       students: "/api/students",
       examSessions: "/api/exam-sessions",
       attendance: "/api/attendance",
-      classAttendance: "/api/class-attendance",
       batchTransfers: "/api/batch-transfers",
       incidents: "/api/incidents",
       analytics: "/api/analytics",
@@ -510,7 +508,6 @@ app.use("/api/users", userRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/exam-sessions", examSessionRoutes);
 app.use("/api/attendance", attendanceRoutes);
-app.use("/api/class-attendance", classAttendanceRoutes);
 app.use("/api/batch-transfers", batchTransferRoutes);
 app.use("/api/incidents", incidentRoutes);
 app.use("/api/analytics", analyticsRoutes);

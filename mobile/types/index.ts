@@ -7,7 +7,6 @@ export const Role = {
   DEPARTMENT_HEAD: "DEPARTMENT_HEAD",
   FACULTY_OFFICER: "FACULTY_OFFICER",
   LECTURER: "LECTURER",
-  CLASS_REP: "CLASS_REP",
 } as const;
 
 export type Role = (typeof Role)[keyof typeof Role];
@@ -35,20 +34,6 @@ export interface LoginResponse {
   token: string;
   refreshToken: string;
   user: User;
-}
-
-export interface ClassAttendanceStudent {
-  id: string;
-  studentId: string;
-  scanTime: string;
-  student: {
-    id: string;
-    indexNumber: string;
-    firstName: string;
-    lastName: string;
-    program?: string | null;
-    level?: number | null;
-  };
 }
 
 export interface ChangePasswordData {

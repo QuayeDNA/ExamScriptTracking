@@ -68,12 +68,6 @@ const adminItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
-    title: "Class Attendance",
-    href: "/dashboard/class-attendance",
-    icon: Users,
-    roles: ["ADMIN"],
-  },
-  {
     title: "Analytics",
     href: "/dashboard/analytics",
     icon: BarChart3,

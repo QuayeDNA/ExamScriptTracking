@@ -13,8 +13,6 @@ import {
   lookupStudentForIncident,
   exportStudentsPDF,
   uploadStudentPicture,
-  generateBiometricEnrollmentLink,
-  enrollBiometric,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -119,19 +117,5 @@ router.post("/bulk", authorize(Role.ADMIN), bulkCreateStudents);
  * @access  Private (Admin only)
  */
 router.get("/export/pdf", authorize(Role.ADMIN), exportStudentsPDF);
-
-/**
- * @route   POST /api/students/:id/biometric-enrollment-link
- * @desc    Generate biometric enrollment link for student
- * @access  Private (Admin only)
- */
-router.post("/:id/biometric-enrollment-link", authorize(Role.ADMIN), generateBiometricEnrollmentLink);
-
-/**
- * @route   POST /api/students/enroll-biometric
- * @desc    Submit biometric enrollment data
- * @access  Public (via secure link)
- */
-router.post("/enroll-biometric", enrollBiometric);
 
 export default router;

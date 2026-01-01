@@ -26,7 +26,6 @@ function useProtectedRoute() {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading, user } = useAuthStore();
-  const isAttendanceUser = user?.role === "CLASS_REP";
   const firstSegment = segments[0] as string | undefined;
 
   // Handle base path for mobile app served from subdirectory
@@ -57,11 +56,6 @@ function useProtectedRoute() {
         firstSegment !== "change-password"
       ) {
         router.replace("/change-password");
-      } else if (isAuthenticated && user?.passwordChanged && isAttendanceUser) {
-        const inAttendance = firstSegment === "attendance";
-        if (!inAttendance) {
-          router.replace("/attendance" as any);
-        }
       } else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
         router.replace("/(tabs)");
       }
@@ -72,7 +66,6 @@ function useProtectedRoute() {
     firstSegment,
     isAuthenticated,
     isLoading,
-    isAttendanceUser,
     segments,
     user,
     router,
@@ -156,15 +149,6 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
           <Stack.Screen name="change-password" />
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="attendance" />
-          <Stack.Screen
-            name="view"
-            options={{
-              headerShown: true,
-              title: "Attendance Record",
-              presentation: "card",
-            }}
-          />
           <Stack.Screen
             name="batch-details"
             options={{

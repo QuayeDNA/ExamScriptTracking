@@ -21,7 +21,6 @@ import { MobileLayout } from "@/layouts/MobileLayout";
 import { UsersPage } from "@/pages/dashboard/UsersPage";
 import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
-import ClassAttendancePage from "@/pages/dashboard/ClassAttendancePage";
 import QRRegistrationPage from "@/pages/dashboard/QRRegistrationPage";
 import DashboardStatsPage from "@/pages/dashboard/DashboardStatsPage";
 import StudentsPage from "@/pages/dashboard/StudentsPage";
@@ -47,7 +46,6 @@ import { MobileCustodyPage } from "@/pages/mobile/MobileCustodyPage";
 import { MobileIncidentsPage } from "@/pages/mobile/MobileIncidentsPage";
 import { MobileScannerPage } from "@/pages/mobile/MobileScannerPage";
 import { MobileProfilePage } from "@/pages/mobile/MobileProfilePage";
-import { MobileAttendancePage } from "@/pages/mobile/MobileAttendancePage";
 import { MobileBatchDetailsPage } from "@/pages/mobile/MobileBatchDetailsPage";
 import { MobileReportIncidentPage } from "@/pages/mobile/MobileReportIncidentPage";
 import { MobileIncidentDetailsPage } from "@/pages/mobile/MobileIncidentDetailsPage";
@@ -149,10 +147,6 @@ function App() {
                     <Route path="incidents" element={<IncidentsPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="users" element={<UsersPage />} />
-                    <Route
-                      path="class-attendance"
-                      element={<ClassAttendancePage />}
-                    />
                     <Route path="audit-logs" element={<AuditLogsPage />} />
                     <Route
                       path="analytics"
@@ -173,10 +167,6 @@ function App() {
                     <Route path="incidents" element={<MobileIncidentsPage />} />
                     <Route path="scanner" element={<MobileScannerPage />} />
                     <Route path="profile" element={<MobileProfilePage />} />
-                    <Route
-                      path="attendance"
-                      element={<MobileAttendancePage />}
-                    />
                     <Route
                       path="batch-details/:batchId"
                       element={<MobileBatchDetailsPage />}
