@@ -1,6 +1,6 @@
 /**
- * Incident Details Screen
- * Detailed view with timeline, comments, status updates, and attachments
+ * Incident Details Screen - REDESIGNED
+ * Enhanced UI with better layout, proper icons, and improved attachment handling
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -9,128 +9,194 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
-  RefreshControl,
-  Alert,
-  Modal,
   Image,
+  Modal,
+  RefreshControl,
+  Dimensions,
+  Share,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { VideoView, useVideoPlayer } from "expo-video";
-import { API_BASE_URL } from "@/lib/api-client";
-import { useThemeColors } from "@/constants/design-system";
-import { useAuthStore } from "@/store/auth";
+import {
+  useThemeColors,
+  Spacing,
+  Typography,
+  BorderRadius,
+} from "@/constants/design-system";
+import { getFileUrl } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  SeverityBadge,
-  StatusBadge,
-  CommentItem,
-} from "@/components/IncidentComponents";
+import { Dialog } from "@/components/ui/dialog";
 import {
   getIncident,
-  getComments,
-  addComment,
   updateStatus,
-  getIncidentTypeLabel,
+  deleteIncident,
   type Incident,
   type IncidentStatus,
-  type IncidentAttachment,
+  getIncidentTypeLabel,
 } from "@/api/incidents";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+// Status configuration with icons and colors
+const STATUS_CONFIG = {
+  REPORTED: {
+    icon: "alert-circle-outline" as const,
+    label: "Reported",
+    color: "#3B82F6", // blue
+  },
+  INVESTIGATING: {
+    icon: "search-outline" as const,
+    label: "Investigating",
+    color: "#F59E0B", // amber
+  },
+  RESOLVED: {
+    icon: "checkmark-circle-outline" as const,
+    label: "Resolved",
+    color: "#10B981", // green
+  },
+  ESCALATED: {
+    icon: "arrow-up-circle-outline" as const,
+    label: "Escalated",
+    color: "#DC2626", // red
+  },
+  CLOSED: {
+    icon: "close-circle-outline" as const,
+    label: "Closed",
+    color: "#6B7280", // gray
+  },
+};
+
+// Severity configuration
+const SEVERITY_CONFIG = {
+  CRITICAL: { color: "#EF4444", bgColor: "#FEE2E2", icon: "warning" as const },
+  HIGH: { color: "#F97316", bgColor: "#FFEDD5", icon: "alert" as const },
+  MEDIUM: { color: "#F59E0B", bgColor: "#FEF3C7", icon: "information-circle" as const },
+  LOW: { color: "#10B981", bgColor: "#D1FAE5", icon: "checkmark-circle" as const },
+};
 
 export default function IncidentDetailsScreen() {
   const colors = useThemeColors();
-  const { user } = useAuthStore();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams();
+  const incidentId = params.id as string;
 
   const [incident, setIncident] = useState<Incident | null>(null);
-  const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [commentText, setCommentText] = useState("");
-  const [isInternal, setIsInternal] = useState(false);
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [previewAttachment, setPreviewAttachment] =
-    useState<IncidentAttachment | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [videoSource, setVideoSource] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
 
-  const isAdmin =
-    user?.role === "ADMIN" ||
-    user?.role === "DEPARTMENT_HEAD" ||
-    user?.role === "FACULTY_OFFICER";
+  // Modal states
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewType, setPreviewType] = useState("");
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  
+  // Dialog states
+  const [errorDialog, setErrorDialog] = useState({ visible: false, message: "" });
+  const [successDialog, setSuccessDialog] = useState({ visible: false, message: "" });
 
-  // Fetch incident and comments
-  const fetchData = useCallback(async () => {
-    if (!id) return;
-
+  const loadIncident = useCallback(async () => {
     try {
-      const [incidentRes, commentsRes] = await Promise.all([
-        getIncident(id),
-        getComments(id),
-      ]);
-      setIncident(incidentRes.incident);
-      setComments(commentsRes.comments);
-    } catch {
-      Alert.alert("Error", "Failed to load incident details");
-      router.back();
+      setLoading(true);
+      const response = await getIncident(incidentId);
+      setIncident(response.incident);
+    } catch (error: any) {
+      setErrorDialog({
+        visible: true,
+        message: error.response?.data?.error || "Failed to load incident details",
+      });
+    } finally {
+      setLoading(false);
     }
-  }, [id]);
+  }, [incidentId]);
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      await fetchData();
-      setLoading(false);
-    };
-    loadData();
-  }, [fetchData]);
+    loadIncident();
+  }, [loadIncident]);
 
-  const onRefresh = useCallback(async () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    await loadIncident();
     setRefreshing(false);
-  }, [fetchData]);
+  };
 
-  // Submit comment
-  const handleSubmitComment = async () => {
-    if (!commentText.trim() || !id) return;
-
+  const handleStatusChange = async (newStatus: IncidentStatus) => {
     try {
-      setSubmittingComment(true);
-      await addComment(id, {
-        comment: commentText.trim(),
-        isInternal,
+      setUpdating(true);
+      setStatusModalVisible(false);
+      await updateStatus(incidentId, { status: newStatus });
+      await loadIncident();
+      setSuccessDialog({
+        visible: true,
+        message: `Incident status updated to ${STATUS_CONFIG[newStatus].label}`,
       });
-      setCommentText("");
-      setIsInternal(false);
-      await fetchData();
-    } catch {
-      Alert.alert("Error", "Failed to add comment");
+    } catch (error: any) {
+      setErrorDialog({
+        visible: true,
+        message: error.response?.data?.error || "Failed to update status",
+      });
     } finally {
-      setSubmittingComment(false);
+      setUpdating(false);
     }
   };
 
-  const player = useVideoPlayer(videoSource || "", (player) => {
-    player.play();
-  });
-
-  // Update status
-  const handleUpdateStatus = async (newStatus: IncidentStatus) => {
-    if (!id) return;
-
+  const handleDelete = async () => {
     try {
-      await updateStatus(id, { status: newStatus });
-      await fetchData();
-      Alert.alert("Success", "Incident status updated");
-    } catch {
-      Alert.alert("Error", "Failed to update status");
+      setUpdating(true);
+      setDeleteConfirmVisible(false);
+      await deleteIncident(incidentId);
+      setSuccessDialog({
+        visible: true,
+        message: "Incident deleted successfully",
+      });
+      setTimeout(() => router.back(), 1500);
+    } catch (error: any) {
+      setErrorDialog({
+        visible: true,
+        message: error.response?.data?.error || "Failed to delete incident",
+      });
+    } finally {
+      setUpdating(false);
     }
+  };
+
+  const handleShare = async () => {
+    if (!incident) return;
+    
+    try {
+      await Share.share({
+        message: `Incident Report: ${incident.title}\n\nType: ${getIncidentTypeLabel(incident.type)}\nStatus: ${STATUS_CONFIG[incident.status].label}\nSeverity: ${incident.severity}\n\nDescription: ${incident.description}`,
+        title: "Share Incident",
+      });
+    } catch (error) {
+      console.error("Share error:", error);
+    }
+  };
+
+  const previewAttachment = (url: string, type: string) => {
+    setPreviewUrl(url);
+    setPreviewType(type);
+    setPreviewVisible(true);
+  };
+
+  const closePreview = () => {
+    setPreviewVisible(false);
+    setPreviewUrl("");
+    setPreviewType("");
+  };
+
+  const openAttachmentExternal = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      setErrorDialog({
+        visible: true,
+        message: "Cannot open this file type",
+      });
+    });
   };
 
   if (loading) {
@@ -139,13 +205,16 @@ export default function IncidentDetailsScreen() {
         style={{ flex: 1, backgroundColor: colors.background }}
         edges={["top"]}
       >
-        <View className="flex-1 items-center justify-center">
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text
-            className="mt-4 text-sm"
-            style={{ color: colors.foregroundMuted }}
+            style={{
+              marginTop: Spacing[4],
+              color: colors.foregroundMuted,
+              fontSize: Typography.fontSize.sm,
+            }}
           >
-            Loading incident...
+            Loading incident details...
           </Text>
         </View>
       </SafeAreaView>
@@ -158,19 +227,30 @@ export default function IncidentDetailsScreen() {
         style={{ flex: 1, backgroundColor: colors.background }}
         edges={["top"]}
       >
-        <View className="flex-1 items-center justify-center p-8">
-          <Ionicons
-            name="alert-circle-outline"
-            size={64}
-            color={colors.foregroundMuted}
-          />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing[4] }}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.foregroundMuted} />
           <Text
-            className="text-lg font-semibold mt-4"
-            style={{ color: colors.foreground }}
+            style={{
+              marginTop: Spacing[4],
+              color: colors.foreground,
+              fontSize: Typography.fontSize.lg,
+              fontWeight: Typography.fontWeight.semibold,
+              textAlign: "center",
+            }}
           >
             Incident Not Found
           </Text>
-          <Button className="mt-6" onPress={() => router.back()}>
+          <Text
+            style={{
+              marginTop: Spacing[2],
+              color: colors.foregroundMuted,
+              fontSize: Typography.fontSize.sm,
+              textAlign: "center",
+            }}
+          >
+            The incident you&apos;re looking for doesn&apos;t exist or has been removed.
+          </Text>
+          <Button onPress={() => router.back()} style={{ marginTop: Spacing[6] }}>
             Go Back
           </Button>
         </View>
@@ -178,150 +258,324 @@ export default function IncidentDetailsScreen() {
     );
   }
 
+  const statusConfig = STATUS_CONFIG[incident.status];
+  const severityConfig = SEVERITY_CONFIG[incident.severity];
+
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: colors.background }}
       edges={["top"]}
     >
-      <ScrollView
-        className="flex-1"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={{ paddingBottom: 100 }}
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: Spacing[4],
+          paddingVertical: Spacing[3],
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+        }}
       >
-        {/* Header */}
-        <View className="px-4 pt-6 pb-4">
-          <View className="flex-row items-center gap-3 mb-4">
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-            </TouchableOpacity>
-            <View className="flex-1">
-              <View className="flex-row items-center gap-2 mb-1">
-                <Text
-                  className="text-lg font-bold"
-                  style={{ color: colors.foreground }}
-                >
-                  {incident.incidentNumber}
-                </Text>
-                {incident.isConfidential && (
-                  <Badge variant="error">Confidential</Badge>
-                )}
-                {incident.autoCreated && <Badge variant="outline">Auto</Badge>}
-              </View>
-              <Text
-                className="text-sm"
-                style={{ color: colors.foregroundMuted }}
-              >
-                {new Date(incident.reportedAt).toLocaleString()}
-              </Text>
-            </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[3], flex: 1 }}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontSize: Typography.fontSize.lg,
+                fontWeight: Typography.fontWeight.semibold,
+                color: colors.foreground,
+              }}
+              numberOfLines={1}
+            >
+              Incident Details
+            </Text>
+            <Text
+              style={{
+                fontSize: Typography.fontSize.xs,
+                color: colors.foregroundMuted,
+                marginTop: 2,
+              }}
+            >
+              ID: {incident.id.slice(0, 8)}
+            </Text>
           </View>
         </View>
+        
+        <View style={{ flexDirection: "row", gap: Spacing[2] }}>
+          <TouchableOpacity
+            onPress={handleShare}
+            style={{
+              padding: Spacing[2],
+              borderRadius: BorderRadius.md,
+              backgroundColor: colors.muted,
+            }}
+          >
+            <Ionicons name="share-outline" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setDeleteConfirmVisible(true)}
+            style={{
+              padding: Spacing[2],
+              borderRadius: BorderRadius.md,
+              backgroundColor: colors.error + "20",
+            }}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        <View className="px-4 gap-4">
-          {/* Status & Severity */}
-          <Card>
-            <View className="p-4">
-              <View className="flex-row items-center justify-between">
-                <View>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: Spacing[4], paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
+        {/* Status & Severity Header Card */}
+        <Card style={{ marginBottom: Spacing[4] }}>
+          <View style={{ padding: Spacing[4] }}>
+            <View style={{ flexDirection: "row", gap: Spacing[3], marginBottom: Spacing[4] }}>
+              {/* Status Badge */}
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.xs,
+                    color: colors.foregroundMuted,
+                    marginBottom: Spacing[2],
+                    textTransform: "uppercase",
+                    fontWeight: Typography.fontWeight.medium,
+                  }}
+                >
+                  Status
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: statusConfig.color + "20",
+                    paddingVertical: Spacing[2],
+                    paddingHorizontal: Spacing[3],
+                    borderRadius: BorderRadius.md,
+                    borderWidth: 1,
+                    borderColor: statusConfig.color,
+                  }}
+                >
+                  <Ionicons
+                    name={statusConfig.icon}
+                    size={18}
+                    color={statusConfig.color}
+                    style={{ marginRight: Spacing[2] }}
+                  />
                   <Text
-                    className="text-xs mb-2"
-                    style={{ color: colors.foregroundMuted }}
+                    style={{
+                      color: statusConfig.color,
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    }}
                   >
-                    Status
+                    {statusConfig.label}
                   </Text>
-                  <StatusBadge status={incident.status} />
-                </View>
-                <View>
-                  <Text
-                    className="text-xs mb-2"
-                    style={{ color: colors.foregroundMuted }}
-                  >
-                    Severity
-                  </Text>
-                  <SeverityBadge severity={incident.severity} />
-                </View>
-                <View>
-                  <Text
-                    className="text-xs mb-2"
-                    style={{ color: colors.foregroundMuted }}
-                  >
-                    Type
-                  </Text>
-                  <Badge variant="outline">
-                    {getIncidentTypeLabel(incident.type)}
-                  </Badge>
                 </View>
               </View>
 
-              {/* Update Status Button (Admin Only) */}
-              {isAdmin && incident.status !== "CLOSED" && (
-                <View
-                  className="mt-4 pt-4 border-t"
-                  style={{ borderColor: colors.border }}
+              {/* Severity Badge */}
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.xs,
+                    color: colors.foregroundMuted,
+                    marginBottom: Spacing[2],
+                    textTransform: "uppercase",
+                    fontWeight: Typography.fontWeight.medium,
+                  }}
                 >
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View className="flex-row gap-2">
-                      {(
-                        [
-                          "INVESTIGATING",
-                          "RESOLVED",
-                          "ESCALATED",
-                          "CLOSED",
-                        ] as IncidentStatus[]
-                      )
-                        .filter((s) => s !== incident.status)
-                        .map((status) => (
-                          <Button
-                            key={status}
-                            variant="outline"
-                            size="sm"
-                            onPress={() => handleUpdateStatus(status)}
-                          >
-                            {status}
-                          </Button>
-                        ))}
-                    </View>
-                  </ScrollView>
+                  Severity
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: severityConfig.bgColor,
+                    paddingVertical: Spacing[2],
+                    paddingHorizontal: Spacing[3],
+                    borderRadius: BorderRadius.md,
+                    borderWidth: 1,
+                    borderColor: severityConfig.color,
+                  }}
+                >
+                  <Ionicons
+                    name={severityConfig.icon}
+                    size={18}
+                    color={severityConfig.color}
+                    style={{ marginRight: Spacing[2] }}
+                  />
+                  <Text
+                    style={{
+                      color: severityConfig.color,
+                      fontSize: Typography.fontSize.sm,
+                      fontWeight: Typography.fontWeight.semibold,
+                    }}
+                  >
+                    {incident.severity}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Update Status Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setStatusModalVisible(true)}
+              disabled={updating}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[2] }}>
+                <Ionicons name="refresh-outline" size={16} color={colors.foreground} />
+                <Text style={{ color: colors.foreground }}>Update Status</Text>
+              </View>
+            </Button>
+          </View>
+        </Card>
+
+        {/* Incident Title & Type */}
+        <Card style={{ marginBottom: Spacing[4] }}>
+          <View style={{ padding: Spacing[4] }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                marginBottom: Spacing[2],
+              }}
+            >
+              <View style={{ flex: 1, marginRight: Spacing[2] }}>
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.xl,
+                    fontWeight: Typography.fontWeight.bold,
+                    color: colors.foreground,
+                    lineHeight: 28,
+                  }}
+                >
+                  {incident.title}
+                </Text>
+              </View>
+              {incident.isConfidential && (
+                <View
+                  style={{
+                    backgroundColor: colors.error + "20",
+                    paddingVertical: Spacing[1],
+                    paddingHorizontal: Spacing[2],
+                    borderRadius: BorderRadius.sm,
+                    borderWidth: 1,
+                    borderColor: colors.error,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Ionicons name="lock-closed" size={12} color={colors.error} />
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.error,
+                        fontWeight: Typography.fontWeight.semibold,
+                      }}
+                    >
+                      CONFIDENTIAL
+                    </Text>
+                  </View>
                 </View>
               )}
             </View>
-          </Card>
 
-          {/* Details */}
-          <Card>
-            <View className="p-4">
-              <Text
-                className="text-xl font-bold mb-3"
-                style={{ color: colors.foreground }}
-              >
-                {incident.title}
-              </Text>
-              <Text
-                className="text-base leading-6 mb-4"
-                style={{ color: colors.foreground }}
-              >
-                {incident.description}
-              </Text>
+            <Badge variant="default" style={{ alignSelf: "flex-start" }}>
+              {getIncidentTypeLabel(incident.type)}
+            </Badge>
+          </View>
+        </Card>
 
+        {/* Description */}
+        <Card style={{ marginBottom: Spacing[4] }}>
+          <View style={{ padding: Spacing[4] }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[3] }}>
+              <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+              <Text
+                style={{
+                  fontSize: Typography.fontSize.sm,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: colors.foreground,
+                  marginLeft: Spacing[2],
+                }}
+              >
+                Description
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: Typography.fontSize.base,
+                color: colors.foreground,
+                lineHeight: 24,
+              }}
+            >
+              {incident.description}
+            </Text>
+          </View>
+        </Card>
+
+        {/* Metadata Grid */}
+        <Card style={{ marginBottom: Spacing[4] }}>
+          <View style={{ padding: Spacing[4] }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[3] }}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+              <Text
+                style={{
+                  fontSize: Typography.fontSize.sm,
+                  fontWeight: Typography.fontWeight.semibold,
+                  color: colors.foreground,
+                  marginLeft: Spacing[2],
+                }}
+              >
+                Additional Information
+              </Text>
+            </View>
+
+            <View style={{ gap: Spacing[3] }}>
+              {/* Location */}
               {incident.location && (
-                <View className="flex-row items-start gap-2 mb-3">
-                  <Ionicons
-                    name="location-outline"
-                    size={18}
-                    color={colors.foregroundMuted}
-                  />
-                  <View className="flex-1">
+                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: BorderRadius.md,
+                      backgroundColor: colors.muted,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: Spacing[3],
+                    }}
+                  >
+                    <Ionicons name="location-outline" size={16} color={colors.foreground} />
+                  </View>
+                  <View style={{ flex: 1 }}>
                     <Text
-                      className="text-xs mb-1"
-                      style={{ color: colors.foregroundMuted }}
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.foregroundMuted,
+                        marginBottom: 2,
+                      }}
                     >
                       Location
                     </Text>
                     <Text
-                      className="text-sm"
-                      style={{ color: colors.foreground }}
+                      style={{
+                        fontSize: Typography.fontSize.sm,
+                        color: colors.foreground,
+                        fontWeight: Typography.fontWeight.medium,
+                      }}
                     >
                       {incident.location}
                     </Text>
@@ -329,541 +583,690 @@ export default function IncidentDetailsScreen() {
                 </View>
               )}
 
-              {incident.resolutionNotes && (
-                <View className="p-3 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                  <View className="flex-row items-start gap-2">
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color={colors.success}
-                    />
-                    <View className="flex-1">
-                      <Text
-                        className="text-xs font-semibold mb-1"
-                        style={{ color: colors.success }}
-                      >
-                        Resolution
-                      </Text>
-                      <Text
-                        className="text-sm"
-                        style={{ color: colors.foreground }}
-                      >
-                        {incident.resolutionNotes}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-          </Card>
-
-          {/* People */}
-          <Card>
-            <View className="p-4">
-              <Text
-                className="text-sm font-semibold mb-3"
-                style={{ color: colors.foreground }}
-              >
-                People
-              </Text>
-
+              {/* Reported By */}
               {incident.reporter && (
-                <View className="mb-3">
-                  <Text
-                    className="text-xs mb-1"
-                    style={{ color: colors.foregroundMuted }}
-                  >
-                    Reported By
-                  </Text>
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons
-                      name="person-circle-outline"
-                      size={20}
-                      color={colors.foreground}
-                    />
-                    <View>
-                      <Text
-                        className="text-sm font-medium"
-                        style={{ color: colors.foreground }}
-                      >
-                        {incident.reporter.name}
-                      </Text>
-                      <Text
-                        className="text-xs"
-                        style={{ color: colors.foregroundMuted }}
-                      >
-                        {incident.reporter.email}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {incident.assignee ? (
-                <View>
-                  <Text
-                    className="text-xs mb-1"
-                    style={{ color: colors.foregroundMuted }}
-                  >
-                    Assigned To
-                  </Text>
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons
-                      name="person-add-outline"
-                      size={20}
-                      color={colors.primary}
-                    />
-                    <View>
-                      <Text
-                        className="text-sm font-medium"
-                        style={{ color: colors.foreground }}
-                      >
-                        {incident.assignee.name}
-                      </Text>
-                      <Text
-                        className="text-xs"
-                        style={{ color: colors.foregroundMuted }}
-                      >
-                        {incident.assignee.role}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ) : (
-                <View
-                  className="p-3 rounded-lg"
-                  style={{ backgroundColor: colors.muted }}
-                >
-                  <Text
-                    className="text-sm text-center"
-                    style={{ color: colors.foregroundMuted }}
-                  >
-                    Not assigned
-                  </Text>
-                </View>
-              )}
-            </View>
-          </Card>
-
-          {/* Related Information */}
-          {(incident.student || incident.examSession) && (
-            <Card>
-              <View className="p-4">
-                <Text
-                  className="text-sm font-semibold mb-3"
-                  style={{ color: colors.foreground }}
-                >
-                  Related Information
-                </Text>
-
-                {incident.student && (
-                  <View className="mb-3">
-                    <Text
-                      className="text-xs mb-1"
-                      style={{ color: colors.foregroundMuted }}
-                    >
-                      Student
-                    </Text>
-                    <Text
-                      className="text-sm font-medium"
-                      style={{ color: colors.foreground }}
-                    >
-                      {incident.student.firstName} {incident.student.lastName}
-                    </Text>
-                    <Text
-                      className="text-xs"
-                      style={{ color: colors.foregroundMuted }}
-                    >
-                      {incident.student.indexNumber} •{" "}
-                      {incident.student.program} • Level{" "}
-                      {incident.student.level}
-                    </Text>
-                  </View>
-                )}
-
-                {incident.examSession && (
-                  <View>
-                    <Text
-                      className="text-xs mb-1"
-                      style={{ color: colors.foregroundMuted }}
-                    >
-                      Exam Session
-                    </Text>
-                    <Text
-                      className="text-sm font-medium"
-                      style={{ color: colors.foreground }}
-                    >
-                      {incident.examSession.courseCode} -{" "}
-                      {incident.examSession.courseName}
-                    </Text>
-                    <Text
-                      className="text-xs"
-                      style={{ color: colors.foregroundMuted }}
-                    >
-                      Batch: {incident.examSession.batchQrCode}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </Card>
-          )}
-
-          {/* Timeline */}
-          <Card>
-            <View className="p-4">
-              <Text
-                className="text-sm font-semibold mb-3"
-                style={{ color: colors.foreground }}
-              >
-                Timeline
-              </Text>
-
-              <View className="gap-3">
-                <TimelineItem
-                  icon="create-outline"
-                  label="Reported"
-                  date={incident.reportedAt}
-                  color={colors.foregroundMuted}
-                  colors={colors}
-                />
-                {incident.assignedAt && (
-                  <TimelineItem
-                    icon="person-add-outline"
-                    label="Assigned"
-                    date={incident.assignedAt}
-                    color={colors.primary}
-                    colors={colors}
-                  />
-                )}
-                {incident.resolvedAt && (
-                  <TimelineItem
-                    icon="checkmark-circle-outline"
-                    label="Resolved"
-                    date={incident.resolvedAt}
-                    color={colors.success}
-                    colors={colors}
-                  />
-                )}
-                {incident.closedAt && (
-                  <TimelineItem
-                    icon="close-circle-outline"
-                    label="Closed"
-                    date={incident.closedAt}
-                    color={colors.foregroundMuted}
-                    colors={colors}
-                  />
-                )}
-              </View>
-            </View>
-          </Card>
-
-          {/* Comments */}
-          <Card>
-            <View className="p-4">
-              <View className="flex-row items-center justify-between mb-3">
-                <Text
-                  className="text-sm font-semibold"
-                  style={{ color: colors.foreground }}
-                >
-                  Comments ({comments.length})
-                </Text>
-              </View>
-
-              {/* Comment List */}
-              {comments.length > 0 && (
-                <View className="mb-4">
-                  {comments.map((comment) => (
-                    <CommentItem key={comment.id} comment={comment} />
-                  ))}
-                </View>
-              )}
-
-              {/* Add Comment */}
-              <View className="gap-3">
-                <TextInput
-                  className="p-3 rounded-lg text-base"
-                  placeholder="Add a comment..."
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                  style={{
-                    backgroundColor: colors.background,
-                    color: colors.foreground,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    minHeight: 80,
-                  }}
-                />
-
-                {isAdmin && (
-                  <TouchableOpacity
-                    onPress={() => setIsInternal(!isInternal)}
-                    className="flex-row items-center gap-2"
-                  >
-                    <View
-                      className={`w-5 h-5 rounded items-center justify-center ${
-                        isInternal ? "bg-primary" : "bg-muted"
-                      }`}
-                      style={{ borderWidth: 1, borderColor: colors.border }}
-                    >
-                      {isInternal && (
-                        <Ionicons name="checkmark" size={14} color="white" />
-                      )}
-                    </View>
-                    <Text
-                      className="text-sm"
-                      style={{ color: colors.foreground }}
-                    >
-                      Internal note (staff only)
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <Button
-                  onPress={handleSubmitComment}
-                  disabled={!commentText.trim() || submittingComment}
-                  loading={submittingComment}
-                >
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="send" size={16} color="white" />
-                    <Text className="text-white font-semibold">
-                      {submittingComment ? "Posting..." : "Post Comment"}
-                    </Text>
-                  </View>
-                </Button>
-              </View>
-            </View>
-          </Card>
-
-          {/* Attachments */}
-          {incident.attachments && incident.attachments.length > 0 && (
-            <Card>
-              <View className="p-4">
-                <View className="flex-row items-center justify-between mb-3">
-                  <Text
-                    className="text-sm font-semibold"
-                    style={{ color: colors.foreground }}
-                  >
-                    Attachments ({incident.attachments.length})
-                  </Text>
-                </View>
-
-                <View className="gap-3">
-                  {incident.attachments.map((attachment: IncidentAttachment) => (
-                    <TouchableOpacity
-                      key={attachment.id}
-                      onPress={() => {
-                        setPreviewAttachment(attachment);
-                        setIsPreviewOpen(true);
-                      }}
-                      className="flex-row items-center p-3 rounded-lg"
-                      style={{ backgroundColor: colors.muted }}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        className="w-10 h-10 rounded-lg items-center justify-center mr-3"
-                        style={{ backgroundColor: `${colors.primary}15` }}
-                      >
-                        <Ionicons
-                          name={
-                            attachment.filename
-                              .toLowerCase()
-                              .match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)
-                              ? "image"
-                              : attachment.filename
-                                    .toLowerCase()
-                                    .match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
-                                ? "videocam"
-                                : "document"
-                          }
-                          size={20}
-                          color={colors.primary}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-sm font-medium"
-                          style={{ color: colors.foreground }}
-                          numberOfLines={1}
-                        >
-                          {attachment.filename}
-                        </Text>
-                        <Text
-                          className="text-xs"
-                          style={{ color: colors.foregroundMuted }}
-                        >
-                          {(attachment.size / 1024).toFixed(1)} KB •{" "}
-                          {new Date(attachment.uploadedAt).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={colors.foregroundMuted}
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </Card>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Attachment Preview Modal */}
-      {previewAttachment && (
-      <Modal
-        visible={isPreviewOpen}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          setIsPreviewOpen(false);
-          setVideoSource(null); // Clear video source when closing
-        }}
-      >
-        <View
-          className="flex-1 justify-center items-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.8)" }}
-        >
-          <TouchableOpacity
-            className="absolute top-12 right-4 z-10 w-10 h-10 rounded-full items-center justify-center"
-            style={{ backgroundColor: colors.background }}
-            onPress={() => {
-              setIsPreviewOpen(false);
-              setVideoSource(null); // Clear video source when closing
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="close" size={24} color={colors.foreground} />
-          </TouchableOpacity>
-
-          <View className="flex-1 justify-center items-center p-4">
-            {(() => {
-              const fileName = previewAttachment.filename.toLowerCase();
-              const fileUrl = `${API_BASE_URL}/${previewAttachment.filePath}`;
-
-              if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
-                return (
-                  <View className="w-full max-w-sm">
-                    <Text
-                      className="text-white text-center mb-4 font-medium"
-                      numberOfLines={1}
-                    >
-                      {previewAttachment.filename}
-                    </Text>
-                    <View
-                      className="rounded-lg overflow-hidden"
-                      style={{ backgroundColor: colors.background }}
-                    >
-                      <Image
-                        source={{ uri: fileUrl }}
-                        className="w-full aspect-square"
-                        resizeMode="contain"
-                        onError={() => {
-                          Alert.alert("Error", "Failed to load image");
-                          setIsPreviewOpen(false);
-                        }}
-                      />
-                    </View>
-                  </View>
-                );
-              } else if (
-                fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
-              ) {
-                // Set video source when opening video
-                if (videoSource !== fileUrl) {
-                  setVideoSource(fileUrl);
-                }
-                
-                return (
-                  <View className="w-full max-w-sm">
-                    <Text
-                      className="text-white text-center mb-4 font-medium"
-                      numberOfLines={1}
-                    >
-                      {previewAttachment.filename}
-                    </Text>
-                    <View
-                      className="rounded-lg overflow-hidden"
-                      style={{ backgroundColor: colors.background }}
-                    >
-                      <VideoView
-                        player={player}
-                        style={{ width: "100%", aspectRatio: 16 / 9 }}
-                        nativeControls={true}
-                        contentFit="contain"
-                      />
-                    </View>
-                  </View>
-                );
-              }
-              return (
-                <View
-                  className="items-center p-8 rounded-lg"
-                  style={{ backgroundColor: colors.background }}
-                >
-                  <Ionicons
-                    name="document"
-                    size={64}
-                    color={colors.foregroundMuted}
-                  />
-                  <Text
-                    className="text-lg font-medium mt-4"
-                    style={{ color: colors.foreground }}
-                  >
-                    {previewAttachment.filename}
-                  </Text>
-
-                  <Button
-                    onPress={() => {
-                      Alert.alert("Info", "Document viewer not implemented");
+                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: BorderRadius.md,
+                      backgroundColor: colors.muted,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: Spacing[3],
                     }}
                   >
-                    Open File
-                  </Button>
+                    <Ionicons name="person-outline" size={16} color={colors.foreground} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.foregroundMuted,
+                        marginBottom: 2,
+                      }}
+                    >
+                      Reported By
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.sm,
+                        color: colors.foreground,
+                        fontWeight: Typography.fontWeight.medium,
+                      }}
+                    >
+                      {incident.reporter.firstName} {incident.reporter.lastName}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.foregroundMuted,
+                      }}
+                    >
+                      {incident.reporter.email}
+                    </Text>
+                  </View>
                 </View>
-              );
-            })()}
+              )}
+
+              {/* Reported At */}
+              <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                <View
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: BorderRadius.md,
+                    backgroundColor: colors.muted,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    marginRight: Spacing[3],
+                  }}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={colors.foreground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: Typography.fontSize.xs,
+                      color: colors.foregroundMuted,
+                      marginBottom: 2,
+                    }}
+                  >
+                    Reported At
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: Typography.fontSize.sm,
+                      color: colors.foreground,
+                      fontWeight: Typography.fontWeight.medium,
+                    }}
+                  >
+                    {new Date(incident.reportedAt).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Updated At */}
+              {incident.resolvedAt && (
+                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                  <View
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: BorderRadius.md,
+                      backgroundColor: colors.muted,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: Spacing[3],
+                    }}
+                  >
+                    <Ionicons name="time-outline" size={16} color={colors.foreground} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.foregroundMuted,
+                        marginBottom: 2,
+                      }}
+                    >
+                      Resolved At
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.sm,
+                        color: colors.foreground,
+                        fontWeight: Typography.fontWeight.medium,
+                      }}
+                    >
+                      {new Date(incident.resolvedAt).toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        </Card>
+
+        {/* Student Information (if applicable) */}
+        {incident.student && (
+          <Card style={{ marginBottom: Spacing[4] }}>
+            <View style={{ padding: Spacing[4] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[3] }}>
+                <Ionicons name="school-outline" size={20} color={colors.primary} />
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                    color: colors.foreground,
+                    marginLeft: Spacing[2],
+                  }}
+                >
+                  Student Information
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing[3] }}>
+                {/* Profile Picture */}
+                <View
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: BorderRadius.md,
+                    backgroundColor: colors.muted,
+                    overflow: "hidden",
+                    borderWidth: 2,
+                    borderColor: colors.border,
+                  }}
+                >
+                  {(incident.student as any).profilePicture ? (
+                    <Image
+                      source={{ uri: getFileUrl((incident.student as any).profilePicture) }}
+                      style={{ width: "100%", height: "100%" }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Ionicons name="person" size={32} color={colors.foregroundMuted} />
+                    </View>
+                  )}
+                </View>
+
+                {/* Student Details */}
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: Typography.fontSize.base,
+                      fontWeight: Typography.fontWeight.semibold,
+                      color: colors.foreground,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {incident.student.firstName} {incident.student.lastName}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: Typography.fontSize.sm,
+                      color: colors.foregroundMuted,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {incident.student.indexNumber}
+                  </Text>
+                  {incident.student.program && (
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.xs,
+                        color: colors.foregroundMuted,
+                      }}
+                    >
+                      {incident.student.program}
+                      {incident.student.level && ` • Level ${incident.student.level}`}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          </Card>
+        )}
+
+        {/* Exam Session (if applicable) */}
+        {incident.examSession && (
+          <Card style={{ marginBottom: Spacing[4] }}>
+            <View style={{ padding: Spacing[4] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[3] }}>
+                <Ionicons name="book-outline" size={20} color={colors.primary} />
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                    color: colors.foreground,
+                    marginLeft: Spacing[2],
+                  }}
+                >
+                  Exam Session
+                </Text>
+              </View>
+
+              <View style={{ gap: Spacing[2] }}>
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.base,
+                    fontWeight: Typography.fontWeight.semibold,
+                    color: colors.foreground,
+                  }}
+                >
+                  {incident.examSession.courseName}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.sm,
+                    color: colors.foregroundMuted,
+                  }}
+                >
+                  {incident.examSession.courseCode}
+                </Text>
+                <View style={{ flexDirection: "row", gap: Spacing[2], flexWrap: "wrap" }}>
+                  {(incident.examSession as any).venue && (
+                    <Badge variant="secondary">{(incident.examSession as any).venue}</Badge>
+                  )}
+                  {(incident.examSession as any).examDate && (
+                    <Badge variant="secondary">
+                      {new Date((incident.examSession as any).examDate).toLocaleDateString()}
+                    </Badge>
+                  )}
+                  <Badge variant="secondary">
+                    {incident.examSession.batchQrCode}
+                  </Badge>
+                </View>
+              </View>
+            </View>
+          </Card>
+        )}
+
+        {/* Attachments */}
+        {incident.attachments && incident.attachments.length > 0 && (
+          <Card>
+            <View style={{ padding: Spacing[4] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[3] }}>
+                <Ionicons name="attach-outline" size={20} color={colors.primary} />
+                <Text
+                  style={{
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                    color: colors.foreground,
+                    marginLeft: Spacing[2],
+                  }}
+                >
+                  Attachments ({incident.attachments.length})
+                </Text>
+              </View>
+
+              <View style={{ gap: Spacing[3] }}>
+                {incident.attachments.map((attachment, index) => {
+                  const fileUrl = getFileUrl(attachment.filePath);
+                  const isImage = attachment.fileType.startsWith("image/");
+                  const isVideo = attachment.fileType.startsWith("video/");
+                  const isPDF = attachment.fileType === "application/pdf";
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => {
+                        if (isImage || isVideo) {
+                          previewAttachment(fileUrl, attachment.fileType);
+                        } else {
+                          openAttachmentExternal(fileUrl);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        padding: Spacing[3],
+                        backgroundColor: colors.muted,
+                        borderRadius: BorderRadius.md,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      {/* Thumbnail or Icon */}
+                      <View
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: BorderRadius.sm,
+                          backgroundColor: colors.background,
+                          marginRight: Spacing[3],
+                          overflow: "hidden",
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        {isImage ? (
+                          <Image
+                            source={{ uri: fileUrl }}
+                            style={{ width: "100%", height: "100%" }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Ionicons
+                            name={
+                              isVideo
+                                ? "videocam"
+                                : isPDF
+                                  ? "document-text"
+                                  : "document"
+                            }
+                            size={28}
+                            color={
+                              isVideo
+                                ? colors.error
+                                : isPDF
+                                  ? colors.warning
+                                  : colors.foregroundMuted
+                            }
+                          />
+                        )}
+                      </View>
+
+                      {/* File Info */}
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: Typography.fontSize.sm,
+                            fontWeight: Typography.fontWeight.medium,
+                            color: colors.foreground,
+                            marginBottom: 2,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {attachment.fileName || `Attachment ${index + 1}`}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: Typography.fontSize.xs,
+                            color: colors.foregroundMuted,
+                          }}
+                        >
+                          {attachment.fileSize
+                            ? `${(attachment.fileSize / 1024).toFixed(1)} KB`
+                            : "Unknown size"}{" "}
+                          • {attachment.fileType.split("/")[1]?.toUpperCase() || "FILE"}
+                        </Text>
+                      </View>
+
+                      {/* Preview/Open Icon */}
+                      <Ionicons
+                        name={isImage || isVideo ? "eye-outline" : "open-outline"}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </Card>
+        )}
+      </ScrollView>
+
+      {/* Status Change Modal */}
+      <Modal
+        visible={statusModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusModalVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "center",
+            padding: Spacing[4],
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.background,
+              borderRadius: BorderRadius.lg,
+              padding: Spacing[4],
+            }}
+          >
+            <Text
+              style={{
+                fontSize: Typography.fontSize.lg,
+                fontWeight: Typography.fontWeight.semibold,
+                color: colors.foreground,
+                marginBottom: Spacing[4],
+              }}
+            >
+              Update Incident Status
+            </Text>
+
+            <View style={{ gap: Spacing[2] }}>
+              {(Object.keys(STATUS_CONFIG) as IncidentStatus[]).map((status) => {
+                const config = STATUS_CONFIG[status];
+                const isCurrentStatus = incident.status === status;
+
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    onPress={() => handleStatusChange(status)}
+                    disabled={isCurrentStatus}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: Spacing[3],
+                      backgroundColor: isCurrentStatus
+                        ? config.color + "20"
+                        : colors.muted,
+                      borderRadius: BorderRadius.md,
+                      borderWidth: 1,
+                      borderColor: isCurrentStatus ? config.color : colors.border,
+                      opacity: isCurrentStatus ? 0.6 : 1,
+                    }}
+                  >
+                    <Ionicons
+                      name={config.icon}
+                      size={20}
+                      color={config.color}
+                      style={{ marginRight: Spacing[3] }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: Typography.fontSize.base,
+                        fontWeight: Typography.fontWeight.medium,
+                        color: colors.foreground,
+                        flex: 1,
+                      }}
+                    >
+                      {config.label}
+                    </Text>
+                    {isCurrentStatus && (
+                      <Ionicons name="checkmark-circle" size={20} color={config.color} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Button
+              variant="outline"
+              onPress={() => setStatusModalVisible(false)}
+              style={{ marginTop: Spacing[4] }}
+            >
+              Cancel
+            </Button>
           </View>
         </View>
       </Modal>
-    )}
-    </SafeAreaView>
-  );
-}
 
-// Helper Component: Timeline Item
-function TimelineItem({
-  icon,
-  label,
-  date,
-  color,
-  colors,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  date: string;
-  color: string;
-  colors: any;
-}) {
-
-  return (
-    <View className="flex-row items-center gap-3">
-      <Ionicons name={icon} size={20} color={color} />
-      <View className="flex-1">
-        <Text
-          className="text-sm font-medium"
-          style={{ color: colors.foreground }}
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteConfirmVisible(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "center",
+            padding: Spacing[4],
+          }}
         >
-          {label}
-        </Text>
-        <Text className="text-xs" style={{ color: colors.foregroundMuted }}>
-          {new Date(date).toLocaleString()}
-        </Text>
-      </View>
-    </View>
+          <View
+            style={{
+              backgroundColor: colors.background,
+              borderRadius: BorderRadius.lg,
+              padding: Spacing[4],
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: colors.error + "20",
+                justifyContent: "center",
+                alignItems: "center",
+                alignSelf: "center",
+                marginBottom: Spacing[3],
+              }}
+            >
+              <Ionicons name="warning" size={32} color={colors.error} />
+            </View>
+
+            <Text
+              style={{
+                fontSize: Typography.fontSize.lg,
+                fontWeight: Typography.fontWeight.semibold,
+                color: colors.foreground,
+                marginBottom: Spacing[2],
+                textAlign: "center",
+              }}
+            >
+              Delete Incident?
+            </Text>
+
+            <Text
+              style={{
+                fontSize: Typography.fontSize.sm,
+                color: colors.foregroundMuted,
+                marginBottom: Spacing[4],
+                textAlign: "center",
+                lineHeight: 20,
+              }}
+            >
+              This action cannot be undone. All incident data and attachments will be permanently deleted.
+            </Text>
+
+            <View style={{ flexDirection: "row", gap: Spacing[2] }}>
+              <Button
+                variant="outline"
+                onPress={() => setDeleteConfirmVisible(false)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onPress={handleDelete}
+                disabled={updating}
+                loading={updating}
+                style={{ flex: 1, backgroundColor: colors.error }}
+              >
+                Delete
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Attachment Preview Modal */}
+      <Modal
+        visible={previewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closePreview}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.95)",
+          }}
+        >
+          <SafeAreaView style={{ flex: 1 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: Spacing[4],
+              }}
+            >
+              <TouchableOpacity
+                onPress={closePreview}
+                style={{
+                  padding: Spacing[2],
+                  borderRadius: BorderRadius.md,
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => openAttachmentExternal(previewUrl)}
+                style={{
+                  padding: Spacing[2],
+                  borderRadius: BorderRadius.md,
+                  backgroundColor: "rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <Ionicons name="open-outline" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+                padding: Spacing[4],
+              }}
+            >
+              {previewType.startsWith("image/") ? (
+                <Image
+                  source={{ uri: previewUrl }}
+                  style={{
+                    width: SCREEN_WIDTH - Spacing[8],
+                    height: "100%",
+                  }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={{ alignItems: "center" }}>
+                  <Ionicons name="videocam" size={64} color="white" />
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: Typography.fontSize.lg,
+                      marginTop: Spacing[4],
+                    }}
+                  >
+                    Video preview not available
+                  </Text>
+                  <Text
+                    style={{
+                      color: "rgba(255, 255, 255, 0.7)",
+                      fontSize: Typography.fontSize.sm,
+                      marginTop: Spacing[2],
+                    }}
+                  >
+                    Tap the open icon to view externally
+                  </Text>
+                </View>
+              )}
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      {/* Error Dialog */}
+      <Dialog
+        visible={errorDialog.visible}
+        onClose={() => setErrorDialog({ visible: false, message: "" })}
+        title="Error"
+        message={errorDialog.message}
+        variant="error"
+        primaryAction={{
+          label: "OK",
+          onPress: () => setErrorDialog({ visible: false, message: "" }),
+        }}
+      />
+
+      {/* Success Dialog */}
+      <Dialog
+        visible={successDialog.visible}
+        onClose={() => setSuccessDialog({ visible: false, message: "" })}
+        title="Success"
+        message={successDialog.message}
+        variant="success"
+        primaryAction={{
+          label: "OK",
+          onPress: () => setSuccessDialog({ visible: false, message: "" }),
+        }}
+      />
+    </SafeAreaView>
   );
 }

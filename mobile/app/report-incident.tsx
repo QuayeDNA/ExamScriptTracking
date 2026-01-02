@@ -10,6 +10,7 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   Image,
@@ -31,6 +32,7 @@ import { getFileUrl } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
 import {
   createIncident,
   uploadAttachments,
@@ -121,6 +123,10 @@ export default function ReportIncidentScreen() {
   
   // Session picker modal state
   const [sessionPickerVisible, setSessionPickerVisible] = useState(false);
+  
+  // Dialog states
+  const [errorDialog, setErrorDialog] = useState({ visible: false, title: "", message: "" });
+  const [successDialog, setSuccessDialog] = useState({ visible: false, incidentId: "", message: "" });
 
   // Auto-determined severity based on incident type
   const currentSeverity = getSeverityFromType(formData.type);
@@ -256,10 +262,11 @@ export default function ReportIncidentScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Location permission is required to get your current location."
-        );
+        setErrorDialog({
+          visible: true,
+          title: "Permission Denied",
+          message: "Location permission is required to get your current location."
+        });
         return;
       }
 
@@ -282,7 +289,11 @@ export default function ReportIncidentScreen() {
         );
       }
     } catch {
-      Alert.alert("Error", "Failed to get current location");
+      setErrorDialog({
+        visible: true,
+        title: "Location Error",
+        message: "Failed to get current location. Please try again."
+      });
     } finally {
       setFetchingLocation(false);
     }
@@ -318,29 +329,20 @@ export default function ReportIncidentScreen() {
 
   // Select a template suggestion
   const selectTemplate = (template: IncidentTemplate) => {
-    selectingSuggestionRef.current = true;
+    console.log("selectTemplate called:", template.title);
     
-    console.log("Template selected:", template.title, template.description);
+    // Immediately update form data - no setTimeout needed
+    setFormData((prev) => ({
+      ...prev,
+      title: template.title,
+      description: template.description,
+    }));
     
-    // Hide suggestions first
+    // Hide suggestions immediately
     setShowSuggestions(false);
     setTitleSuggestions([]);
     
-    // Use setTimeout to ensure the state update happens after the blur event
-    setTimeout(() => {
-      console.log("Updating form data...");
-      setFormData((prev) => {
-        const updated = {
-          ...prev,
-          title: template.title,
-          description: template.description,
-        };
-        console.log("Form data updated:", updated);
-        return updated;
-      });
-      
-      selectingSuggestionRef.current = false;
-    }, 50);
+    console.log("Form data updated with template");
   };
 
   // Handle incident type change
@@ -365,12 +367,20 @@ export default function ReportIncidentScreen() {
   // Take photo with camera
   const takePhoto = async () => {
     if (!imagePicker) {
-      Alert.alert("Error", "Camera not available");
+      setErrorDialog({
+        visible: true,
+        title: "Camera Unavailable",
+        message: "Camera functionality is not available on this device."
+      });
       return;
     }
 
     if (attachments.length >= 5) {
-      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+      setErrorDialog({
+        visible: true,
+        title: "Limit Reached",
+        message: "Maximum 5 attachments allowed per incident report."
+      });
       return;
     }
 
@@ -378,10 +388,11 @@ export default function ReportIncidentScreen() {
       const { status } = await imagePicker.requestCameraPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Camera permission is required to take photos."
-        );
+        setErrorDialog({
+          visible: true,
+          title: "Permission Denied",
+          message: "Camera permission is required to take photos."
+        });
         return;
       }
 
@@ -402,26 +413,42 @@ export default function ReportIncidentScreen() {
 
         const validation = validateAttachment(file);
         if (!validation.valid) {
-          Alert.alert("Invalid File", validation.error);
+          setErrorDialog({
+            visible: true,
+            title: "Invalid File",
+            message: validation.error || "The selected file is invalid."
+          });
           return;
         }
 
         setAttachments((prev) => [...prev, file]);
       }
     } catch {
-      Alert.alert("Error", "Failed to take photo");
+      setErrorDialog({
+        visible: true,
+        title: "Camera Error",
+        message: "Failed to take photo. Please try again."
+      });
     }
   };
 
   // Pick image from gallery
   const pickImage = async () => {
     if (!imagePicker) {
-      Alert.alert("Error", "Image picker not available");
+      setErrorDialog({
+        visible: true,
+        title: "Image Picker Unavailable",
+        message: "Image picker is not available on this device."
+      });
       return;
     }
 
     if (attachments.length >= 5) {
-      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+      setErrorDialog({
+        visible: true,
+        title: "Limit Reached",
+        message: "Maximum 5 attachments allowed per incident report."
+      });
       return;
     }
 
@@ -436,7 +463,11 @@ export default function ReportIncidentScreen() {
         const newFiles: AttachmentFile[] = [];
         for (const asset of result.assets) {
           if (attachments.length + newFiles.length >= 5) {
-            Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+            setErrorDialog({
+              visible: true,
+              title: "Limit Reached",
+              message: "Maximum 5 attachments allowed. Some files were not added."
+            });
             break;
           }
 
@@ -451,20 +482,32 @@ export default function ReportIncidentScreen() {
           if (validation.valid) {
             newFiles.push(file);
           } else {
-            Alert.alert("Invalid File", `${asset.fileName || 'File'}: ${validation.error}`);
+            setErrorDialog({
+              visible: true,
+              title: "Invalid File",
+              message: `${asset.fileName || 'File'}: ${validation.error}`
+            });
           }
         }
         setAttachments((prev) => [...prev, ...newFiles]);
       }
     } catch {
-      Alert.alert("Error", "Failed to pick image");
+      setErrorDialog({
+        visible: true,
+        title: "Image Picker Error",
+        message: "Failed to pick image. Please try again."
+      });
     }
   };
 
   // Pick document
   const pickDocument = async () => {
     if (attachments.length >= 5) {
-      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+      setErrorDialog({
+        visible: true,
+        title: "Limit Reached",
+        message: "Maximum 5 attachments allowed per incident report."
+      });
       return;
     }
 
@@ -478,7 +521,11 @@ export default function ReportIncidentScreen() {
         const newFiles: AttachmentFile[] = [];
         for (const asset of result.assets) {
           if (attachments.length + newFiles.length >= 5) {
-            Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+            setErrorDialog({
+              visible: true,
+              title: "Limit Reached",
+              message: "Maximum 5 attachments allowed. Some files were not added."
+            });
             break;
           }
 
@@ -493,13 +540,21 @@ export default function ReportIncidentScreen() {
           if (validation.valid) {
             newFiles.push(file);
           } else {
-            Alert.alert("Invalid File", `${asset.name}: ${validation.error}`);
+            setErrorDialog({
+              visible: true,
+              title: "Invalid File",
+              message: `${asset.name}: ${validation.error}`
+            });
           }
         }
         setAttachments((prev) => [...prev, ...newFiles]);
       }
     } catch {
-      Alert.alert("Error", "Failed to pick document");
+      setErrorDialog({
+        visible: true,
+        title: "Document Picker Error",
+        message: "Failed to pick document. Please try again."
+      });
     }
   };
 
@@ -611,24 +666,40 @@ export default function ReportIncidentScreen() {
   const handleSubmit = async () => {
     // Validation
     if (!formData.title.trim()) {
-      Alert.alert("Validation Error", "Please enter an incident title");
+      setErrorDialog({
+        visible: true,
+        title: "Validation Error",
+        message: "Please enter an incident title."
+      });
       return;
     }
     if (!formData.description.trim()) {
-      Alert.alert("Validation Error", "Please enter a description");
+      setErrorDialog({
+        visible: true,
+        title: "Validation Error",
+        message: "Please enter a description."
+      });
       return;
     }
 
     // Validate student info for student-related incidents
     if (showStudentField) {
       if (!selectedStudent && !showManualStudentFields) {
-        Alert.alert("Validation Error", "Please enter student information or search for a student");
+        setErrorDialog({
+          visible: true,
+          title: "Validation Error",
+          message: "Please enter student information or search for a student."
+        });
         return;
       }
 
       if (showManualStudentFields) {
         if (!manualStudentInfo.indexNumber.trim() || !manualStudentInfo.fullName.trim() || !manualStudentInfo.program.trim()) {
-          Alert.alert("Validation Error", "Please complete all student information fields");
+          setErrorDialog({
+            visible: true,
+            title: "Validation Error",
+            message: "Please complete all student information fields."
+          });
           return;
         }
       }
@@ -681,25 +752,17 @@ export default function ReportIncidentScreen() {
       // Clear draft
       await clearDraft();
 
-      Alert.alert("Success", "Incident reported successfully", [
-        {
-          text: "View Incident",
-          onPress: () => {
-            router.replace(`/incident-details?id=${incidentId}` as any);
-          },
-        },
-        {
-          text: "OK",
-          onPress: () => {
-            router.back();
-          },
-        },
-      ]);
+      setSuccessDialog({
+        visible: true,
+        incidentId: incidentId,
+        message: "Incident reported successfully"
+      });
     } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.error || "Failed to report incident"
-      );
+      setErrorDialog({
+        visible: true,
+        title: "Submission Error",
+        message: error.response?.data?.error || "Failed to report incident. Please try again."
+      });
     } finally {
       setLoading(false);
     }
@@ -1245,14 +1308,6 @@ export default function ReportIncidentScreen() {
                                setShowSuggestions(defaultSuggestions.length > 0);
                              }
                            }}
-                           onBlur={() => {
-                             // Delay hiding suggestions to allow selection, but don't hide if selecting a suggestion
-                             setTimeout(() => {
-                               if (!selectingSuggestionRef.current) {
-                                 setShowSuggestions(false);
-                               }
-                             }, 200);
-                           }}
                          />
                        </View>
                      </Card>
@@ -1274,20 +1329,25 @@ export default function ReportIncidentScreen() {
                            showsVerticalScrollIndicator={false}
                            keyboardShouldPersistTaps="always"
                            nestedScrollEnabled={true}
+                           scrollEnabled={true}
+                           bounces={false}
+                           contentContainerStyle={{ paddingVertical: Spacing[2] }}
                          >
                            {titleSuggestions.map((template) => (
-                             <TouchableOpacity
+                             <Pressable
                                key={template.id}
                                onPress={() => {
-                                 console.log("TouchableOpacity pressed!");
+                                 console.log("Pressable pressed!", template.title);
                                  selectTemplate(template);
                                }}
-                               activeOpacity={0.7}
-                               style={{
-                                 padding: Spacing[3],
-                                 borderBottomWidth: 1,
-                                 borderBottomColor: colors.border,
-                               }}
+                               style={({ pressed }) => [
+                                 {
+                                   padding: Spacing[3],
+                                   borderBottomWidth: 1,
+                                   borderBottomColor: colors.border,
+                                   backgroundColor: pressed ? colors.muted : "transparent",
+                                 },
+                               ]}
                              >
                                <Text
                                  style={{
@@ -1331,7 +1391,7 @@ export default function ReportIncidentScreen() {
                                    {template.severity}
                                  </Badge>
                                </View>
-                             </TouchableOpacity>
+                             </Pressable>
                            ))}
                          </ScrollView>
                        </Card>
@@ -1986,6 +2046,40 @@ export default function ReportIncidentScreen() {
                    )}
                  </View>
                </Modal>
+
+               {/* Error Dialog */}
+               <Dialog
+                 visible={errorDialog.visible}
+                 onClose={() => setErrorDialog({ visible: false, title: "", message: "" })}
+                 title={errorDialog.title}
+                 message={errorDialog.message}
+                 variant="error"
+                 primaryAction={{
+                   label: "OK",
+                   onPress: () => setErrorDialog({ visible: false, title: "", message: "" })
+                 }}
+               />
+
+               {/* Success Dialog */}
+               <Dialog
+                 visible={successDialog.visible}
+                 onClose={() => setSuccessDialog({ visible: false, incidentId: "", message: "" })}
+                 title="Success"
+                 message={successDialog.message}
+                 variant="success"
+                 primaryAction={{
+                   label: "View Incident",
+                   onPress: () => {
+                     router.replace(`/incident-details?id=${successDialog.incidentId}` as any);
+                   }
+                 }}
+                 secondaryAction={{
+                   label: "Close",
+                   onPress: () => {
+                     router.back();
+                   }
+                 }}
+               />
              </SafeAreaView>
            );
          }

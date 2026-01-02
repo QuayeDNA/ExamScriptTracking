@@ -325,7 +325,7 @@ export const incidentsApi = {
    */
   exportPDF: async (id: string): Promise<Blob> => {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/incidents/${id}/export/pdf`,
+      `${import.meta.env.VITE_API_URL}/api/incidents/${id}/export/pdf`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -342,7 +342,7 @@ export const incidentsApi = {
   exportSummary: async (filters?: IncidentFilters): Promise<Blob> => {
     const params = new URLSearchParams(filters as Record<string, string>);
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/incidents/export/summary?${params}`,
+      `${import.meta.env.VITE_API_URL}/api/incidents/export/summary?${params}`,
       {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -358,7 +358,7 @@ export const incidentsApi = {
    */
   exportBulkPDF: async (incidentIds: string[]): Promise<Blob> => {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/incidents/export/bulk-pdf`,
+      `${import.meta.env.VITE_API_URL}/api/incidents/export/bulk-pdf`,
       {
         method: "POST",
         headers: {

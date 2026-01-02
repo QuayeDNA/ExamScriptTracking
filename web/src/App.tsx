@@ -28,6 +28,8 @@ import ExamSessionsPage from "@/pages/dashboard/ExamSessionsPage";
 import BatchDetailsPage from "@/pages/dashboard/BatchDetailsPage";
 import BatchTrackingPage from "@/pages/dashboard/BatchTrackingPage";
 import IncidentsPage from "@/pages/dashboard/IncidentsPage";
+import CreateIncidentPage from "@/pages/dashboard/CreateIncidentPage";
+import IncidentDetailsPage from "@/pages/dashboard/IncidentDetailsPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
 import {
   ProtectedRoute,
@@ -145,6 +147,8 @@ function App() {
                       element={<BatchTrackingPage />}
                     />
                     <Route path="incidents" element={<IncidentsPage />} />
+                    <Route path="incidents/create" element={<CreateIncidentPage />} />
+                    <Route path="incidents/:id" element={<IncidentDetailsPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="users" element={<UsersPage />} />
                     <Route path="audit-logs" element={<AuditLogsPage />} />

@@ -54,13 +54,15 @@ export interface Incident {
   batchTransferId?: string;
   reporter?: {
     id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     role: string;
   };
   assignee?: {
     id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     role: string;
   };
@@ -95,7 +97,8 @@ export interface IncidentComment {
   createdAt: string;
   user: {
     id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     role: string;
   };
@@ -104,15 +107,16 @@ export interface IncidentComment {
 export interface IncidentAttachment {
   id: string;
   incidentId: string;
-  filename: string;
+  fileName: string;
   filePath: string;
-  mimeType: string;
-  size: number;
+  fileType: string;
+  fileSize: number;
   uploadedAt: string;
   uploadedBy: string;
   uploader: {
-    id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
+    role: string;
   };
 }
 
@@ -125,8 +129,9 @@ export interface IncidentStatusHistory {
   changedAt: string;
   changedById: string;
   changedBy: {
-    id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
+    role: string;
   };
 }
 

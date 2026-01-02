@@ -769,7 +769,7 @@ export const getStatistics = async (req: Request, res: Response) => {
  */
 export const exportIncidentPDF = async (req: Request, res: Response) => {
   try {
-    const { incidentId } = req.params;
+    const { id: incidentId } = req.params;
 
     // Check access
     const userContext = {

@@ -9,6 +9,7 @@ import {
   type IncidentAttachment,
 } from "@/api/incidents";
 import { usersApi } from "@/api/users";
+import { getFileUrl } from "@/lib/api-client";
 import {
   ArrowLeft,
   FileDown,
@@ -235,11 +236,10 @@ export default function IncidentDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -461,7 +461,7 @@ export default function IncidentDetailsPage() {
                         const isPreviewable = isImageOrVideo(
                           attachment.fileName
                         );
-                        const fileUrl = `http://192.168.43.153:5000/${attachment.filePath}`;
+                        const fileUrl = getFileUrl(attachment.filePath);
 
                         return (
                           <div
@@ -800,178 +800,178 @@ export default function IncidentDetailsPage() {
           </div>
         </div>
 
-        {/* Update Status Modal */}
-        <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Update Incident Status</DialogTitle>
-              <DialogDescription>
-                Change the status of this incident
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
+      {/* Update Status Modal */}
+      <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Incident Status</DialogTitle>
+            <DialogDescription>
+              Change the status of this incident
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>New Status</Label>
+              <Select
+                value={statusFormData.status}
+                onValueChange={(value: IncidentStatus) =>
+                  setStatusFormData((prev) => ({ ...prev, status: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason (Optional)</Label>
+              <Textarea
+                placeholder="Explain the status change..."
+                value={statusFormData.reason || ""}
+                onChange={(e) =>
+                  setStatusFormData((prev) => ({
+                    ...prev,
+                    reason: e.target.value,
+                  }))
+                }
+                rows={3}
+              />
+            </div>
+            {(statusFormData.status === "RESOLVED" ||
+              statusFormData.status === "CLOSED") && (
               <div className="space-y-2">
-                <Label>New Status</Label>
-                <Select
-                  value={statusFormData.status}
-                  onValueChange={(value: IncidentStatus) =>
-                    setStatusFormData((prev) => ({ ...prev, status: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Reason (Optional)</Label>
+                <Label>Resolution Notes</Label>
                 <Textarea
-                  placeholder="Explain the status change..."
-                  value={statusFormData.reason || ""}
+                  placeholder="Describe how this was resolved..."
+                  value={statusFormData.resolutionNotes || ""}
                   onChange={(e) =>
                     setStatusFormData((prev) => ({
                       ...prev,
-                      reason: e.target.value,
+                      resolutionNotes: e.target.value,
                     }))
                   }
-                  rows={3}
+                  rows={4}
                 />
               </div>
-              {(statusFormData.status === "RESOLVED" ||
-                statusFormData.status === "CLOSED") && (
-                <div className="space-y-2">
-                  <Label>Resolution Notes</Label>
-                  <Textarea
-                    placeholder="Describe how this was resolved..."
-                    value={statusFormData.resolutionNotes || ""}
-                    onChange={(e) =>
-                      setStatusFormData((prev) => ({
-                        ...prev,
-                        resolutionNotes: e.target.value,
-                      }))
-                    }
-                    rows={4}
-                  />
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsStatusModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleUpdateStatus}
-                disabled={updateStatusMutation.isPending}
-              >
-                Update Status
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsStatusModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateStatus}
+              disabled={updateStatusMutation.isPending}
+            >
+              Update Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Assign Modal */}
-        <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Assign Incident</DialogTitle>
-              <DialogDescription>
-                Assign this incident to a staff member for investigation
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Assign To</Label>
-                <Select
-                  value={selectedAssignee}
-                  onValueChange={setSelectedAssignee}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select user" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assignableUsers?.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.name} ({user.role})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsAssignModalOpen(false)}
+      {/* Assign Modal */}
+      <Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Incident</DialogTitle>
+            <DialogDescription>
+              Assign this incident to a staff member for investigation
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Assign To</Label>
+              <Select
+                value={selectedAssignee}
+                onValueChange={setSelectedAssignee}
               >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => assignMutation.mutate()}
-                disabled={!selectedAssignee || assignMutation.isPending}
-              >
-                Assign
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Preview Dialog */}
-        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>{previewAttachment?.fileName}</DialogTitle>
-            </DialogHeader>
-            <div className="flex justify-center items-center min-h-[400px]">
-              {previewAttachment &&
-                (() => {
-                  const fileName = previewAttachment.fileName.toLowerCase();
-                  const fileUrl = `http://192.168.43.153:5000/${previewAttachment.filePath}`;
-
-                  if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
-                    return (
-                      <img
-                        src={fileUrl}
-                        alt={previewAttachment.fileName}
-                        className="max-w-full max-h-full object-contain"
-                        onError={() => {
-                          toast.error("Failed to load image");
-                          setIsPreviewOpen(false);
-                        }}
-                      />
-                    );
-                  } else if (
-                    fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
-                  ) {
-                    return (
-                      <video
-                        src={fileUrl}
-                        controls
-                        className="max-w-full max-h-full"
-                        onError={() => {
-                          toast.error("Failed to load video");
-                          setIsPreviewOpen(false);
-                        }}
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    );
-                  }
-                  return null;
-                })()}
+                <SelectTrigger>
+                  <SelectValue placeholder="Select user" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignableUsers?.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name} ({user.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-    </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAssignModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => assignMutation.mutate()}
+              disabled={!selectedAssignee || assignMutation.isPending}
+            >
+              Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{previewAttachment?.fileName}</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center items-center min-h-[400px]">
+            {previewAttachment &&
+              (() => {
+                if (!previewAttachment) return null;
+                const fileName = previewAttachment.fileName.toLowerCase();
+                const fileUrl = getFileUrl(previewAttachment.filePath);
+
+                if (fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
+                  return (
+                    <img
+                      src={fileUrl}
+                      alt={previewAttachment.fileName}
+                      className="max-w-full max-h-full object-contain"
+                      onError={() => {
+                        toast.error("Failed to load image");
+                        setIsPreviewOpen(false);
+                      }}
+                    />
+                  );
+                } else if (
+                  fileName.match(/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i)
+                ) {
+                  return (
+                    <video
+                      src={fileUrl}
+                      controls
+                      className="max-w-full max-h-full"
+                      onError={() => {
+                        toast.error("Failed to load video");
+                        setIsPreviewOpen(false);
+                      }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  );
+                }
+                return null;
+              })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
