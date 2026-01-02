@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import Papa from "papaparse";
 import {
   examSessionsApi,
   type ExamSession,
@@ -22,7 +23,9 @@ import {
   AlertTriangle,
   Grid3X3,
   List,
+  Upload,
 } from "lucide-react";
+import { downloadExamSessionTemplate, parseExamSessionCSV, type ParsedExamSession } from "@/utils/csvTemplates";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +147,8 @@ export default function ExamSessionsPage() {
   });
   const [qrCodeData, setQrCodeData] = useState<string>("");
   const [newStatus, setNewStatus] = useState<BatchStatus>("IN_PROGRESS");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Fetch exam sessions with filters
   const { data: sessionsData, isLoading } = useQuery({
@@ -246,6 +251,31 @@ export default function ExamSessionsPage() {
     },
   });
 
+  // Bulk import mutation
+  const bulkImportMutation = useMutation({
+    mutationFn: (sessions: CreateExamSessionData[]) =>
+      examSessionsApi.bulkCreateExamSessions(sessions),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["examSessions"] });
+      setUploadError(null);
+      
+      if (data.failed > 0) {
+        toast.warning("Partial Import Complete", {
+          description: `${data.created} sessions created • ${data.failed} failed`,
+        });
+      } else {
+        toast.success("Import Complete!", {
+          description: `${data.created} exam sessions created successfully`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast.error("Import Failed", {
+        description: error.message,
+      });
+    },
+  });
+
   // Get QR code
   const handleShowQRCode = async (session: ExamSession) => {
     try {
@@ -311,19 +341,51 @@ export default function ExamSessionsPage() {
 
   // Download CSV template
   const handleDownloadTemplate = () => {
-    const templateContent = `courseCode,courseName,lecturerId,lecturerName,department,faculty,venue,examDate
-CS101,Introduction to Computer Science,LEC001,Dr. John Smith,Computer Science,Faculty of Science,Room 101,2025-01-15T09:00:00.000Z
-MATH201,Calculus II,LEC002,Prof. Sarah Johnson,Mathematics,Faculty of Science,Room 205,2025-01-16T14:30:00.000Z
-ENG301,Advanced English Literature,LEC003,Dr. Michael Brown,English Literature,Faculty of Arts,Room 312,2025-01-17T11:15:00.000Z`;
-
-    const blob = new Blob([templateContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "exam_sessions_template.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadExamSessionTemplate("exam_sessions_template.csv");
   };
+
+  // Handle CSV file upload
+  const handleFileUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setUploading(true);
+      setUploadError(null);
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const sessions = (results.data as Record<string, string>[])
+            .map(parseExamSessionCSV)
+            .filter((session): session is ParsedExamSession => session !== null);
+
+          if (sessions.length === 0) {
+            setUploadError(
+              "No valid exam sessions found in CSV file. Required columns: courseCode, courseName, lecturerId, lecturerName, department, faculty, venue, examDate"
+            );
+            setUploading(false);
+            return;
+          }
+
+          bulkImportMutation.mutate(sessions, {
+            onSettled: () => setUploading(false),
+            onError: (error: Error) => {
+              setUploadError(error.message || "Failed to import exam sessions");
+            },
+          });
+        },
+        error: (error) => {
+          setUploadError(`CSV parsing error: ${error.message}`);
+          setUploading(false);
+        },
+      });
+
+      event.target.value = "";
+    },
+    [bulkImportMutation]
+  );
 
   const resetForm = () => {
     setFormData({
@@ -568,13 +630,35 @@ ENG301,Advanced English Literature,LEC003,Dr. Michael Brown,English Literature,F
                 Download Template
               </Button>
               {canCreate && (
-                <Button onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Session
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={uploading}
+                    onClick={() => document.getElementById("csv-upload")?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploading ? "Uploading..." : "Import CSV"}
+                  </Button>
+                  <input
+                    id="csv-upload"
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Button onClick={() => setIsCreateModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Session
+                  </Button>
+                </>
               )}
             </div>
           </div>
+          {uploadError && (
+            <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive">{uploadError}</p>
+            </div>
+          )}
         </CardHeader>
 
         {/* Filters */}

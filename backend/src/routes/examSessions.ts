@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createExamSession,
+  bulkCreateExamSessions,
   getExamSessions,
   getExamSession,
   updateExamSession,
@@ -74,6 +75,13 @@ router.delete(
 
 // Create exam session (admin and lecturer only)
 router.post("/", authorize(Role.ADMIN, Role.LECTURER), createExamSession);
+
+// Bulk create exam sessions (admin and lecturer only)
+router.post(
+  "/bulk",
+  authorize(Role.ADMIN, Role.LECTURER),
+  bulkCreateExamSessions
+);
 
 // Update exam session (admin and lecturer only)
 router.put("/:id", authorize(Role.ADMIN, Role.LECTURER), updateExamSession);

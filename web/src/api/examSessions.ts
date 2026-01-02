@@ -217,6 +217,22 @@ export const examSessionsApi = {
     }>("/exam-sessions", data);
   },
 
+  bulkCreateExamSessions: async (
+    sessions: CreateExamSessionData[]
+  ): Promise<{
+    message: string;
+    created: number;
+    failed: number;
+    errors: Array<{ row: number; error: string }>;
+  }> => {
+    return apiClient.post<{
+      message: string;
+      created: number;
+      failed: number;
+      errors: Array<{ row: number; error: string }>;
+    }>("/exam-sessions/bulk", { sessions });
+  },
+
   updateExamSession: async (
     id: string,
     data: UpdateExamSessionData

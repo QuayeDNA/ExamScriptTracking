@@ -1,4 +1,5 @@
 courseCode,courseName,lecturerId,lecturerName,department,faculty,venue,examDate
-CS101,Introduction to Computer Science,LEC001,Dr. John Smith,Computer Science,Faculty of Science,Room 101,2025-01-15T09:00:00.000Z
-MATH201,Calculus II,LEC002,Prof. Sarah Johnson,Mathematics,Faculty of Science,Room 205,2025-01-16T14:30:00.000Z
-ENG301,Advanced English Literature,LEC003,Dr. Michael Brown,English Literature,Faculty of Arts,Room 312,2025-01-17T11:15:00.000Z
+CS101,Introduction to Computer Science,LEC001,Dr. Kwame Nkrumah,Computer Science Department,Faculty of Computing & Information Systems,Room 101,2025-01-15T09:00:00.000Z
+MATH201,Calculus II,LEC002,Prof. Yaa Asantewaa,Mathematics Department,Faculty of Applied Sciences,Room 205,2025-01-16T14:30:00.000Z
+ENG301,Advanced English Literature,LEC003,Dr. Kofi Annan,English Department,Faculty of Arts,Room 312,2025-01-17T11:15:00.000Z
+BUS150,Business Management,LEC004,Dr. Ama Ata Aidoo,Business Administration,Faculty of Business,Hall B,2025-01-18T08:00:00.000Z

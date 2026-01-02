@@ -210,6 +210,95 @@ export const createExamSession = async (req: Request, res: Response) => {
   }
 };
 
+// Bulk create exam sessions
+export const bulkCreateExamSessions = async (req: Request, res: Response) => {
+  try {
+    const { sessions } = req.body;
+
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({ message: "Sessions array is required" });
+    }
+
+    const results = {
+      created: 0,
+      failed: 0,
+      errors: [] as Array<{ row: number; error: string }>,
+    };
+
+    // Process each session
+    for (let i = 0; i < sessions.length; i++) {
+      try {
+        const validatedData = createExamSessionSchema.parse(sessions[i]);
+
+        // Generate unique batch QR code
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000);
+        const batchQrCode = `BATCH-${validatedData.courseCode}-${timestamp}-${random}`;
+
+        // Create exam session
+        const examSession = await prisma.examSession.create({
+          data: {
+            ...validatedData,
+            examDate: new Date(validatedData.examDate),
+            batchQrCode,
+            createdById: req.user!.userId,
+          },
+        });
+
+        // Log audit trail
+        await prisma.auditLog.create({
+          data: {
+            userId: req.user!.userId,
+            action: "CREATE_EXAM_SESSION",
+            entity: "ExamSession",
+            entityId: examSession.id,
+            details: {
+              courseCode: examSession.courseCode,
+              courseName: examSession.courseName,
+              examDate: examSession.examDate,
+              venue: examSession.venue,
+              bulk: true,
+            },
+            ipAddress: req.ip || "unknown",
+          },
+        });
+
+        // Emit socket event for batch creation
+        emitBatchCreated(io, {
+          id: examSession.id,
+          batchQrCode: examSession.batchQrCode,
+          courseCode: examSession.courseCode,
+          courseName: examSession.courseName,
+          department: examSession.department,
+          faculty: examSession.faculty,
+          examDate: examSession.examDate,
+        });
+
+        results.created++;
+      } catch (error) {
+        results.failed++;
+        const errorMessage =
+          error instanceof z.ZodError
+            ? error.issues[0].message
+            : error instanceof Error
+            ? error.message
+            : "Unknown error";
+        results.errors.push({ row: i + 1, error: errorMessage });
+      }
+    }
+
+    res.status(results.created > 0 ? 201 : 400).json({
+      message: `Bulk import complete: ${results.created} created, ${results.failed} failed`,
+      created: results.created,
+      failed: results.failed,
+      errors: results.errors,
+    });
+  } catch (error) {
+    console.error("Bulk create exam sessions error:", error);
+    res.status(500).json({ message: "Failed to process bulk import" });
+  }
+};
+
 // Get all exam sessions with filters and pagination
 export const getExamSessions = async (req: Request, res: Response) => {
   try {
