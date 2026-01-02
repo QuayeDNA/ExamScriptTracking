@@ -17,6 +17,7 @@ import {
   getStatistics,
   exportIncidentPDF,
   exportIncidentsSummaryExcel,
+  exportIncidentsBulkPDF,
 } from "../controllers/incidentController";
 
 const router = Router();
@@ -33,9 +34,11 @@ router.get("/statistics", getStatistics);
 /**
  * Export
  * GET /api/incidents/export/summary - Export filtered incidents summary as Excel
+ * POST /api/incidents/export/bulk-pdf - Export multiple incidents as individual PDFs in ZIP
  * GET /api/incidents/:id/export/pdf - Export single incident report as PDF
  */
 router.get("/export/summary", exportIncidentsSummaryExcel);
+router.post("/export/bulk-pdf", exportIncidentsBulkPDF);
 router.get("/:id/export/pdf", exportIncidentPDF);
 
 /**

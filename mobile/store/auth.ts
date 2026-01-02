@@ -31,20 +31,35 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await storage.getToken();
 
       if (token && user) {
-        // Validate the token by trying to get profile
-        await apiClient
+        // Set user immediately from storage (optimistic)
+        set({
+          user,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+
+        // Validate token in background to refresh user data
+        apiClient
           .get<{ user: User }>("/auth/profile")
           .then((response) => {
+            // Update with fresh data from server
             set({
               user: response.user,
               isAuthenticated: true,
-              isLoading: false,
             });
+            // Update stored user data
+            storage.updateUser(response.user);
           })
-          .catch(() => {
-            // Token invalid, clear auth
-            storage.clearAuth();
-            set({ user: null, isAuthenticated: false, isLoading: false });
+          .catch((error) => {
+            // Only clear auth if it's a permanent auth failure (not network issues)
+            if (error?.error?.includes("Invalid token") || error?.error?.includes("Unauthorized")) {
+              console.log("Token permanently invalid, clearing auth");
+              storage.clearAuth();
+              set({ user: null, isAuthenticated: false });
+            } else {
+              // Network error or temporary issue - keep user logged in with cached data
+              console.log("Token validation failed (network issue), keeping cached auth");
+            }
           });
       } else {
         set({ user: null, isAuthenticated: false, isLoading: false });
@@ -56,12 +71,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    console.log("User explicitly logging out");
     await storage.clearAuth();
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isLoading: false });
   },
 
   invalidateAuth: () => {
-    set({ user: null, isAuthenticated: false });
+    // When API returns 401, attempt to re-validate
+    // If we have stored credentials, try to validate again
+    const currentState = useAuthStore.getState();
+    if (currentState.user) {
+      console.log("Auth invalidated by API, but keeping cached user for now");
+      // Don't immediately log out - let the user continue with cached data
+      // The next API call will attempt to use the token again
+    } else {
+      set({ user: null, isAuthenticated: false });
+    }
   },
 
   validateToken: async () => {

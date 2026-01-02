@@ -1,9 +1,9 @@
 /**
- * Report Incident Screen
- * Form to create new incidents with camera and file attachment support
+ * Report Incident Screen - REFACTORED
+ * Enhanced with: session selection, debounced lookup, manual student info, auto-severity, file validation, draft system
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,20 +12,22 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-// import * as ImagePicker from "expo-image-picker"; // Temporarily commented out
 import * as DocumentPicker from "expo-document-picker";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useThemeColors,
   Spacing,
   Typography,
   BorderRadius,
 } from "@/constants/design-system";
+import { getFileUrl } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,9 +35,10 @@ import {
   createIncident,
   uploadAttachments,
   type IncidentType,
-  type IncidentSeverity,
   getIncidentTypeLabel,
+  getSeverityFromType,
 } from "@/api/incidents";
+import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 import { useSessionStore } from "@/store/session";
 import {
   searchIncidentTemplates,
@@ -44,91 +47,127 @@ import {
 } from "@/constants/incident-templates";
 import {
   lookupStudentForIncident,
-  createStudent,
   type Student,
   type StudentLookupResult,
 } from "@/api/students";
+import {
+  debounce,
+  validateAttachment,
+  type AttachmentFile,
+} from "@/utils/debounce";
 
 // Safe ImagePicker wrapper
 let imagePicker: any = null;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const ImagePicker = require("expo-image-picker");
   imagePicker = ImagePicker;
-} catch (_) {
+} catch {
   console.warn("ImagePicker not available, camera features disabled");
 }
 
-interface AttachmentFile {
-  uri: string;
-  name: string;
-  type: string;
-  size?: number;
-}
+const DRAFT_KEY = "incident_draft";
 
 export default function ReportIncidentScreen() {
   const colors = useThemeColors();
-  const { currentSession, hasRecordedFirstAttendance } = useSessionStore();
+  const { currentSession } = useSessionStore();
 
   // Ref to track if a suggestion is being selected
   const selectingSuggestionRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
+
+  // Form data
   const [formData, setFormData] = useState<{
     type: IncidentType;
-    severity: IncidentSeverity;
     title: string;
     description: string;
     location: string;
     isConfidential: boolean;
   }>({
     type: "OTHER",
-    severity: "MEDIUM",
     title: "",
     description: "",
     location: "",
     isConfidential: false,
   });
 
-  // Student-related state
+  // Exam session selection
+  const [examSessions, setExamSessions] = useState<ExamSession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<ExamSession | null>(null);
+
+  // Student-related state (only for student-related incidents)
   const [showStudentField, setShowStudentField] = useState(false);
   const [studentIndexNumber, setStudentIndexNumber] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [studentLookupLoading, setStudentLookupLoading] = useState(false);
-  const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
-  const [createStudentData, setCreateStudentData] = useState({
+  
+  // Manual student info (when student not found)
+  const [showManualStudentFields, setShowManualStudentFields] = useState(false);
+  const [manualStudentInfo, setManualStudentInfo] = useState({
     indexNumber: "",
-    firstName: "",
-    lastName: "",
+    fullName: "",
     program: "",
-    level: "",
   });
 
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const [fetchingLocation, setFetchingLocation] = useState(false);
-  const [titleSuggestions, setTitleSuggestions] = useState<IncidentTemplate[]>(
-    []
-  );
+  const [titleSuggestions, setTitleSuggestions] = useState<IncidentTemplate[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [forceUpdate, setForceUpdate] = useState(0);
+  
+  // Preview modal state
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewFile, setPreviewFile] = useState<AttachmentFile | null>(null);
+  
+  // Session picker modal state
+  const [sessionPickerVisible, setSessionPickerVisible] = useState(false);
+
+  // Auto-determined severity based on incident type
+  const currentSeverity = getSeverityFromType(formData.type);
 
   // Handle form field changes
-  const handleChange = (field: string, value: any) => {
+  const handleChange = useCallback((field: string, value: any) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
+  }, []);
+
+  // Load exam sessions on mount
+  useEffect(() => {
+    loadExamSessions();
+  }, []);
+
+  const loadExamSessions = async () => {
+    try {
+      const sessions = await examSessionsApi.getExamSessions();
+      // Show all exam sessions
+      setExamSessions(sessions);
+    } catch (error) {
+      console.error("Failed to load exam sessions:", error);
+    }
   };
 
-  // Auto-populate location when first attendance is recorded
+  // Auto-populate session from scanner context
   useEffect(() => {
-    if (
-      hasRecordedFirstAttendance &&
-      currentSession?.venue &&
-      !formData.location
-    ) {
-      handleChange("location", currentSession.venue);
+    if (currentSession && !selectedSession) {
+      // Find matching session from examSessions list
+      const matchingSession = examSessions.find(s => s.id === currentSession.id);
+      if (matchingSession) {
+        setSelectedSession(matchingSession);
+        if (matchingSession.venue && !formData.location) {
+          handleChange("location", matchingSession.venue);
+        }
+      }
     }
-  }, [hasRecordedFirstAttendance, currentSession?.venue, formData.location]);
+  }, [currentSession, selectedSession, examSessions, formData.location, handleChange]);
+
+  // Auto-populate location when session changes
+  useEffect(() => {
+    if (selectedSession?.venue && !formData.location) {
+      handleChange("location", selectedSession.venue);
+    }
+  }, [selectedSession, formData.location, handleChange]);
 
   // Show/hide student field based on incident type
   useEffect(() => {
@@ -136,87 +175,78 @@ export default function ReportIncidentScreen() {
       "MALPRACTICE",
       "STUDENT_ILLNESS",
     ];
-    setShowStudentField(studentRelatedTypes.includes(formData.type));
+    const shouldShow = studentRelatedTypes.includes(formData.type);
+    setShowStudentField(shouldShow);
 
     // Clear student data when switching away from student-related types
-    if (!studentRelatedTypes.includes(formData.type)) {
+    if (!shouldShow) {
       setStudentIndexNumber("");
       setSelectedStudent(null);
+      setShowManualStudentFields(false);
+      setManualStudentInfo({ indexNumber: "", fullName: "", program: "" });
     }
   }, [formData.type]);
 
-  // Handle student index number input and lookup
-  const handleStudentIndexNumberChange = async (indexNumber: string) => {
+  // Debounced student lookup (1 second)
+  const debouncedStudentLookup = useMemo(
+    () => debounce(async (indexNumber: string, sessionId?: string) => {
+      if (indexNumber.trim().length < 3) {
+        return;
+      }
+
+      try {
+        setStudentLookupLoading(true);
+        const result: StudentLookupResult = await lookupStudentForIncident(
+          indexNumber.trim(),
+          sessionId
+        );
+
+        if (result.found && result.student) {
+          setSelectedStudent(result.student);
+          setShowManualStudentFields(false);
+        } else {
+          // Student not found - show manual entry fields
+          setSelectedStudent(null);
+          setShowManualStudentFields(true);
+          setManualStudentInfo({
+            indexNumber: indexNumber.trim(),
+            fullName: "",
+            program: "",
+          });
+        }
+      } catch (error: any) {
+        // Student not found (404) - show manual entry fields
+        if (error?.response?.status === 404 || error?.error === "Student not found") {
+          setSelectedStudent(null);
+          setShowManualStudentFields(true);
+          setManualStudentInfo({
+            indexNumber: indexNumber.trim(),
+            fullName: "",
+            program: "",
+          });
+        } else {
+          console.error("Student lookup error:", error);
+          setSelectedStudent(null);
+        }
+      } finally {
+        setStudentLookupLoading(false);
+      }
+    }, 1000),
+    []
+  );
+
+  // Handle student index number input
+  const handleStudentIndexNumberChange = (indexNumber: string) => {
     setStudentIndexNumber(indexNumber);
 
     if (indexNumber.trim().length === 0) {
       setSelectedStudent(null);
+      setShowManualStudentFields(false);
       return;
     }
 
-    if (indexNumber.trim().length < 3) {
-      // Don't lookup until we have at least 3 characters
-      return;
-    }
-
-    try {
-      setStudentLookupLoading(true);
-      const result: StudentLookupResult = await lookupStudentForIncident(
-        indexNumber.trim(),
-        currentSession?.id
-      );
-
-      if (result.found && result.student) {
-        setSelectedStudent(result.student);
-      } else {
-        setSelectedStudent(null);
-      }
-    } catch (error) {
-      console.error("Student lookup error:", error);
-      setSelectedStudent(null);
-    } finally {
-      setStudentLookupLoading(false);
-    }
-  };
-
-  // Handle creating a new student
-  const handleCreateStudent = async () => {
-    if (
-      !createStudentData.indexNumber.trim() ||
-      !createStudentData.firstName.trim() ||
-      !createStudentData.lastName.trim() ||
-      !createStudentData.program.trim() ||
-      !createStudentData.level.trim()
-    ) {
-      Alert.alert("Error", "All fields are required");
-      return;
-    }
-
-    try {
-      const result = await createStudent({
-        indexNumber: createStudentData.indexNumber.trim(),
-        firstName: createStudentData.firstName.trim(),
-        lastName: createStudentData.lastName.trim(),
-        program: createStudentData.program.trim(),
-        level: parseInt(createStudentData.level.trim()),
-      });
-
-      setSelectedStudent(result.student);
-      setStudentIndexNumber(result.student.indexNumber);
-      setShowCreateStudentModal(false);
-      setCreateStudentData({
-        indexNumber: "",
-        firstName: "",
-        lastName: "",
-        program: "",
-        level: "",
-      });
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.response?.data?.error || "Failed to create student"
-      );
-    }
+    // Call debounced lookup with exam session context
+    debouncedStudentLookup(indexNumber, selectedSession?.id);
   };
 
   // Get current location
@@ -258,10 +288,10 @@ export default function ReportIncidentScreen() {
     }
   };
 
-  // Auto-populate location from current exam session
+  // Auto-populate location from selected exam session
   const populateLocationFromSession = () => {
-    if (currentSession?.venue && !formData.location) {
-      handleChange("location", currentSession.venue);
+    if (selectedSession?.venue) {
+      handleChange("location", selectedSession.venue);
     }
   };
 
@@ -270,19 +300,15 @@ export default function ReportIncidentScreen() {
     handleChange("title", text);
 
     if (text.trim().length > 0) {
-      // Search across all incident types for better UX, but prioritize the selected type
-      const allSuggestions = searchIncidentTemplates(text); // Search all types
-      const typeSuggestions = searchIncidentTemplates(text, formData.type); // Search selected type
-
-      // Combine results, prioritizing selected type first, then others
+      const allSuggestions = searchIncidentTemplates(text);
+      const typeSuggestions = searchIncidentTemplates(text, formData.type);
       const combinedSuggestions = [
         ...typeSuggestions,
         ...allSuggestions.filter(
           (s) => !typeSuggestions.find((ts) => ts.id === s.id)
         ),
       ];
-
-      setTitleSuggestions(combinedSuggestions.slice(0, 5)); // Limit to 5 suggestions
+      setTitleSuggestions(combinedSuggestions.slice(0, 5));
       setShowSuggestions(combinedSuggestions.length > 0);
     } else {
       setTitleSuggestions([]);
@@ -293,39 +319,35 @@ export default function ReportIncidentScreen() {
   // Select a template suggestion
   const selectTemplate = (template: IncidentTemplate) => {
     selectingSuggestionRef.current = true;
-
-    // Update form data with individual state updates to ensure they take effect
-    setFormData((prev) => {
-      const newState = { ...prev, title: template.title };
-      return newState;
-    });
-    setTimeout(() => {
-      setFormData((prev) => {
-        const newState = { ...prev, description: template.description };
-        return newState;
-      });
-    }, 10);
-    setTimeout(() => {
-      setFormData((prev) => {
-        const newState = { ...prev, severity: template.severity };
-        return newState;
-      });
-      // Force a re-render to ensure TextInputs update
-      setForceUpdate((prev) => prev + 1);
-    }, 20);
-
-    setTitleSuggestions([]);
+    
+    console.log("Template selected:", template.title, template.description);
+    
+    // Hide suggestions first
     setShowSuggestions(false);
-    // Reset the ref after a short delay
+    setTitleSuggestions([]);
+    
+    // Use setTimeout to ensure the state update happens after the blur event
     setTimeout(() => {
+      console.log("Updating form data...");
+      setFormData((prev) => {
+        const updated = {
+          ...prev,
+          title: template.title,
+          description: template.description,
+        };
+        console.log("Form data updated:", updated);
+        return updated;
+      });
+      
       selectingSuggestionRef.current = false;
-    }, 100);
+    }, 50);
   };
 
-  // Handle incident type change - update suggestions
+  // Handle incident type change
   const handleTypeChange = (type: IncidentType) => {
     handleChange("type", type);
-    // Refresh suggestions if there's text in the title field
+    
+    // Refresh suggestions
     if (formData.title.trim().length > 0) {
       const allSuggestions = searchIncidentTemplates(formData.title);
       const typeSuggestions = searchIncidentTemplates(formData.title, type);
@@ -337,12 +359,6 @@ export default function ReportIncidentScreen() {
       ];
       setTitleSuggestions(combinedSuggestions.slice(0, 5));
       setShowSuggestions(combinedSuggestions.length > 0);
-    } else {
-      // Show default suggestions for the new type
-      const typeTemplates = getTemplatesForType(type);
-      const defaultSuggestions = typeTemplates.slice(0, 3);
-      setTitleSuggestions(defaultSuggestions);
-      setShowSuggestions(defaultSuggestions.length > 0);
     }
   };
 
@@ -350,6 +366,11 @@ export default function ReportIncidentScreen() {
   const takePhoto = async () => {
     if (!imagePicker) {
       Alert.alert("Error", "Camera not available");
+      return;
+    }
+
+    if (attachments.length >= 5) {
+      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
       return;
     }
 
@@ -372,15 +393,20 @@ export default function ReportIncidentScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        setAttachments((prev) => [
-          ...prev,
-          {
-            uri: asset.uri,
-            name: `photo_${Date.now()}.jpg`,
-            type: "image/jpeg",
-            size: asset.fileSize,
-          },
-        ]);
+        const file: AttachmentFile = {
+          uri: asset.uri,
+          name: `photo_${Date.now()}.jpg`,
+          type: "image/jpeg",
+          size: asset.fileSize,
+        };
+
+        const validation = validateAttachment(file);
+        if (!validation.valid) {
+          Alert.alert("Invalid File", validation.error);
+          return;
+        }
+
+        setAttachments((prev) => [...prev, file]);
       }
     } catch {
       Alert.alert("Error", "Failed to take photo");
@@ -394,6 +420,11 @@ export default function ReportIncidentScreen() {
       return;
     }
 
+    if (attachments.length >= 5) {
+      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+      return;
+    }
+
     try {
       const result = await imagePicker.launchImageLibraryAsync({
         mediaTypes: imagePicker.MediaTypeOptions.Images,
@@ -402,13 +433,28 @@ export default function ReportIncidentScreen() {
       });
 
       if (!result.canceled) {
-        const newAttachments = result.assets.map((asset: any) => ({
-          uri: asset.uri,
-          name: `image_${Date.now()}.jpg`,
-          type: "image/jpeg",
-          size: asset.fileSize,
-        }));
-        setAttachments((prev) => [...prev, ...newAttachments]);
+        const newFiles: AttachmentFile[] = [];
+        for (const asset of result.assets) {
+          if (attachments.length + newFiles.length >= 5) {
+            Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+            break;
+          }
+
+          const file: AttachmentFile = {
+            uri: asset.uri,
+            name: `image_${Date.now()}.jpg`,
+            type: "image/jpeg",
+            size: asset.fileSize,
+          };
+
+          const validation = validateAttachment(file);
+          if (validation.valid) {
+            newFiles.push(file);
+          } else {
+            Alert.alert("Invalid File", `${asset.fileName || 'File'}: ${validation.error}`);
+          }
+        }
+        setAttachments((prev) => [...prev, ...newFiles]);
       }
     } catch {
       Alert.alert("Error", "Failed to pick image");
@@ -417,6 +463,11 @@ export default function ReportIncidentScreen() {
 
   // Pick document
   const pickDocument = async () => {
+    if (attachments.length >= 5) {
+      Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+      return;
+    }
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "image/*", "video/*"],
@@ -424,15 +475,28 @@ export default function ReportIncidentScreen() {
       });
 
       if (!result.canceled && result.assets) {
-        const newAttachments = result.assets.map(
-          (asset: DocumentPicker.DocumentPickerAsset) => ({
+        const newFiles: AttachmentFile[] = [];
+        for (const asset of result.assets) {
+          if (attachments.length + newFiles.length >= 5) {
+            Alert.alert("Limit Reached", "Maximum 5 attachments allowed");
+            break;
+          }
+
+          const file: AttachmentFile = {
             uri: asset.uri,
             name: asset.name,
             type: asset.mimeType || "application/octet-stream",
             size: asset.size,
-          })
-        );
-        setAttachments((prev) => [...prev, ...newAttachments]);
+          };
+
+          const validation = validateAttachment(file);
+          if (validation.valid) {
+            newFiles.push(file);
+          } else {
+            Alert.alert("Invalid File", `${asset.name}: ${validation.error}`);
+          }
+        }
+        setAttachments((prev) => [...prev, ...newFiles]);
       }
     } catch {
       Alert.alert("Error", "Failed to pick document");
@@ -443,6 +507,105 @@ export default function ReportIncidentScreen() {
   const removeAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // Preview attachment
+  const previewAttachment = (file: AttachmentFile) => {
+    setPreviewFile(file);
+    setPreviewVisible(true);
+  };
+
+  const closePreview = () => {
+    setPreviewVisible(false);
+    setPreviewFile(null);
+  };
+
+  // Draft system - auto-save every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (formData.title || formData.description) {
+        saveDraft();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, attachments, selectedSession, manualStudentInfo]);
+
+  const saveDraft = async () => {
+    try {
+      const draft = {
+        formData,
+        attachments: attachments.map(a => ({ uri: a.uri, name: a.name, type: a.type, size: a.size })),
+        selectedSessionId: selectedSession?.id,
+        studentIndexNumber,
+        manualStudentInfo: showManualStudentFields ? manualStudentInfo : null,
+        timestamp: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      console.log("Draft saved");
+    } catch (error) {
+      console.error("Failed to save draft:", error);
+    }
+  };
+
+  const loadDraft = async () => {
+    try {
+      const draftJson = await AsyncStorage.getItem(DRAFT_KEY);
+      if (draftJson) {
+        const draft = JSON.parse(draftJson);
+        return draft;
+      }
+    } catch (error) {
+      console.error("Failed to load draft:", error);
+    }
+    return null;
+  };
+
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.removeItem(DRAFT_KEY);
+    } catch (error) {
+      console.error("Failed to clear draft:", error);
+    }
+  };
+
+  // Restore draft on mount
+  useEffect(() => {
+    const restoreDraft = async () => {
+      const draft = await loadDraft();
+      if (draft && !formData.title && examSessions.length > 0) {
+        Alert.alert(
+          'Restore Draft?',
+          `You have an unsaved incident report from ${new Date(draft.timestamp).toLocaleString()}`,
+          [
+            { 
+              text: 'Discard', 
+              style: 'destructive',
+              onPress: () => clearDraft() 
+            },
+            { 
+              text: 'Restore', 
+              onPress: () => {
+                setFormData(draft.formData);
+                if (draft.attachments) setAttachments(draft.attachments);
+                if (draft.studentIndexNumber) setStudentIndexNumber(draft.studentIndexNumber);
+                if (draft.manualStudentInfo) {
+                  setShowManualStudentFields(true);
+                  setManualStudentInfo(draft.manualStudentInfo);
+                }
+                // Find and set session
+                if (draft.selectedSessionId) {
+                  const session = examSessions.find(s => s.id === draft.selectedSessionId);
+                  if (session) setSelectedSession(session);
+                }
+              }
+            }
+          ]
+        );
+      }
+    };
+    restoreDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examSessions]);
 
   // Submit incident
   const handleSubmit = async () => {
@@ -456,29 +619,55 @@ export default function ReportIncidentScreen() {
       return;
     }
 
+    // Validate student info for student-related incidents
+    if (showStudentField) {
+      if (!selectedStudent && !showManualStudentFields) {
+        Alert.alert("Validation Error", "Please enter student information or search for a student");
+        return;
+      }
+
+      if (showManualStudentFields) {
+        if (!manualStudentInfo.indexNumber.trim() || !manualStudentInfo.fullName.trim() || !manualStudentInfo.program.trim()) {
+          Alert.alert("Validation Error", "Please complete all student information fields");
+          return;
+        }
+      }
+    }
+
     try {
       setLoading(true);
 
-      // Create incident
-      const incidentData = {
+      // Prepare incident data
+      const incidentData: any = {
         type: formData.type,
-        severity: formData.severity,
+        // Severity auto-determined by backend
         title: formData.title.trim(),
         description: formData.description.trim(),
         location: formData.location.trim() || undefined,
         isConfidential: formData.isConfidential,
-        examSessionId: currentSession?.id, // Include current exam session
-        ...(selectedStudent?.id && { studentId: selectedStudent.id }), // Include student ID if available
+        examSessionId: selectedSession?.id,
       };
 
-      const response = await createIncident(incidentData);
+      // Add student info
+      if (showStudentField) {
+        if (selectedStudent?.id) {
+          incidentData.studentId = selectedStudent.id;
+        } else if (showManualStudentFields) {
+          incidentData.manualStudentInfo = {
+            indexNumber: manualStudentInfo.indexNumber.trim(),
+            fullName: manualStudentInfo.fullName.trim(),
+            program: manualStudentInfo.program.trim(),
+          };
+        }
+      }
 
+      const response = await createIncident(incidentData);
       const incidentId = response.incident.id;
 
       // Upload attachments if any
       if (attachments.length > 0) {
         const formDataObj = new FormData();
-        attachments.forEach((file, index) => {
+        attachments.forEach((file) => {
           formDataObj.append("files", {
             uri: file.uri,
             name: file.name,
@@ -488,6 +677,9 @@ export default function ReportIncidentScreen() {
 
         await uploadAttachments(incidentId, formDataObj);
       }
+
+      // Clear draft
+      await clearDraft();
 
       Alert.alert("Success", "Incident reported successfully", [
         {
@@ -546,6 +738,70 @@ export default function ReportIncidentScreen() {
         </View>
 
         <View style={{ paddingHorizontal: Spacing[4], gap: Spacing[4] }}>
+          {/* Exam Session Selection */}
+          <Card>
+            <View style={{ padding: Spacing[4] }}>
+              <Text
+                style={[
+                  { color: colors.foreground, marginBottom: Spacing[3] },
+                  {
+                    fontSize: Typography.fontSize.sm,
+                    fontWeight: Typography.fontWeight.semibold,
+                  },
+                ]}
+              >
+                Exam Session (Optional)
+              </Text>
+              
+              <TouchableOpacity
+                onPress={() => setSessionPickerVisible(true)}
+                style={{
+                  padding: Spacing[3],
+                  borderRadius: BorderRadius.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  {selectedSession ? (
+                    <>
+                      <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+                        {selectedSession.courseName}
+                      </Text>
+                      <Text style={{ color: colors.foregroundMuted, fontSize: Typography.fontSize.sm }}>
+                        {selectedSession.courseCode} • {selectedSession.venue}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={{ color: colors.foregroundMuted }}>
+                      Select exam session for context-aware lookup
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-down" size={20} color={colors.foregroundMuted} />
+              </TouchableOpacity>
+
+              {selectedSession && (
+                <TouchableOpacity
+                  onPress={() => setSelectedSession(null)}
+                  style={{
+                    marginTop: Spacing[2],
+                    padding: Spacing[2],
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ color: colors.error, fontSize: Typography.fontSize.sm }}>
+                    Clear Selection
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Card>
+
           {/* Type Selection */}
           <Card>
             <View style={{ padding: Spacing[4] }}>
@@ -611,7 +867,44 @@ export default function ReportIncidentScreen() {
             </View>
           </Card>
 
-          {/* Student Information (for student-related incidents) */}
+          {/* Auto-Determined Severity Display */}
+          <Card>
+            <View style={{ padding: Spacing[4] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View>
+                  <Text
+                    style={[
+                      { color: colors.foreground, marginBottom: Spacing[1] },
+                      {
+                        fontSize: Typography.fontSize.sm,
+                        fontWeight: Typography.fontWeight.semibold,
+                      },
+                    ]}
+                  >
+                    Severity Level
+                  </Text>
+                  <Text style={{ color: colors.foregroundMuted, fontSize: Typography.fontSize.xs }}>
+                    Auto-determined from incident type
+                  </Text>
+                </View>
+                <Badge
+                  variant={
+                    currentSeverity === "CRITICAL"
+                      ? "error"
+                      : currentSeverity === "HIGH"
+                        ? "warning"
+                        : currentSeverity === "MEDIUM"
+                          ? "default"
+                          : "secondary"
+                  }
+                >
+                  {currentSeverity}
+                </Badge>
+              </View>
+            </View>
+          </Card>
+
+          {/* Student Information - Only shown for student-related incidents */}
           {showStudentField && (
             <Card>
               <View style={{ padding: Spacing[4] }}>
@@ -624,7 +917,7 @@ export default function ReportIncidentScreen() {
                     },
                   ]}
                 >
-                  Student Information
+                  Student Information *
                 </Text>
 
                 <View style={{ gap: Spacing[3] }}>
@@ -638,7 +931,7 @@ export default function ReportIncidentScreen() {
                         },
                       ]}
                     >
-                      Student Index Number *
+                      Student Index Number
                     </Text>
                     <View style={{ position: "relative" }}>
                       <TextInput
@@ -651,7 +944,7 @@ export default function ReportIncidentScreen() {
                           color: colors.foreground,
                           backgroundColor: colors.background,
                         }}
-                        placeholder="Enter student index number"
+                        placeholder={selectedSession ? "Search in session students first..." : "Enter student index number"}
                         value={studentIndexNumber}
                         onChangeText={handleStudentIndexNumberChange}
                         autoCapitalize="characters"
@@ -673,951 +966,1026 @@ export default function ReportIncidentScreen() {
                         </View>
                       )}
                     </View>
+                    {selectedSession && (
+                      <Text style={{ fontSize: Typography.fontSize.xs, color: colors.info, marginTop: Spacing[1] }}>
+                        💡 Searching in {selectedSession.courseName} students first
+                      </Text>
+                    )}
                   </View>
 
+                  {/* Found Student Display */}
                   {selectedStudent && (
                     <View
                       style={{
                         padding: Spacing[3],
-                        backgroundColor: colors.muted,
+                        backgroundColor: colors.success + "20",
                         borderRadius: BorderRadius.md,
                         borderWidth: 1,
-                        borderColor: colors.border,
+                        borderColor: colors.success,
                       }}
                     >
-                      <Text
-                        style={[
-                          {
-                            color: colors.foreground,
-                            marginBottom: Spacing[2],
-                          },
-                          {
-                            fontSize: Typography.fontSize.sm,
-                            fontWeight: Typography.fontWeight.semibold,
-                          },
-                        ]}
-                      >
-                        Student Found
-                      </Text>
-                      <Text
-                        style={{
-                          color: colors.foreground,
-                          marginBottom: Spacing[1],
-                        }}
-                      >
-                        {selectedStudent.firstName} {selectedStudent.lastName}
-                      </Text>
-                      <Text
-                        style={{
-                          color: colors.foregroundMuted,
-                          fontSize: Typography.fontSize.sm,
-                        }}
-                      >
-                        {selectedStudent.program} - Level{" "}
-                        {selectedStudent.level}
-                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing[2] }}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                        <Text
+                          style={[
+                            {
+                              color: colors.foreground,
+                              marginLeft: Spacing[2],
+                            },
+                            {
+                              fontSize: Typography.fontSize.sm,
+                              fontWeight: Typography.fontWeight.semibold,
+                            },
+                          ]}
+                        >
+                          Student Found
+                        </Text>
+                      </View>
+                      
+                      {/* Student Info with Profile Picture */}
+                      <View style={{ flexDirection: "row", gap: Spacing[3], alignItems: "center" }}>
+                        {/* Profile Picture */}
+                        <View
+                          style={{
+                            width: 60,
+                            height: 60,
+                            borderRadius: BorderRadius.md,
+                            backgroundColor: colors.background,
+                            overflow: "hidden",
+                            borderWidth: 2,
+                            borderColor: colors.success,
+                          }}
+                        >
+                          {selectedStudent.profilePicture ? (() => {
+                            const profileUrl = getFileUrl(selectedStudent.profilePicture);
+                            return (
+                              <Image
+                                source={{ uri: profileUrl }}
+                                style={{ width: "100%", height: "100%" }}
+                                resizeMode="cover"
+                                onError={(e) => console.error("Image load error:", e.nativeEvent.error, "URL:", profileUrl)}
+                                onLoad={() => console.log("Image loaded successfully:", profileUrl)}
+                              />
+                            );
+                          })() : (
+                            <View
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                justifyContent: "center",
+                                alignItems: "center",
+                              }}
+                            >
+                              <Ionicons
+                                name="person"
+                                size={32}
+                                color={colors.foregroundMuted}
+                              />
+                            </View>
+                          )}
+                        </View>
+                        
+                        {/* Student Details */}
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: colors.foreground,
+                              marginBottom: Spacing[1],
+                              fontWeight: "600",
+                              fontSize: Typography.fontSize.base,
+                            }}
+                          >
+                            {selectedStudent.firstName} {selectedStudent.lastName}
+                          </Text>
+                          <Text
+                            style={{
+                              color: colors.foregroundMuted,
+                              fontSize: Typography.fontSize.sm,
+                              marginBottom: 2,
+                            }}
+                          >
+                            {selectedStudent.indexNumber}
+                          </Text>
+                          <Text
+                            style={{
+                              color: colors.foregroundMuted,
+                              fontSize: Typography.fontSize.sm,
+                            }}
+                          >
+                            {selectedStudent.program}
+                            {selectedStudent.level && ` • Level ${selectedStudent.level}`}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   )}
 
-                  {!selectedStudent &&
-                    studentIndexNumber.trim().length >= 3 &&
-                    !studentLookupLoading && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setCreateStudentData({
-                            ...createStudentData,
-                            indexNumber: studentIndexNumber.trim(),
-                          });
-                          setShowCreateStudentModal(true);
-                        }}
-                        style={{
-                          padding: Spacing[3],
-                          backgroundColor: colors.primary,
-                          borderRadius: BorderRadius.md,
-                          alignItems: "center",
-                        }}
-                      >
+                  {/* Manual Student Info Fields */}
+                  {showManualStudentFields && !selectedStudent && studentIndexNumber.trim().length >= 3 && (
+                    <View
+                      style={{
+                        padding: Spacing[3],
+                        backgroundColor: colors.warning + "20",
+                        borderRadius: BorderRadius.md,
+                        borderWidth: 1,
+                        borderColor: colors.warning,
+                        gap: Spacing[3],
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Ionicons name="alert-circle" size={20} color={colors.warning} />
                         <Text
                           style={{
-                            color: "white",
+                            color: colors.foreground,
+                            marginLeft: Spacing[2],
                             fontSize: Typography.fontSize.sm,
-                            fontWeight: Typography.fontWeight.medium,
+                            fontWeight: "600",
                           }}
                         >
-                          Create New Student
+                          Student Not Found - Enter Details Manually
                         </Text>
-                      </TouchableOpacity>
-                    )}
+                      </View>
+                      
+                      <View>
+                        <Text style={{ color: colors.foreground, marginBottom: Spacing[1], fontSize: Typography.fontSize.sm }}>
+                          Index Number *
+                        </Text>
+                        <TextInput
+                          style={{
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: BorderRadius.md,
+                            padding: Spacing[2],
+                            fontSize: Typography.fontSize.base,
+                            color: colors.foreground,
+                            backgroundColor: colors.background,
+                          }}
+                          value={manualStudentInfo.indexNumber}
+                          onChangeText={(value) =>
+                            setManualStudentInfo((prev) => ({
+                              ...prev,
+                              indexNumber: value,
+                            }))
+                          }
+                          autoCapitalize="characters"
+                        />
+                      </View>
+
+                      <View>
+                        <Text style={{ color: colors.foreground, marginBottom: Spacing[1], fontSize: Typography.fontSize.sm }}>
+                          Full Name *
+                        </Text>
+                        <TextInput
+                          style={{
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: BorderRadius.md,
+                            padding: Spacing[2],
+                            fontSize: Typography.fontSize.base,
+                            color: colors.foreground,
+                            backgroundColor: colors.background,
+                          }}
+                          placeholder="First and Last Name"
+                          value={manualStudentInfo.fullName}
+                          onChangeText={(value) =>
+                            setManualStudentInfo((prev) => ({
+                              ...prev,
+                              fullName: value,
+                            }))
+                          }
+                          autoCapitalize="words"
+                        />
+                      </View>
+
+                      <View>
+                        <Text style={{ color: colors.foreground, marginBottom: Spacing[1], fontSize: Typography.fontSize.sm }}>
+                          Program *
+                        </Text>
+                        <TextInput
+                          style={{
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: BorderRadius.md,
+                            padding: Spacing[2],
+                            fontSize: Typography.fontSize.base,
+                            color: colors.foreground,
+                            backgroundColor: colors.background,
+                          }}
+                          placeholder="e.g., Computer Science"
+                          value={manualStudentInfo.program}
+                          onChangeText={(value) =>
+                            setManualStudentInfo((prev) => ({
+                              ...prev,
+                              program: value,
+                            }))
+                          }
+                          autoCapitalize="words"
+                        />
+                      </View>
+                    </View>
+                  )}
                 </View>
               </View>
             </Card>
           )}
 
-          {/* Severity Selection */}
-          <Card>
-            <View style={{ padding: Spacing[4] }}>
-              <Text
-                style={[
-                  { color: colors.foreground, marginBottom: Spacing[3] },
-                  {
-                    fontSize: Typography.fontSize.sm,
-                    fontWeight: Typography.fontWeight.semibold,
-                  },
-                ]}
-              >
-                Severity Level *
-              </Text>
-              <View style={{ flexDirection: "row", gap: Spacing[2] }}>
-                {(
-                  ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as IncidentSeverity[]
-                ).map((severity) => (
-                  <TouchableOpacity
-                    key={severity}
-                    onPress={() => handleChange("severity", severity)}
-                    style={{
-                      flex: 1,
-                      paddingVertical: Spacing[3],
-                      borderRadius: BorderRadius.md,
-                      alignItems: "center",
-                      borderWidth: 1,
-                      borderColor:
-                        formData.severity === severity
-                          ? colors.primary
-                          : colors.border,
-                      backgroundColor:
-                        formData.severity === severity
-                          ? colors.primary
-                          : colors.muted,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                        color:
-                          formData.severity === severity
-                            ? "white"
-                            : colors.foreground,
-                      }}
-                    >
-                      {severity}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </Card>
+           {/* Title with Smart Suggestions */}
+                   <View style={{ position: "relative" }}>
+                     <Card>
+                       <View style={{ padding: Spacing[4] }}>
+                         <Text
+                           style={[
+                             { color: colors.foreground, marginBottom: Spacing[2] },
+                             {
+                               fontSize: Typography.fontSize.sm,
+                               fontWeight: Typography.fontWeight.semibold,
+                             },
+                           ]}
+                         >
+                           Title *
+                         </Text>
+                         <TextInput
+                           style={{
+                             padding: Spacing[3],
+                             borderRadius: BorderRadius.md,
+                             fontSize: Typography.fontSize.base,
+                             backgroundColor: colors.background,
+                             color: colors.foreground,
+                             borderWidth: 1,
+                             borderColor: colors.border,
+                           }}
+                           placeholder="Start typing for suggestions..."
+                           placeholderTextColor={colors.foregroundMuted}
+                           value={formData.title}
+                           onChangeText={handleTitleChange}
+                           onFocus={() => {
+                             // Show suggestions based on current title or show default suggestions for the incident type
+                             if (formData.title.trim().length > 0) {
+                               // Search across all types when user has typed something
+                               const allSuggestions = searchIncidentTemplates(
+                                 formData.title
+                               );
+                               const typeSuggestions = searchIncidentTemplates(
+                                 formData.title,
+                                 formData.type
+                               );
+                               const combinedSuggestions = [
+                                 ...typeSuggestions,
+                                 ...allSuggestions.filter(
+                                   (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+                                 ),
+                               ];
+                               setTitleSuggestions(combinedSuggestions.slice(0, 5));
+                               setShowSuggestions(combinedSuggestions.length > 0);
+                             } else {
+                               // Show top templates for the selected incident type when field is focused
+                               const typeTemplates = getTemplatesForType(formData.type);
+                               const defaultSuggestions = typeTemplates.slice(0, 3); // Show top 3 templates
+                               setTitleSuggestions(defaultSuggestions);
+                               setShowSuggestions(defaultSuggestions.length > 0);
+                             }
+                           }}
+                           onBlur={() => {
+                             // Delay hiding suggestions to allow selection, but don't hide if selecting a suggestion
+                             setTimeout(() => {
+                               if (!selectingSuggestionRef.current) {
+                                 setShowSuggestions(false);
+                               }
+                             }, 200);
+                           }}
+                         />
+                       </View>
+                     </Card>
+         
+                     {/* Smart Suggestions - positioned outside the Card to avoid overflow:hidden clipping */}
+                     {showSuggestions && titleSuggestions.length > 0 && (
+                       <Card
+                         style={{
+                           position: "absolute",
+                           top: "100%",
+                           left: Spacing[4],
+                           right: Spacing[4],
+                           zIndex: 9999,
+                           marginTop: Spacing[1],
+                           maxHeight: 200,
+                         }}
+                       >
+                         <ScrollView
+                           showsVerticalScrollIndicator={false}
+                           keyboardShouldPersistTaps="always"
+                           nestedScrollEnabled={true}
+                         >
+                           {titleSuggestions.map((template) => (
+                             <TouchableOpacity
+                               key={template.id}
+                               onPress={() => {
+                                 console.log("TouchableOpacity pressed!");
+                                 selectTemplate(template);
+                               }}
+                               activeOpacity={0.7}
+                               style={{
+                                 padding: Spacing[3],
+                                 borderBottomWidth: 1,
+                                 borderBottomColor: colors.border,
+                               }}
+                             >
+                               <Text
+                                 style={{
+                                   fontSize: Typography.fontSize.sm,
+                                   fontWeight: Typography.fontWeight.medium,
+                                   color: colors.foreground,
+                                   marginBottom: Spacing[1],
+                                 }}
+                                 numberOfLines={1}
+                               >
+                                 {template.title}
+                               </Text>
+                               <Text
+                                 style={{
+                                   fontSize: Typography.fontSize.xs,
+                                   color: colors.foregroundMuted,
+                                 }}
+                                 numberOfLines={2}
+                               >
+                                 {template.description}
+                               </Text>
+                               <View
+                                 style={{
+                                   flexDirection: "row",
+                                   alignItems: "center",
+                                   marginTop: Spacing[1],
+                                 }}
+                               >
+                                 <Badge
+                                   variant={
+                                     template.severity === "CRITICAL"
+                                       ? "error"
+                                       : template.severity === "HIGH"
+                                         ? "warning"
+                                         : template.severity === "MEDIUM"
+                                           ? "default"
+                                           : "secondary"
+                                   }
+                                   style={{ marginRight: Spacing[2] }}
+                                 >
+                                   {template.severity}
+                                 </Badge>
+                               </View>
+                             </TouchableOpacity>
+                           ))}
+                         </ScrollView>
+                       </Card>
+                     )}
+                   </View>
+         
+                   {/* Help text for smart suggestions */}
+                   <View style={{ marginBottom: Spacing[2] }}>
+                     <Text
+                       style={{
+                         fontSize: Typography.fontSize.xs,
+                         color: colors.foregroundMuted,
+                         textAlign: "center",
+                       }}
+                     >
+                       💡 Type to see smart suggestions
+                     </Text>
+                   </View>
+         
+                   {/* Description */}
+                   <Card>
+                     <View style={{ padding: Spacing[4] }}>
+                       <Text
+                         style={[
+                           { color: colors.foreground, marginBottom: Spacing[2] },
+                           {
+                             fontSize: Typography.fontSize.sm,
+                             fontWeight: Typography.fontWeight.semibold,
+                           },
+                         ]}
+                       >
+                         Description *
+                       </Text>
+                       <TextInput
+                         style={{
+                           padding: Spacing[3],
+                           borderRadius: BorderRadius.md,
+                           fontSize: Typography.fontSize.base,
+                           backgroundColor: colors.background,
+                           color: colors.foreground,
+                           borderWidth: 1,
+                           borderColor: colors.border,
+                           minHeight: 120,
+                           textAlignVertical: "top",
+                         }}
+                         placeholder="Detailed description of what happened..."
+                         placeholderTextColor={colors.foregroundMuted}
+                         value={formData.description}
+                         onChangeText={(value) => handleChange("description", value)}
+                         multiline
+                         numberOfLines={5}
+                       />
+                     </View>
+                   </Card>
+         
+                   {/* Location */}
+                   <Card>
+                     <View style={{ padding: Spacing[4] }}>
+                       <View
+                         style={{
+                           flexDirection: "row",
+                           alignItems: "center",
+                           justifyContent: "space-between",
+                           marginBottom: Spacing[2],
+                         }}
+                       >
+                         <Text
+                           style={[
+                             { color: colors.foreground },
+                             {
+                               fontSize: Typography.fontSize.sm,
+                               fontWeight: Typography.fontWeight.semibold,
+                             },
+                           ]}
+                         >
+                           Location
+                         </Text>
+                         <View style={{ flexDirection: "row", gap: Spacing[2] }}>
+                           {currentSession?.venue && (
+                             <TouchableOpacity
+                               onPress={populateLocationFromSession}
+                               style={{
+                                 flexDirection: "row",
+                                 alignItems: "center",
+                                 gap: Spacing[1],
+                                 paddingHorizontal: Spacing[2],
+                                 paddingVertical: Spacing[1],
+                                 borderRadius: BorderRadius.sm,
+                                 backgroundColor: colors.info,
+                               }}
+                             >
+                               <Ionicons name="school" size={14} color="white" />
+                               <Text
+                                 style={{
+                                   fontSize: Typography.fontSize.xs,
+                                   fontWeight: Typography.fontWeight.medium,
+                                   color: "white",
+                                 }}
+                               >
+                                 Use Venue
+                               </Text>
+                             </TouchableOpacity>
+                           )}
+                           <TouchableOpacity
+                             onPress={getCurrentLocation}
+                             disabled={fetchingLocation}
+                             style={{
+                               flexDirection: "row",
+                               alignItems: "center",
+                               gap: Spacing[1],
+                               paddingHorizontal: Spacing[2],
+                               paddingVertical: Spacing[1],
+                               borderRadius: BorderRadius.sm,
+                               backgroundColor: colors.primary,
+                             }}
+                           >
+                             {fetchingLocation ? (
+                               <ActivityIndicator size="small" color="white" />
+                             ) : (
+                               <>
+                                 <Ionicons name="location" size={14} color="white" />
+                                 <Text
+                                   style={{
+                                     fontSize: Typography.fontSize.xs,
+                                     fontWeight: Typography.fontWeight.medium,
+                                     color: "white",
+                                   }}
+                                 >
+                                   Use Current
+                                 </Text>
+                               </>
+                             )}
+                           </TouchableOpacity>
+                         </View>
+                       </View>
+                       <TextInput
+                         style={{
+                           padding: Spacing[3],
+                           borderRadius: BorderRadius.md,
+                           fontSize: Typography.fontSize.base,
+                           backgroundColor: colors.background,
+                           color: colors.foreground,
+                           borderWidth: 1,
+                           borderColor: colors.border,
+                         }}
+                         placeholder="Where did this occur?"
+                         placeholderTextColor={colors.foregroundMuted}
+                         value={formData.location}
+                         onChangeText={(value) => handleChange("location", value)}
+                       />
+                     </View>
+                   </Card>
+         
+                   {/* Confidential Toggle */}
+                   <Card>
+                     <TouchableOpacity
+                       onPress={() =>
+                         handleChange("isConfidential", !formData.isConfidential)
+                       }
+                       style={{
+                         padding: Spacing[4],
+                         flexDirection: "row",
+                         alignItems: "center",
+                         justifyContent: "space-between",
+                       }}
+                     >
+                       <View style={{ flex: 1, marginRight: Spacing[3] }}>
+                         <Text
+                           style={[
+                             { color: colors.foreground, marginBottom: Spacing[1] },
+                             {
+                               fontSize: Typography.fontSize.sm,
+                               fontWeight: Typography.fontWeight.semibold,
+                             },
+                           ]}
+                         >
+                           Mark as Confidential
+                         </Text>
+                         <Text
+                           style={[
+                             { color: colors.foregroundMuted },
+                             { fontSize: Typography.fontSize.xs },
+                           ]}
+                         >
+                           Restrict access to authorized personnel only
+                         </Text>
+                       </View>
+                       <View
+                         style={{
+                           width: Spacing[12],
+                           height: Spacing[7],
+                           borderRadius: BorderRadius.full,
+                           padding: Spacing[1],
+                           backgroundColor: formData.isConfidential
+                             ? colors.primary
+                             : colors.muted,
+                         }}
+                       >
+                         <View
+                           style={{
+                             width: Spacing[5],
+                             height: Spacing[5],
+                             borderRadius: BorderRadius.full,
+                             backgroundColor: "white",
+                             marginLeft: formData.isConfidential ? "auto" : 0,
+                           }}
+                         />
+                       </View>
+                     </TouchableOpacity>
+                   </Card>
+         
+                   {/* Attachments */}
+                   <Card>
+                     <View style={{ padding: Spacing[4] }}>
+                       <Text
+                         style={[
+                           { color: colors.foreground, marginBottom: Spacing[3] },
+                           {
+                             fontSize: Typography.fontSize.sm,
+                             fontWeight: Typography.fontWeight.semibold,
+                           },
+                         ]}
+                       >
+                         Attachments ({attachments.length}/5)
+                       </Text>
+         
+                       {/* Attachment Actions */}
+                       <View
+                         style={{
+                           flexDirection: "row",
+                           gap: Spacing[2],
+                           marginBottom: Spacing[3],
+                         }}
+                       >
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           onPress={takePhoto}
+                           disabled={attachments.length >= 5}
+                           style={{ flex: 1 }}
+                         >
+                           <View
+                             style={{
+                               flexDirection: "row",
+                               alignItems: "center",
+                               gap: Spacing[2],
+                             }}
+                           >
+                             <Ionicons
+                               name="camera-outline"
+                               size={18}
+                               color={colors.foreground}
+                             />
+                             <Text style={{ color: colors.foreground }}>Camera</Text>
+                           </View>
+                         </Button>
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           onPress={pickImage}
+                           disabled={attachments.length >= 5}
+                           style={{ flex: 1 }}
+                         >
+                           <View
+                             style={{
+                               flexDirection: "row",
+                               alignItems: "center",
+                               gap: Spacing[2],
+                             }}
+                           >
+                             <Ionicons
+                               name="images-outline"
+                               size={18}
+                               color={colors.foreground}
+                             />
+                             <Text style={{ color: colors.foreground }}>Gallery</Text>
+                           </View>
+                         </Button>
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           onPress={pickDocument}
+                           disabled={attachments.length >= 5}
+                           style={{ flex: 1 }}
+                         >
+                           <View
+                             style={{
+                               flexDirection: "row",
+                               alignItems: "center",
+                               gap: Spacing[2],
+                             }}
+                           >
+                             <Ionicons
+                               name="document-outline"
+                               size={18}
+                               color={colors.foreground}
+                             />
+                             <Text style={{ color: colors.foreground }}>Files</Text>
+                           </View>
+                         </Button>
+                       </View>
+         
+                       {/* Attachment List with Thumbnails */}
+                       {attachments.map((file, index) => (
+                         <TouchableOpacity
+                           key={index}
+                           onPress={() => previewAttachment(file)}
+                           activeOpacity={0.7}
+                           style={{
+                             flexDirection: "row",
+                             alignItems: "center",
+                             justifyContent: "space-between",
+                             padding: Spacing[3],
+                             marginBottom: Spacing[2],
+                             borderRadius: BorderRadius.md,
+                             backgroundColor: colors.muted,
+                           }}
+                         >
+                           <View
+                             style={{
+                               flexDirection: "row",
+                               alignItems: "center",
+                               gap: Spacing[2],
+                               flex: 1,
+                             }}
+                           >
+                             {/* Thumbnail or Icon */}
+                             {file.type.startsWith("image/") ? (
+                               <Image
+                                 source={{ uri: file.uri }}
+                                 style={{
+                                   width: 40,
+                                   height: 40,
+                                   borderRadius: BorderRadius.sm,
+                                   backgroundColor: colors.background,
+                                 }}
+                                 resizeMode="cover"
+                               />
+                             ) : (
+                               <View
+                                 style={{
+                                   width: 40,
+                                   height: 40,
+                                   borderRadius: BorderRadius.sm,
+                                   backgroundColor: colors.background,
+                                   alignItems: "center",
+                                   justifyContent: "center",
+                                 }}
+                               >
+                                 <Ionicons
+                                   name={
+                                     file.type.startsWith("video/")
+                                       ? "videocam-outline"
+                                       : "document-outline"
+                                   }
+                                   size={24}
+                                   color={colors.foreground}
+                                 />
+                               </View>
+                             )}
+                             <View style={{ flex: 1 }}>
+                               <Text
+                                 style={[
+                                   { color: colors.foreground },
+                                   { fontSize: Typography.fontSize.sm, fontWeight: Typography.fontWeight.medium },
+                                 ]}
+                                 numberOfLines={1}
+                               >
+                                 {file.name}
+                               </Text>
+                               <Text
+                                 style={{
+                                   color: colors.foregroundMuted,
+                                   fontSize: Typography.fontSize.xs,
+                                   marginTop: 2,
+                                 }}
+                               >
+                                 {file.type.split("/")[1]?.toUpperCase() || "FILE"}
+                                 {file.size ? ` • ${(file.size / 1024 / 1024).toFixed(2)} MB` : ""}
+                               </Text>
+                             </View>
+                           </View>
+                           <TouchableOpacity 
+                             onPress={(e) => {
+                               e.stopPropagation();
+                               removeAttachment(index);
+                             }}
+                             style={{ padding: Spacing[1] }}
+                           >
+                             <Ionicons
+                               name="close-circle"
+                               size={22}
+                               color={colors.error}
+                             />
+                           </TouchableOpacity>
+                         </TouchableOpacity>
+                       ))}
+         
+                       {attachments.length === 0 && (
+                         <View
+                           style={{ paddingVertical: Spacing[8], alignItems: "center" }}
+                         >
+                           <Ionicons
+                             name="cloud-upload-outline"
+                             size={40}
+                             color={colors.foregroundMuted}
+                           />
+                           <Text
+                             style={[
+                               { color: colors.foregroundMuted, marginTop: Spacing[2] },
+                               { fontSize: Typography.fontSize.sm },
+                             ]}
+                           >
+                             No attachments added
+                           </Text>
+                         </View>
+                       )}
+                     </View>
+                   </Card>
+         
+                   {/* Submit Button */}
+                   <Button
+                     onPress={handleSubmit}
+                     disabled={
+                       loading || !formData.title.trim() || !formData.description.trim()
+                     }
+                     loading={loading}
+                     style={{ marginTop: Spacing[2] }}
+                   >
+                     {loading ? "Submitting..." : "Submit Incident Report"}
+                   </Button>
+                 </View>
+               </ScrollView>
 
-          {/* Title with Smart Suggestions */}
-          <View style={{ position: "relative" }}>
-            <Card>
-              <View style={{ padding: Spacing[4] }}>
-                <Text
-                  style={[
-                    { color: colors.foreground, marginBottom: Spacing[2] },
-                    {
-                      fontSize: Typography.fontSize.sm,
-                      fontWeight: Typography.fontWeight.semibold,
-                    },
-                  ]}
-                >
-                  Title *
-                </Text>
-                <TextInput
-                  key={`title-${forceUpdate}`}
-                  style={{
-                    padding: Spacing[3],
-                    borderRadius: BorderRadius.md,
-                    fontSize: Typography.fontSize.base,
-                    backgroundColor: colors.background,
-                    color: colors.foreground,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                  placeholder="Start typing to see incident suggestions from all categories"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.title}
-                  onChangeText={handleTitleChange}
-                  onFocus={() => {
-                    // Show suggestions based on current title or show default suggestions for the incident type
-                    if (formData.title.trim().length > 0) {
-                      // Search across all types when user has typed something
-                      const allSuggestions = searchIncidentTemplates(
-                        formData.title
-                      );
-                      const typeSuggestions = searchIncidentTemplates(
-                        formData.title,
-                        formData.type
-                      );
-                      const combinedSuggestions = [
-                        ...typeSuggestions,
-                        ...allSuggestions.filter(
-                          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
-                        ),
-                      ];
-                      setTitleSuggestions(combinedSuggestions.slice(0, 5));
-                      setShowSuggestions(combinedSuggestions.length > 0);
-                    } else {
-                      // Show top templates for the selected incident type when field is focused
-                      const typeTemplates = getTemplatesForType(formData.type);
-                      const defaultSuggestions = typeTemplates.slice(0, 3); // Show top 3 templates
-                      setTitleSuggestions(defaultSuggestions);
-                      setShowSuggestions(defaultSuggestions.length > 0);
-                    }
-                  }}
-                  onBlur={() => {
-                    // Delay hiding suggestions to allow selection, but don't hide if selecting a suggestion
-                    setTimeout(() => {
-                      if (!selectingSuggestionRef.current) {
-                        setShowSuggestions(false);
-                      }
-                    }, 200);
-                  }}
-                />
-              </View>
-            </Card>
+               {/* Session Picker Modal */}
+               <Modal
+                 visible={sessionPickerVisible}
+                 transparent={true}
+                 animationType="slide"
+                 onRequestClose={() => setSessionPickerVisible(false)}
+               >
+                 <View
+                   style={{
+                     flex: 1,
+                     backgroundColor: "rgba(0, 0, 0, 0.5)",
+                     justifyContent: "flex-end",
+                   }}
+                 >
+                   <View
+                     style={{
+                       flex: 1,
+                       backgroundColor: colors.background,
+                       borderTopLeftRadius: BorderRadius.lg,
+                       borderTopRightRadius: BorderRadius.lg,
+                       paddingTop: Spacing[4],
+                       paddingBottom: Spacing[8],
+                       maxHeight: "70%",
+                     }}
+                   >
+                     <View
+                       style={{
+                         flexDirection: "row",
+                         alignItems: "center",
+                         justifyContent: "space-between",
+                         paddingHorizontal: Spacing[4],
+                         paddingBottom: Spacing[4],
+                         borderBottomWidth: 1,
+                         borderBottomColor: colors.border,
+                       }}
+                     >
+                       <Text
+                         style={{
+                           fontSize: Typography.fontSize.lg,
+                           fontWeight: Typography.fontWeight.semibold,
+                           color: colors.foreground,
+                         }}
+                       >
+                         Select Exam Session
+                       </Text>
+                       <TouchableOpacity
+                         onPress={() => setSessionPickerVisible(false)}
+                         style={{ padding: Spacing[2] }}
+                       >
+                         <Ionicons name="close" size={24} color={colors.foreground} />
+                       </TouchableOpacity>
+                     </View>
 
-            {/* Smart Suggestions - positioned outside the Card to avoid overflow:hidden clipping */}
-            {showSuggestions && titleSuggestions.length > 0 && (
-              <Card
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: Spacing[4],
-                  right: Spacing[4],
-                  zIndex: 9999,
-                  marginTop: Spacing[1],
-                  maxHeight: 200,
-                }}
-              >
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {titleSuggestions.map((template) => (
-                    <TouchableOpacity
-                      key={template.id}
-                      onPress={() => selectTemplate(template)}
-                      activeOpacity={0.7}
-                      style={{
-                        padding: Spacing[3],
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.border,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: Typography.fontSize.sm,
-                          fontWeight: Typography.fontWeight.medium,
-                          color: colors.foreground,
-                          marginBottom: Spacing[1],
-                        }}
-                        numberOfLines={1}
-                      >
-                        {template.title}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: Typography.fontSize.xs,
-                          color: colors.foregroundMuted,
-                        }}
-                        numberOfLines={2}
-                      >
-                        {template.description}
-                      </Text>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginTop: Spacing[1],
-                        }}
-                      >
-                        <Badge
-                          variant={
-                            template.severity === "CRITICAL"
-                              ? "error"
-                              : template.severity === "HIGH"
-                                ? "warning"
-                                : template.severity === "MEDIUM"
-                                  ? "default"
-                                  : "secondary"
-                          }
-                          style={{ marginRight: Spacing[2] }}
-                        >
-                          {template.severity}
-                        </Badge>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </Card>
-            )}
-          </View>
+                     <ScrollView
+                       style={{ flex: 1, paddingHorizontal: Spacing[4] }}
+                       contentContainerStyle={{ paddingTop: Spacing[4], gap: Spacing[3] }}
+                     >
+                       {examSessions.length === 0 ? (
+                         <View style={{ paddingVertical: Spacing[8], alignItems: "center" }}>
+                           <Text style={{ color: colors.foregroundMuted }}>
+                             No exam sessions available
+                           </Text>
+                         </View>
+                       ) : (
+                         examSessions.map((session) => (
+                           <TouchableOpacity
+                             key={session.id}
+                             onPress={() => {
+                               setSelectedSession(session);
+                               setSessionPickerVisible(false);
+                             }}
+                             style={{
+                               padding: Spacing[4],
+                               borderRadius: BorderRadius.md,
+                               borderWidth: 1,
+                               borderColor:
+                                 selectedSession?.id === session.id
+                                   ? colors.primary
+                                   : colors.border,
+                               backgroundColor:
+                                 selectedSession?.id === session.id
+                                   ? colors.primary + "20"
+                                   : colors.muted,
+                             }}
+                           >
+                             <Text
+                               style={{
+                                 fontSize: Typography.fontSize.base,
+                                 fontWeight: Typography.fontWeight.semibold,
+                                 color: colors.foreground,
+                                 marginBottom: Spacing[1],
+                               }}
+                             >
+                               {session.courseName}
+                             </Text>
+                             <Text
+                               style={{
+                                 fontSize: Typography.fontSize.sm,
+                                 color: colors.foregroundMuted,
+                                 marginBottom: Spacing[2],
+                               }}
+                             >
+                               {session.courseCode} • {session.venue}
+                             </Text>
+                             <View style={{ flexDirection: "row", gap: Spacing[2] }}>
+                               <Badge
+                                 variant={
+                                   session.status === "IN_PROGRESS"
+                                     ? "default"
+                                     : session.status === "COMPLETED"
+                                       ? "secondary"
+                                       : "secondary"
+                                 }
+                               >
+                                 {session.status.replace("_", " ")}
+                               </Badge>
+                               <Text
+                                 style={{
+                                   fontSize: Typography.fontSize.xs,
+                                   color: colors.foregroundMuted,
+                                 }}
+                               >
+                                 {new Date(session.examDate).toLocaleDateString()}
+                               </Text>
+                             </View>
+                           </TouchableOpacity>
+                         ))
+                       )}
+                     </ScrollView>
+                   </View>
+                 </View>
+               </Modal>
 
-          {/* Help text for smart suggestions */}
-          <View style={{ marginBottom: Spacing[2] }}>
-            <Text
-              style={{
-                fontSize: Typography.fontSize.xs,
-                color: colors.foregroundMuted,
-                textAlign: "center",
-              }}
-            >
-              💡 Start typing to see smart suggestions from all incident
-              categories
-            </Text>
-          </View>
+               {/* Preview Modal */}
+               <Modal
+                 visible={previewVisible}
+                 transparent={true}
+                 animationType="fade"
+                 onRequestClose={closePreview}
+               >
+                 <View
+                   style={{
+                     flex: 1,
+                     backgroundColor: "rgba(0, 0, 0, 0.9)",
+                     justifyContent: "center",
+                     alignItems: "center",
+                   }}
+                 >
+                   <TouchableOpacity
+                     onPress={closePreview}
+                     style={{
+                       position: "absolute",
+                       top: 50,
+                       right: 20,
+                       zIndex: 10,
+                       backgroundColor: "rgba(255, 255, 255, 0.2)",
+                       borderRadius: BorderRadius.full,
+                       padding: Spacing[2],
+                     }}
+                   >
+                     <Ionicons name="close" size={28} color="white" />
+                   </TouchableOpacity>
 
-          {/* Description */}
-          <Card>
-            <View style={{ padding: Spacing[4] }}>
-              <Text
-                style={[
-                  { color: colors.foreground, marginBottom: Spacing[2] },
-                  {
-                    fontSize: Typography.fontSize.sm,
-                    fontWeight: Typography.fontWeight.semibold,
-                  },
-                ]}
-              >
-                Description *
-              </Text>
-              <TextInput
-                key={`description-${forceUpdate}`}
-                style={{
-                  padding: Spacing[3],
-                  borderRadius: BorderRadius.md,
-                  fontSize: Typography.fontSize.base,
-                  backgroundColor: colors.background,
-                  color: colors.foreground,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  minHeight: 120,
-                  textAlignVertical: "top",
-                }}
-                placeholder="Detailed description of what happened..."
-                placeholderTextColor={colors.foregroundMuted}
-                value={formData.description}
-                onChangeText={(value) => handleChange("description", value)}
-                multiline
-                numberOfLines={5}
-              />
-            </View>
-          </Card>
-
-          {/* Location */}
-          <Card>
-            <View style={{ padding: Spacing[4] }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: Spacing[2],
-                }}
-              >
-                <Text
-                  style={[
-                    { color: colors.foreground },
-                    {
-                      fontSize: Typography.fontSize.sm,
-                      fontWeight: Typography.fontWeight.semibold,
-                    },
-                  ]}
-                >
-                  Location
-                </Text>
-                <View style={{ flexDirection: "row", gap: Spacing[2] }}>
-                  {currentSession?.venue && (
-                    <TouchableOpacity
-                      onPress={populateLocationFromSession}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: Spacing[1],
-                        paddingHorizontal: Spacing[2],
-                        paddingVertical: Spacing[1],
-                        borderRadius: BorderRadius.sm,
-                        backgroundColor: colors.info,
-                      }}
-                    >
-                      <Ionicons name="school" size={14} color="white" />
-                      <Text
-                        style={{
-                          fontSize: Typography.fontSize.xs,
-                          fontWeight: Typography.fontWeight.medium,
-                          color: "white",
-                        }}
-                      >
-                        Use Venue
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={getCurrentLocation}
-                    disabled={fetchingLocation}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: Spacing[1],
-                      paddingHorizontal: Spacing[2],
-                      paddingVertical: Spacing[1],
-                      borderRadius: BorderRadius.sm,
-                      backgroundColor: colors.primary,
-                    }}
-                  >
-                    {fetchingLocation ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <>
-                        <Ionicons name="location" size={14} color="white" />
-                        <Text
-                          style={{
-                            fontSize: Typography.fontSize.xs,
-                            fontWeight: Typography.fontWeight.medium,
-                            color: "white",
-                          }}
-                        >
-                          Use Current
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <TextInput
-                style={{
-                  padding: Spacing[3],
-                  borderRadius: BorderRadius.md,
-                  fontSize: Typography.fontSize.base,
-                  backgroundColor: colors.background,
-                  color: colors.foreground,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-                placeholder="Where did this occur?"
-                placeholderTextColor={colors.foregroundMuted}
-                value={formData.location}
-                onChangeText={(value) => handleChange("location", value)}
-              />
-            </View>
-          </Card>
-
-          {/* Confidential Toggle */}
-          <Card>
-            <TouchableOpacity
-              onPress={() =>
-                handleChange("isConfidential", !formData.isConfidential)
-              }
-              style={{
-                padding: Spacing[4],
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <View style={{ flex: 1, marginRight: Spacing[3] }}>
-                <Text
-                  style={[
-                    { color: colors.foreground, marginBottom: Spacing[1] },
-                    {
-                      fontSize: Typography.fontSize.sm,
-                      fontWeight: Typography.fontWeight.semibold,
-                    },
-                  ]}
-                >
-                  Mark as Confidential
-                </Text>
-                <Text
-                  style={[
-                    { color: colors.foregroundMuted },
-                    { fontSize: Typography.fontSize.xs },
-                  ]}
-                >
-                  Restrict access to authorized personnel only
-                </Text>
-              </View>
-              <View
-                style={{
-                  width: Spacing[12],
-                  height: Spacing[7],
-                  borderRadius: BorderRadius.full,
-                  padding: Spacing[1],
-                  backgroundColor: formData.isConfidential
-                    ? colors.primary
-                    : colors.muted,
-                }}
-              >
-                <View
-                  style={{
-                    width: Spacing[5],
-                    height: Spacing[5],
-                    borderRadius: BorderRadius.full,
-                    backgroundColor: "white",
-                    marginLeft: formData.isConfidential ? "auto" : 0,
-                  }}
-                />
-              </View>
-            </TouchableOpacity>
-          </Card>
-
-          {/* Attachments */}
-          <Card>
-            <View style={{ padding: Spacing[4] }}>
-              <Text
-                style={[
-                  { color: colors.foreground, marginBottom: Spacing[3] },
-                  {
-                    fontSize: Typography.fontSize.sm,
-                    fontWeight: Typography.fontWeight.semibold,
-                  },
-                ]}
-              >
-                Attachments ({attachments.length}/5)
-              </Text>
-
-              {/* Attachment Actions */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: Spacing[2],
-                  marginBottom: Spacing[3],
-                }}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={takePhoto}
-                  disabled={attachments.length >= 5}
-                  style={{ flex: 1 }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: Spacing[2],
-                    }}
-                  >
-                    <Ionicons
-                      name="camera-outline"
-                      size={18}
-                      color={colors.foreground}
-                    />
-                    <Text style={{ color: colors.foreground }}>Camera</Text>
-                  </View>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={pickImage}
-                  disabled={attachments.length >= 5}
-                  style={{ flex: 1 }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: Spacing[2],
-                    }}
-                  >
-                    <Ionicons
-                      name="images-outline"
-                      size={18}
-                      color={colors.foreground}
-                    />
-                    <Text style={{ color: colors.foreground }}>Gallery</Text>
-                  </View>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onPress={pickDocument}
-                  disabled={attachments.length >= 5}
-                  style={{ flex: 1 }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: Spacing[2],
-                    }}
-                  >
-                    <Ionicons
-                      name="document-outline"
-                      size={18}
-                      color={colors.foreground}
-                    />
-                    <Text style={{ color: colors.foreground }}>Files</Text>
-                  </View>
-                </Button>
-              </View>
-
-              {/* Attachment List */}
-              {attachments.map((file, index) => (
-                <View
-                  key={index}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: Spacing[3],
-                    marginBottom: Spacing[2],
-                    borderRadius: BorderRadius.md,
-                    backgroundColor: colors.muted,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: Spacing[2],
-                      flex: 1,
-                    }}
-                  >
-                    <Ionicons
-                      name={
-                        file.type.startsWith("image/")
-                          ? "image-outline"
-                          : file.type.startsWith("video/")
-                            ? "videocam-outline"
-                            : "document-outline"
-                      }
-                      size={20}
-                      color={colors.foreground}
-                    />
-                    <Text
-                      style={[
-                        { color: colors.foreground, flex: 1 },
-                        { fontSize: Typography.fontSize.sm },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {file.name}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => removeAttachment(index)}>
-                    <Ionicons
-                      name="close-circle"
-                      size={22}
-                      color={colors.error}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-
-              {attachments.length === 0 && (
-                <View
-                  style={{ paddingVertical: Spacing[8], alignItems: "center" }}
-                >
-                  <Ionicons
-                    name="cloud-upload-outline"
-                    size={40}
-                    color={colors.foregroundMuted}
-                  />
-                  <Text
-                    style={[
-                      { color: colors.foregroundMuted, marginTop: Spacing[2] },
-                      { fontSize: Typography.fontSize.sm },
-                    ]}
-                  >
-                    No attachments added
-                  </Text>
-                </View>
-              )}
-            </View>
-          </Card>
-
-          {/* Submit Button */}
-          <Button
-            onPress={handleSubmit}
-            disabled={
-              loading || !formData.title.trim() || !formData.description.trim()
-            }
-            loading={loading}
-            style={{ marginTop: Spacing[2] }}
-          >
-            {loading ? "Submitting..." : "Submit Incident Report"}
-          </Button>
-        </View>
-      </ScrollView>
-
-      {/* Create Student Modal */}
-      <Modal
-        visible={showCreateStudentModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCreateStudentModal(false)}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.background,
-              borderTopLeftRadius: BorderRadius.lg,
-              borderTopRightRadius: BorderRadius.lg,
-              padding: Spacing[4],
-              maxHeight: "80%",
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: Spacing[4],
-              }}
-            >
-              <Text
-                style={[
-                  { color: colors.foreground },
-                  {
-                    fontSize: Typography.fontSize.lg,
-                    fontWeight: Typography.fontWeight.semibold,
-                  },
-                ]}
-              >
-                Create New Student
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowCreateStudentModal(false)}
-              >
-                <Ionicons name="close" size={24} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ gap: Spacing[4] }}>
-                <View>
-                  <Text
-                    style={[
-                      { color: colors.foreground, marginBottom: Spacing[2] },
-                      {
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      },
-                    ]}
-                  >
-                    Index Number *
-                  </Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: BorderRadius.md,
-                      padding: Spacing[3],
-                      fontSize: Typography.fontSize.base,
-                      color: colors.foreground,
-                      backgroundColor: colors.background,
-                    }}
-                    placeholder="Enter index number"
-                    value={createStudentData.indexNumber}
-                    onChangeText={(value) =>
-                      setCreateStudentData((prev) => ({
-                        ...prev,
-                        indexNumber: value,
-                      }))
-                    }
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
-                </View>
-
-                <View>
-                  <Text
-                    style={[
-                      { color: colors.foreground, marginBottom: Spacing[2] },
-                      {
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      },
-                    ]}
-                  >
-                    First Name *
-                  </Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: BorderRadius.md,
-                      padding: Spacing[3],
-                      fontSize: Typography.fontSize.base,
-                      color: colors.foreground,
-                      backgroundColor: colors.background,
-                    }}
-                    placeholder="Enter first name"
-                    value={createStudentData.firstName}
-                    onChangeText={(value) =>
-                      setCreateStudentData((prev) => ({
-                        ...prev,
-                        firstName: value,
-                      }))
-                    }
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View>
-                  <Text
-                    style={[
-                      { color: colors.foreground, marginBottom: Spacing[2] },
-                      {
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      },
-                    ]}
-                  >
-                    Last Name *
-                  </Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: BorderRadius.md,
-                      padding: Spacing[3],
-                      fontSize: Typography.fontSize.base,
-                      color: colors.foreground,
-                      backgroundColor: colors.background,
-                    }}
-                    placeholder="Enter last name"
-                    value={createStudentData.lastName}
-                    onChangeText={(value) =>
-                      setCreateStudentData((prev) => ({
-                        ...prev,
-                        lastName: value,
-                      }))
-                    }
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View>
-                  <Text
-                    style={[
-                      { color: colors.foreground, marginBottom: Spacing[2] },
-                      {
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      },
-                    ]}
-                  >
-                    Program *
-                  </Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: BorderRadius.md,
-                      padding: Spacing[3],
-                      fontSize: Typography.fontSize.base,
-                      color: colors.foreground,
-                      backgroundColor: colors.background,
-                    }}
-                    placeholder="Enter program"
-                    value={createStudentData.program}
-                    onChangeText={(value) =>
-                      setCreateStudentData((prev) => ({
-                        ...prev,
-                        program: value,
-                      }))
-                    }
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View>
-                  <Text
-                    style={[
-                      { color: colors.foreground, marginBottom: Spacing[2] },
-                      {
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      },
-                    ]}
-                  >
-                    Level *
-                  </Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      borderRadius: BorderRadius.md,
-                      padding: Spacing[3],
-                      fontSize: Typography.fontSize.base,
-                      color: colors.foreground,
-                      backgroundColor: colors.background,
-                    }}
-                    placeholder="Enter level (1-4)"
-                    value={createStudentData.level}
-                    onChangeText={(value) =>
-                      setCreateStudentData((prev) => ({
-                        ...prev,
-                        level: value,
-                      }))
-                    }
-                    keyboardType="numeric"
-                    maxLength={1}
-                  />
-                </View>
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: Spacing[3],
-                    marginTop: Spacing[4],
-                  }}
-                >
-                  <TouchableOpacity
-                    onPress={() => setShowCreateStudentModal(false)}
-                    style={{
-                      flex: 1,
-                      padding: Spacing[3],
-                      borderRadius: BorderRadius.md,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: colors.foreground,
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      }}
-                    >
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleCreateStudent}
-                    style={{
-                      flex: 1,
-                      padding: Spacing[3],
-                      borderRadius: BorderRadius.md,
-                      backgroundColor: colors.primary,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: "white",
-                        fontSize: Typography.fontSize.sm,
-                        fontWeight: Typography.fontWeight.medium,
-                      }}
-                    >
-                      Create Student
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
+                   {previewFile && (
+                     <View style={{ width: "100%", height: "100%", justifyContent: "center", alignItems: "center" }}>
+                       {previewFile.type.startsWith("image/") ? (
+                         <ScrollView
+                           maximumZoomScale={3}
+                           minimumZoomScale={1}
+                           style={{ width: "100%", height: "100%" }}
+                           contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: Spacing[4] }}
+                         >
+                           <Image
+                             source={{ uri: previewFile.uri }}
+                             style={{
+                               width: 350,
+                               height: 500,
+                             }}
+                             resizeMode="contain"
+                           />
+                         </ScrollView>
+                       ) : (
+                         <View style={{ alignItems: "center", gap: Spacing[4] }}>
+                           <Ionicons
+                             name={
+                               previewFile.type.startsWith("video/")
+                                 ? "videocam"
+                                 : "document-text"
+                             }
+                             size={80}
+                             color="white"
+                           />
+                           <Text
+                             style={{
+                               color: "white",
+                               fontSize: Typography.fontSize.lg,
+                               fontWeight: Typography.fontWeight.semibold,
+                               textAlign: "center",
+                               paddingHorizontal: Spacing[4],
+                             }}
+                           >
+                             {previewFile.name}
+                           </Text>
+                           <Text
+                             style={{
+                               color: "rgba(255, 255, 255, 0.7)",
+                               fontSize: Typography.fontSize.sm,
+                               textAlign: "center",
+                             }}
+                           >
+                             {previewFile.type.startsWith("video/")
+                               ? "Video preview not available"
+                               : "Document preview not available"}
+                           </Text>
+                         </View>
+                       )}
+                     </View>
+                   )}
+                 </View>
+               </Modal>
+             </SafeAreaView>
+           );
+         }

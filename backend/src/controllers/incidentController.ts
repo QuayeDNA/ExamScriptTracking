@@ -15,10 +15,36 @@ import {
 
 const prisma = new PrismaClient();
 
+// File validation constants
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/jpg', 
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/mpeg',
+  'video/quicktime',
+  'application/pdf'
+];
+
+// Severity mapping by incident type
+const INCIDENT_TYPE_SEVERITY: Record<IncidentType, IncidentSeverity> = {
+  MISSING_SCRIPT: 'CRITICAL',
+  DAMAGED_SCRIPT: 'HIGH',
+  MALPRACTICE: 'CRITICAL',
+  STUDENT_ILLNESS: 'MEDIUM',
+  VENUE_ISSUE: 'HIGH',
+  COUNT_DISCREPANCY: 'HIGH',
+  LATE_SUBMISSION: 'MEDIUM',
+  OTHER: 'MEDIUM',
+};
+
 // Validation schemas
 const createIncidentSchema = z.object({
   type: z.nativeEnum(IncidentType),
-  severity: z.nativeEnum(IncidentSeverity),
+  // Severity auto-determined from type
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   location: z.string().optional(),
@@ -30,6 +56,12 @@ const createIncidentSchema = z.object({
   incidentDate: z.string().datetime().optional(),
   isConfidential: z.boolean().optional(),
   metadata: z.any().optional(),
+  // Manual student info (when student not in system)
+  manualStudentInfo: z.object({
+    indexNumber: z.string(),
+    fullName: z.string(),
+    program: z.string(),
+  }).optional(),
 });
 
 const updateIncidentSchema = z.object({
@@ -67,8 +99,12 @@ export const createIncident = async (req: Request, res: Response) => {
   try {
     const validated = createIncidentSchema.parse(req.body);
 
+    // Auto-determine severity from incident type
+    const severity = INCIDENT_TYPE_SEVERITY[validated.type];
+
     const incident = await incidentService.createIncident({
       ...validated,
+      severity,
       reporterId: req.user!.userId,
       incidentDate: validated.incidentDate
         ? new Date(validated.incidentDate)
@@ -805,6 +841,68 @@ export const exportIncidentsSummaryExcel = async (
     console.error("Error exporting incidents Excel:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: "Failed to export incidents summary" });
+    }
+  }
+};
+
+/**
+ * Export multiple incidents as individual PDFs in a ZIP file
+ */
+export const exportIncidentsBulkPDF = async (req: Request, res: Response) => {
+  try {
+    const { incidentIds } = req.body;
+
+    if (!Array.isArray(incidentIds) || incidentIds.length === 0) {
+      return res.status(400).json({ error: "Please provide incident IDs" });
+    }
+
+    if (incidentIds.length > 50) {
+      return res.status(400).json({ error: "Maximum 50 incidents can be exported at once" });
+    }
+
+    // Check access to all incidents
+    const userContext = {
+      userId: req.user!.userId,
+      role: req.user!.role,
+      isSuperAdmin: req.user!.isSuperAdmin,
+    };
+
+    const accessChecks = await Promise.all(
+      incidentIds.map((id) => incidentService.hasAccessToIncident(id, userContext))
+    );
+
+    const unauthorizedCount = accessChecks.filter((hasAccess) => !hasAccess).length;
+    if (unauthorizedCount > 0) {
+      return res.status(403).json({ 
+        error: `Access denied to ${unauthorizedCount} incident(s)` 
+      });
+    }
+
+    // Generate PDFs
+    const archiver = require('archiver');
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=incidents-bulk-export-${new Date().toISOString().split('T')[0]}.zip`
+    );
+
+    archive.pipe(res);
+
+    // Add each incident PDF to the archive
+    for (const incidentId of incidentIds) {
+      const { generateIncidentReportPDFBuffer } = require('../services/exportService');
+      const { buffer, filename } = await generateIncidentReportPDFBuffer(incidentId);
+      archive.append(buffer, { name: filename });
+    }
+
+    await archive.finalize();
+
+  } catch (error: any) {
+    console.error("Error exporting incidents bulk PDF:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to export incidents" });
     }
   }
 };

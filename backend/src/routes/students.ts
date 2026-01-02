@@ -65,6 +65,13 @@ router.post(
 router.get("/", getStudents);
 
 /**
+ * @route   GET /api/students/lookup
+ * @desc    Lookup student for incident reporting (includes expected students)
+ * @access  Private
+ */
+router.get("/lookup", lookupStudentForIncident);
+
+/**
  * @route   GET /api/students/:id
  * @desc    Get single student by ID
  * @access  Private
@@ -96,13 +103,6 @@ router.put(
  * @access  Private (Admin only)
  */
 router.delete("/:id", authorize(Role.ADMIN), deleteStudent);
-
-/**
- * @route   GET /api/students/lookup
- * @desc    Lookup student for incident reporting (includes expected students)
- * @access  Private
- */
-router.get("/lookup", lookupStudentForIncident);
 
 /**
  * @route   POST /api/students/bulk

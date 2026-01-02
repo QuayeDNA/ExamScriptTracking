@@ -6,6 +6,7 @@ import {
 import { Stack, useRouter, useSegments, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import * as Notifications from "expo-notifications";
 import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -76,12 +77,14 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const initializeAuth = useAuthStore((state) => state.initialize);
   const initializeSession = useSessionStore((state) => state.initialize);
+  const { isAuthenticated } = useAuthStore();
   const notificationListener = useRef<Notifications.Subscription | undefined>(
     undefined
   );
   const responseListener = useRef<Notifications.Subscription | undefined>(
     undefined
   );
+  const appState = useRef<AppStateStatus>(AppState.currentState);
   const { handleNotificationTap, handleNotificationAction } = useNotificationNavigation();
 
   // Create QueryClient instance
@@ -129,6 +132,19 @@ export default function RootLayout() {
         }
       });
 
+    // Listen for app state changes to refresh auth when app comes to foreground
+    const appStateSubscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active" &&
+        isAuthenticated
+      ) {
+        console.log("App came to foreground, refreshing auth state");
+        initializeAuth();
+      }
+      appState.current = nextAppState;
+    });
+
     return () => {
       if (notificationListener.current) {
         notificationListener.current.remove();
@@ -136,6 +152,7 @@ export default function RootLayout() {
       if (responseListener.current) {
         responseListener.current.remove();
       }
+      appStateSubscription.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

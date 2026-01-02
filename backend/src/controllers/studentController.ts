@@ -945,7 +945,7 @@ export const getStudentByIndexNumber = async (
   }
 };
 
-// Lookup student for incident reporting (includes expected students from current session)
+// Lookup student for incident reporting (prioritizes expected students from session)
 export const lookupStudentForIncident = async (
   req: Request,
   res: Response
@@ -960,23 +960,9 @@ export const lookupStudentForIncident = async (
 
     const trimmedIndexNumber = indexNumber.trim();
 
-    // First, try to find the student in the database
-    const student = await prisma.student.findUnique({
-      where: { indexNumber: trimmedIndexNumber },
-      select: {
-        id: true,
-        indexNumber: true,
-        firstName: true,
-        lastName: true,
-        program: true,
-        level: true,
-        createdAt: true,
-      },
-    });
-
     let expectedStudent = null;
 
-    // If exam session is provided, also check expected students
+    // PRIORITY 1: If exam session provided, check expected students FIRST
     if (examSessionId && typeof examSessionId === "string") {
       expectedStudent = await prisma.examSessionStudent.findUnique({
         where: {
@@ -993,7 +979,39 @@ export const lookupStudentForIncident = async (
           level: true,
         },
       });
+
+      // If found in expected students, return immediately
+      if (expectedStudent) {
+        res.json({
+          found: true,
+          source: "expected",
+          student: {
+            id: null, // Not in global database
+            indexNumber: expectedStudent.indexNumber,
+            firstName: expectedStudent.firstName || "",
+            lastName: expectedStudent.lastName || "",
+            program: expectedStudent.program || "",
+            level: expectedStudent.level || null,
+          },
+        });
+        return;
+      }
     }
+
+    // PRIORITY 2: Search global student database
+    const student = await prisma.student.findUnique({
+      where: { indexNumber: trimmedIndexNumber },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        program: true,
+        level: true,
+        profilePicture: true,
+        createdAt: true,
+      },
+    });
 
     // Return result
     if (student) {
@@ -1001,19 +1019,6 @@ export const lookupStudentForIncident = async (
         found: true,
         source: "database",
         student,
-      });
-    } else if (expectedStudent) {
-      res.json({
-        found: true,
-        source: "expected",
-        student: {
-          id: null, // Not in database yet
-          indexNumber: expectedStudent.indexNumber,
-          firstName: expectedStudent.firstName || "",
-          lastName: expectedStudent.lastName || "",
-          program: expectedStudent.program || "",
-          level: expectedStudent.level || null,
-        },
       });
     } else {
       res.json({

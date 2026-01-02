@@ -132,7 +132,7 @@ export interface IncidentStatusHistory {
 
 export interface CreateIncidentData {
   type: IncidentType;
-  severity: IncidentSeverity;
+  // Severity auto-determined by backend
   title: string;
   description: string;
   location?: string;
@@ -143,6 +143,12 @@ export interface CreateIncidentData {
   examAttendanceId?: string;
   batchTransferId?: string;
   metadata?: Record<string, unknown>;
+  // Manual student info (when student not in system)
+  manualStudentInfo?: {
+    indexNumber: string;
+    fullName: string;
+    program: string;
+  };
 }
 
 export interface UpdateIncidentData {
@@ -406,6 +412,23 @@ export const getSeverityColor = (severity: IncidentSeverity): string => {
 };
 
 /**
+ * Auto-determine severity from incident type
+ */
+export const getSeverityFromType = (type: IncidentType): IncidentSeverity => {
+  const severityMap: Record<IncidentType, IncidentSeverity> = {
+    MISSING_SCRIPT: 'CRITICAL',
+    DAMAGED_SCRIPT: 'HIGH',
+    MALPRACTICE: 'CRITICAL',
+    STUDENT_ILLNESS: 'MEDIUM',
+    VENUE_ISSUE: 'HIGH',
+    COUNT_DISCREPANCY: 'HIGH',
+    LATE_SUBMISSION: 'MEDIUM',
+    OTHER: 'MEDIUM',
+  };
+  return severityMap[type];
+};
+
+/**
  * Get status color (OKLCH)
  */
 export const getStatusColor = (status: IncidentStatus): string => {
@@ -437,4 +460,5 @@ export default {
   getStatusLabel,
   getSeverityColor,
   getStatusColor,
+  getSeverityFromType,
 };

@@ -18,10 +18,12 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -114,6 +116,7 @@ export default function IncidentsPage() {
     page: 1,
     limit: 20,
   });
+  const [selectedIncidents, setSelectedIncidents] = useState<Set<string>>(new Set());
 
   // Fetch incidents
   const { data: incidentsData, isLoading } = useQuery({
@@ -148,6 +151,27 @@ export default function IncidentsPage() {
     },
   });
 
+  const exportBulkPDFMutation = useMutation({
+    mutationFn: (incidentIds: string[]) => incidentsApi.exportBulkPDF(incidentIds),
+    onSuccess: (blob) => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `incidents-bulk-export-${
+        new Date().toISOString().split("T")[0]
+      }.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success(`${selectedIncidents.size} incidents exported successfully`);
+      setSelectedIncidents(new Set());
+    },
+    onError: () => {
+      toast.error("Failed to export incidents");
+    },
+  });
+
   const handleSearch = (value: string) => {
     setSearchTerm(value);
     // Implement search logic if needed
@@ -167,6 +191,36 @@ export default function IncidentsPage() {
   const clearFilters = () => {
     setFilters({ page: 1, limit: 20 });
     setSearchTerm("");
+  };
+
+  const toggleIncidentSelection = (incidentId: string) => {
+    const newSelection = new Set(selectedIncidents);
+    if (newSelection.has(incidentId)) {
+      newSelection.delete(incidentId);
+    } else {
+      newSelection.add(incidentId);
+    }
+    setSelectedIncidents(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIncidents.size === filteredIncidents?.length) {
+      setSelectedIncidents(new Set());
+    } else {
+      setSelectedIncidents(new Set(filteredIncidents?.map(i => i.id) || []));
+    }
+  };
+
+  const handleBulkExport = () => {
+    if (selectedIncidents.size === 0) {
+      toast.error("Please select incidents to export");
+      return;
+    }
+    if (selectedIncidents.size > 50) {
+      toast.error("Maximum 50 incidents can be exported at once");
+      return;
+    }
+    exportBulkPDFMutation.mutate(Array.from(selectedIncidents));
   };
 
   const filteredIncidents = incidentsData?.incidents.filter((incident) => {
@@ -196,6 +250,18 @@ export default function IncidentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {selectedIncidents.size > 0 && (
+            <Button
+              variant="default"
+              onClick={handleBulkExport}
+              disabled={exportBulkPDFMutation.isPending}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {exportBulkPDFMutation.isPending 
+                ? "Exporting..." 
+                : `Export ${selectedIncidents.size} PDF${selectedIncidents.size > 1 ? 's' : ''}`}
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => exportSummaryMutation.mutate()}
@@ -391,6 +457,16 @@ export default function IncidentsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={
+                        filteredIncidents &&
+                        filteredIncidents.length > 0 &&
+                        selectedIncidents.size === filteredIncidents.length
+                      }
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Incident #</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Title</TableHead>
@@ -404,7 +480,7 @@ export default function IncidentsPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center">
+                    <TableCell colSpan={9} className="text-center">
                       Loading incidents...
                     </TableCell>
                   </TableRow>
@@ -416,6 +492,12 @@ export default function IncidentsPage() {
                         incident.isConfidential ? "bg-muted/50 italic" : ""
                       }
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIncidents.has(incident.id)}
+                          onCheckedChange={() => toggleIncidentSelection(incident.id)}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {incident.incidentNumber}
@@ -468,7 +550,7 @@ export default function IncidentsPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center">
+                    <TableCell colSpan={9} className="text-center">
                       No incidents found
                     </TableCell>
                   </TableRow>

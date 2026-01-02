@@ -352,4 +352,23 @@ export const incidentsApi = {
     if (!response.ok) throw new Error("Export failed");
     return response.blob();
   },
+
+  /**
+   * Export multiple incidents as individual PDFs in a ZIP file
+   */
+  exportBulkPDF: async (incidentIds: string[]): Promise<Blob> => {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/incidents/export/bulk-pdf`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ incidentIds }),
+      }
+    );
+    if (!response.ok) throw new Error("Bulk export failed");
+    return response.blob();
+  },
 };

@@ -47,10 +47,10 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       const response = await authApi.login({ identifier, password });
+      console.log("Login successful, saving auth data");
       await saveAuth(response.token, response.refreshToken, response.user);
       setUser(response.user);
 
-      const isAttendanceUser = response.user.role === "CLASS_REP";
 
       Toast.show({
         type: "success",
@@ -61,7 +61,7 @@ export default function LoginScreen() {
       if (!response.user.passwordChanged) {
         router.replace("/change-password");
       } else {
-        router.replace(isAttendanceUser ? ("/attendance" as any) : "/(tabs)");
+        router.replace("/(tabs)");
       }
     } catch (error: any) {
       setError(error.error || "Invalid credentials. Please try again.");
@@ -85,7 +85,7 @@ export default function LoginScreen() {
           <View style={styles.inputContainer}>
             <Input
               label="Email or Phone Number"
-              placeholder="your.email@example.com or 0241234567"
+              placeholder="Enter email or phone number"
               value={identifier}
               onChangeText={setIdentifier}
               autoCapitalize="none"

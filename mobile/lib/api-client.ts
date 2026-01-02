@@ -72,9 +72,11 @@ class ApiClient {
           error.response?.data
         );
 
+        // Only clear auth and notify if it's truly an auth failure (not network issues)
+        // Let the auth store's initialize method handle validation
         if (error.response?.status === 401 && !error.config?.url?.includes("/auth/login")) {
-          await clearAuth();
-          // Notify auth invalidation callback
+          // Only notify invalidation callback, don't clear storage immediately
+          // This allows the auth store to decide whether to keep cached credentials
           this.onAuthInvalid?.();
         }
 
@@ -132,3 +134,31 @@ export const apiClient = new ApiClient();
 
 // Export the API URL for use in components
 export const API_BASE_URL = API_URL;
+
+/**
+ * Helper function to construct full URL for file paths
+ * @param relativePath - Relative path from backend (e.g., "uploads/students/...")
+ * @returns Full URL to access the file
+ */
+export const getFileUrl = (relativePath: string): string => {
+  if (!relativePath) return "";
+
+  // If it's already a full URL (e.g., from Cloudinary), return as-is
+  if (
+    relativePath.startsWith("http://") ||
+    relativePath.startsWith("https://")
+  ) {
+    return relativePath;
+  }
+
+  // Remove leading slash if present
+  const cleanPath = relativePath.startsWith("/")
+    ? relativePath.substring(1)
+    : relativePath;
+  
+  // Static files are served from backend root, not under /api
+  // Extract base URL by removing /api suffix
+  const baseUrl = API_URL.replace(/\/api\/?$/, "");
+  
+  return `${baseUrl}/${cleanPath}`;
+};
