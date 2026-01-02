@@ -2,6 +2,7 @@ import { Server as HTTPServer } from "http";
 import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
+import { setupAttendanceSocketHandlers } from "./handlers/classAttendanceEvents";
 
 const prisma = new PrismaClient();
 
@@ -79,6 +80,9 @@ export function initializeSocketServer(httpServer: HTTPServer, allowedOrigins: s
 
     // Join role-specific room
     socket.join(`role:${socket.userRole}`);
+
+    // Setup class attendance socket handlers
+    setupAttendanceSocketHandlers(socket);
 
     // Handle disconnection
     socket.on("disconnect", (reason) => {

@@ -144,8 +144,8 @@ export default function QRRegistrationScreen() {
         text2: `Welcome, ${response.user.name}!`,
       });
 
-      // Navigate to main app
-      router.replace("/(tabs)");
+      // Navigate to app selector
+      router.replace("/app-selector");
     } catch (error: any) {
       setError(error.error || "Registration failed. Please try again.");
     } finally {

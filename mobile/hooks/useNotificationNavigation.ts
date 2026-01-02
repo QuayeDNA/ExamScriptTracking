@@ -33,7 +33,7 @@ export function useNotificationNavigation() {
               params: { transferId: data.transferId },
             });
           } else {
-            router.push("/(tabs)/custody");
+            router.push("/(exam-tabs)/custody");
           }
           break;
 
@@ -41,7 +41,7 @@ export function useNotificationNavigation() {
         case "transfer_rejected":
         case "transfer_updated":
           // Navigate to custody tab to see transfers
-          router.push("/(tabs)/custody");
+          router.push("/(exam-tabs)/custody");
           break;
 
         case "batch_status":
@@ -54,24 +54,24 @@ export function useNotificationNavigation() {
             });
           } else {
             // Fallback to main tab
-            router.push("/(tabs)");
+            router.push("/(exam-tabs)");
           }
           break;
 
         case "attendance_recorded":
           // Navigate to scanner tab (attendance section)
-          router.push("/(tabs)/scanner");
+          router.push("/(exam-tabs)/scanner");
           break;
 
         default:
           // Unknown type, navigate to home
           console.log("Unknown notification type, navigating to home");
-          router.push("/(tabs)");
+          router.push("/(exam-tabs)");
       }
     } catch (error) {
       console.error("Error navigating from notification:", error);
       // Fallback to home on error
-      router.push("/(tabs)");
+      router.push("/(exam-tabs)");
     }
   };
 

@@ -1,6 +1,6 @@
 /**
- * Profile Screen
- * User profile with SafeAreaView and design system integration
+ * Attendance App Profile Screen
+ * Shared profile with app switcher
  */
 
 import {
@@ -8,12 +8,12 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth";
+import { useAppContext } from "@/store/appContext";
 import { authApi } from "@/api/auth";
 import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
@@ -22,8 +22,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { useState } from "react";
 import Toast from "react-native-toast-message";
 
-export default function ProfileScreen() {
+export default function AttendanceProfileScreen() {
   const { user, logout } = useAuthStore();
+  const { switchApp, canAccessBothApps, canAccessExamApp } = useAppContext();
   const colors = useThemeColors();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
@@ -55,7 +56,7 @@ export default function ProfileScreen() {
     >
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.primary }]}>
+        <View style={[styles.header, { backgroundColor: '#10b981' }]}>
           <View style={styles.headerContent}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
@@ -64,6 +65,10 @@ export default function ProfileScreen() {
             </View>
             <H2 style={styles.headerName}>{user?.name}</H2>
             <Text style={styles.headerEmail}>{user?.email}</Text>
+            <View style={styles.appBadge}>
+              <Ionicons name="checkmark-circle" size={16} color="#fff" />
+              <Text style={styles.appBadgeText}>Attendance App</Text>
+            </View>
           </View>
         </View>
 
@@ -144,6 +149,37 @@ export default function ProfileScreen() {
             Settings
           </H3>
 
+          {/* App Switcher - Only show if user has access to both apps */}
+          {canAccessBothApps && canAccessExamApp && (
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors.card }]}
+              onPress={() => switchApp('exam')}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.actionIcon,
+                  { backgroundColor: '#3b82f615' },
+                ]}
+              >
+                <Ionicons name="swap-horizontal" size={20} color="#3b82f6" />
+              </View>
+              <Text
+                style={StyleSheet.flatten([
+                  styles.actionText,
+                  { color: colors.foreground },
+                ])}
+              >
+                Switch to Exam Tracking App
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.foregroundMuted}
+              />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: colors.card }]}
             onPress={() => router.push("/change-password")}
@@ -177,42 +213,8 @@ export default function ProfileScreen() {
             onPress={() =>
               Toast.show({
                 type: "info",
-                text1: "Settings",
-                text2: "Settings screen coming soon",
-              })
-            }
-            activeOpacity={0.7}
-          >
-            <View
-              style={[
-                styles.actionIcon,
-                { backgroundColor: `${colors.info}15` },
-              ]}
-            >
-              <Ionicons name="settings" size={20} color={colors.info} />
-            </View>
-            <Text
-              style={StyleSheet.flatten([
-                styles.actionText,
-                { color: colors.foreground },
-              ])}
-            >
-              Settings
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={colors.foregroundMuted}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: colors.card }]}
-            onPress={() =>
-              Toast.show({
-                type: "info",
                 text1: "About",
-                text2: "Exam Script Tracking System v1.0",
+                text2: "Class Attendance System v1.0",
               })
             }
             activeOpacity={0.7}
@@ -248,11 +250,11 @@ export default function ProfileScreen() {
         {/* Logout Button */}
         <View style={[styles.section, styles.lastSection]}>
           <TouchableOpacity
-            style={[styles.logoutButton, { backgroundColor: colors.error }]}
+            style={[styles.logoutButton, { backgroundColor: '#ef4444' }]}
             onPress={() => setShowLogoutDialog(true)}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
           >
-            <Ionicons name="log-out" size={20} color="#ffffff" />
+            <Ionicons name="log-out" size={20} color="#fff" />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
@@ -262,10 +264,9 @@ export default function ProfileScreen() {
       <Dialog
         visible={showLogoutDialog}
         onClose={() => setShowLogoutDialog(false)}
-        title="Logout"
+        title="Confirm Logout"
         message="Are you sure you want to logout?"
         variant="warning"
-        icon="log-out"
         primaryAction={{
           label: "Logout",
           onPress: handleLogout,
@@ -284,80 +285,66 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 24,
     paddingBottom: 32,
-    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   headerContent: {
     alignItems: "center",
     gap: 8,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#ffffff",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
   },
   avatarText: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: "bold",
-    color: "#3b82f6",
+    color: "#fff",
   },
   headerName: {
-    color: "#ffffff",
+    color: "#fff",
+    fontSize: 24,
   },
   headerEmail: {
-    color: "#ffffff",
-    opacity: 0.9,
+    color: "rgba(255,255,255,0.9)",
     fontSize: 14,
   },
+  appBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  appBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   section: {
-    paddingHorizontal: 16,
-    marginTop: 24,
+    padding: 16,
   },
   lastSection: {
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   sectionTitle: {
-    marginBottom: 16,
-  },
-  infoRow: {
-    padding: 16,
-    borderBottomWidth: 1,
-    gap: 4,
-  },
-  infoRowLast: {
-    padding: 16,
-    gap: 4,
-  },
-  infoLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: "600",
+    marginBottom: 12,
   },
   actionCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
     borderRadius: 12,
-    marginBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
+    marginBottom: 8,
+    gap: 12,
   },
   actionIcon: {
     width: 40,
@@ -365,12 +352,32 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
   },
   actionText: {
     flex: 1,
     fontSize: 16,
+    fontWeight: "500",
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  infoRowLast: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  infoLabel: {
+    fontSize: 14,
+  },
+  infoValue: {
+    fontSize: 14,
     fontWeight: "600",
+    textTransform: "capitalize",
   },
   logoutButton: {
     flexDirection: "row",
@@ -381,7 +388,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logoutText: {
-    color: "#ffffff",
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },

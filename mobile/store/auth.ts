@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { User } from "@/types";
 import * as storage from "@/utils/storage";
 import { apiClient } from "@/lib/api-client";
+import { initializeAppContext } from "./appContext";
 
 interface AuthState {
   user: User | null;
@@ -38,6 +39,9 @@ export const useAuthStore = create<AuthState>((set) => ({
           isLoading: false,
         });
 
+        // Initialize app context with user data
+        await initializeAppContext();
+
         // Validate token in background to refresh user data
         apiClient
           .get<{ user: User }>("/auth/profile")
@@ -72,6 +76,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     console.log("User explicitly logging out");
+    
+    // Clear app context
+    const { clearAppPreference } = await import("./appContext");
+    await clearAppPreference();
+    
+    // Clear auth
     await storage.clearAuth();
     set({ user: null, isAuthenticated: false, isLoading: false });
   },

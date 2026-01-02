@@ -94,7 +94,7 @@ export default function ChangePasswordScreen() {
         text2: "You can now access the system!",
       });
 
-      setTimeout(() => router.replace("/(tabs)"), 500);
+      setTimeout(() => router.replace("/app-selector"), 500);
     } catch (error: any) {
       setError(error.error || "Failed to change password. Please try again.");
     } finally {

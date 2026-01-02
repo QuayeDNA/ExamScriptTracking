@@ -58,7 +58,7 @@ function useProtectedRoute() {
       ) {
         router.replace("/change-password");
       } else if (isAuthenticated && user?.passwordChanged && inAuthFlow) {
-        router.replace("/(tabs)");
+        router.replace("/app-selector");
       }
     }, 0);
 
@@ -165,7 +165,9 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />
           <Stack.Screen name="change-password" />
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="app-selector" />
+          <Stack.Screen name="(exam-tabs)" />
+          <Stack.Screen name="(attendance-tabs)" />
           <Stack.Screen
             name="batch-details"
             options={{

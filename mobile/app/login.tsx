@@ -61,7 +61,7 @@ export default function LoginScreen() {
       if (!response.user.passwordChanged) {
         router.replace("/change-password");
       } else {
-        router.replace("/(tabs)");
+        router.replace("/app-selector");
       }
     } catch (error: any) {
       setError(error.error || "Invalid credentials. Please try again.");
