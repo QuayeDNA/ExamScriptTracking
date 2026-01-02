@@ -12,7 +12,16 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure storage based on provider
 const getStorageConfig = () => {
-  const provider = process.env.STORAGE_PROVIDER || "local";
+  const nodeEnv = process.env.NODE_ENV || "development";
+  const explicitProvider = process.env.STORAGE_PROVIDER;
+  
+  // Determine actual provider (explicit setting overrides NODE_ENV)
+  let provider: string;
+  if (explicitProvider && ["local", "cloudinary"].includes(explicitProvider)) {
+    provider = explicitProvider;
+  } else {
+    provider = nodeEnv === "production" ? "cloudinary" : "local";
+  }
 
   if (provider === "local") {
     return multer.diskStorage({

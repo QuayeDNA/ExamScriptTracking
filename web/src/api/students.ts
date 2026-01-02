@@ -136,6 +136,9 @@ export const studentsApi = {
     formData.append("lastName", data.lastName);
     formData.append("program", data.program);
     formData.append("level", data.level.toString());
+    // Add option and department if provided
+    if (data.option) formData.append("option", data.option);
+    if (data.department) formData.append("department", data.department);
     formData.append("profilePicture", profilePicture);
 
     return apiClient.post<{ message: string; student: Student }>(
@@ -163,6 +166,9 @@ export const studentsApi = {
     if (data.program !== undefined) formData.append("program", data.program);
     if (data.level !== undefined)
       formData.append("level", data.level.toString());
+    // Add option and department (including empty strings to clear values)
+    if (data.option !== undefined) formData.append("option", data.option);
+    if (data.department !== undefined) formData.append("department", data.department);
     if (profilePicture) formData.append("profilePicture", profilePicture);
 
     return apiClient.put<{ message: string; student: Student }>(

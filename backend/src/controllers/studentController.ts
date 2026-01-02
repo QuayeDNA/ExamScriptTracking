@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
 import { storageService } from "../services/storageService";
 import {
   hashBiometricTemplate,
@@ -18,7 +19,18 @@ const prisma = new PrismaClient();
 
 // Configure multer for profile picture uploads
 const getStorageConfig = () => {
-  const provider = process.env.STORAGE_PROVIDER || "local";
+  const nodeEnv = process.env.NODE_ENV || "development";
+  const explicitProvider = process.env.STORAGE_PROVIDER;
+  
+  // Determine actual provider (explicit setting overrides NODE_ENV)
+  let provider: string;
+  if (explicitProvider && ["local", "cloudinary"].includes(explicitProvider)) {
+    provider = explicitProvider;
+  } else {
+    provider = nodeEnv === "production" ? "cloudinary" : "local";
+  }
+
+  console.log(`[MULTER_CONFIG] Using ${provider} storage (NODE_ENV: ${nodeEnv}, STORAGE_PROVIDER: ${explicitProvider || 'not set'})`);
 
   if (provider === "local") {
     return multer.diskStorage({
@@ -31,13 +43,15 @@ const getStorageConfig = () => {
         cb(null, uploadDir);
       },
       filename: (req, file, cb) => {
-        // Generate unique filename with timestamp
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, `student-${uniqueSuffix}${path.extname(file.originalname)}`);
+        // Generate unique filename with student- prefix and UUID
+        const uniqueFileName = `student-${uuidv4()}-${file.originalname}`;
+        console.log(`[MULTER_CONFIG] Generated filename: ${uniqueFileName}`);
+        cb(null, uniqueFileName);
       },
     });
   } else {
     // For cloud storage, use memory storage
+    console.log(`[MULTER_CONFIG] Using memory storage for cloud uploads`);
     return multer.memoryStorage();
   }
 };
@@ -70,8 +84,14 @@ const createStudentSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   program: z.string().min(1, "Program is required"),
-  option: z.string().optional(), // Optional program option
-  department: z.string().optional(), // Optional department
+  option: z.string().optional().nullable().transform(val => {
+    if (val === undefined || val === null || val === "") return null;
+    return val;
+  }),
+  department: z.string().optional().nullable().transform(val => {
+    if (val === undefined || val === null || val === "") return null;
+    return val;
+  }),
   level: z
     .string()
     .transform((val) => parseInt(val, 10))
@@ -101,8 +121,14 @@ const updateStudentSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   program: z.string().min(1).optional(),
-  option: z.string().optional(), // Optional program option
-  department: z.string().optional(), // Optional department
+  option: z.string().optional().nullable().transform(val => {
+    if (val === undefined || val === null || val === "") return null;
+    return val;
+  }),
+  department: z.string().optional().nullable().transform(val => {
+    if (val === undefined || val === null || val === "") return null;
+    return val;
+  }),
   level: z
     .string()
     .optional()
@@ -152,8 +178,13 @@ export const createStudent = async (
 ): Promise<void> => {
   try {
     console.log("[CREATE_STUDENT] Request from:", req.user?.email);
+    console.log("[CREATE_STUDENT] Request body:", {
+      ...req.body,
+      profilePicture: req.file ? "File received" : "No file"
+    });
 
     const validatedData = createStudentSchema.parse(req.body);
+    console.log("[CREATE_STUDENT] Validated data:", validatedData);
 
     // Check if profile picture was uploaded
     if (!req.file) {
@@ -175,27 +206,32 @@ export const createStudent = async (
 
     // Handle profile picture upload
     let profilePictureUrl: string;
-    const isLocalStorage =
-      (process.env.STORAGE_PROVIDER || "local") === "local";
+    
+    console.log("[CREATE_STUDENT] File received:", {
+      originalname: req.file?.originalname,
+      size: req.file?.size,
+      hasPath: !!req.file?.path,
+      hasBuffer: !!req.file?.buffer,
+      filename: req.file?.filename
+    });
 
-    if (isLocalStorage) {
-      // For local storage, use the multer-generated path
-      profilePictureUrl = `/uploads/students/${req.file.filename}`;
-    } else {
-      // For cloud storage, upload using storage service
-      const uploadResult = await storageService.uploadFile(
-        req.file,
-        "students"
-      );
-      if (!uploadResult.success) {
-        res.status(500).json({
-          error: "Failed to upload profile picture",
-          details: uploadResult.error,
-        });
-        return;
-      }
-      profilePictureUrl = uploadResult.url;
+    // Use storage service for all uploads (it handles both local and cloud)
+    const uploadResult = await storageService.uploadFile(req.file, "students");
+    
+    if (!uploadResult.success) {
+      console.error("[CREATE_STUDENT] Upload failed:", uploadResult.error);
+      res.status(500).json({
+        error: "Failed to upload profile picture",
+        details: uploadResult.error,
+      });
+      return;
     }
+    
+    profilePictureUrl = uploadResult.url;
+    console.log("[CREATE_STUDENT] File uploaded successfully:", {
+      url: profilePictureUrl,
+      provider: uploadResult.provider
+    });
 
     // Generate QR code data
     const qrData = JSON.stringify({
@@ -405,9 +441,14 @@ export const updateStudent = async (
 ): Promise<void> => {
   try {
     console.log("[UPDATE_STUDENT] Request from:", req.user?.email);
+    console.log("[UPDATE_STUDENT] Request body:", {
+      ...req.body,
+      profilePicture: req.file ? "File received" : "No file"
+    });
 
     const { id } = req.params;
     const validatedData = updateStudentSchema.parse(req.body);
+    console.log("[UPDATE_STUDENT] Validated data:", validatedData);
 
     // Check if student exists
     const existingStudent = await prisma.student.findUnique({
@@ -443,28 +484,33 @@ export const updateStudent = async (
     // Handle profile picture update
     let profilePictureUrl = existingStudent.profilePicture;
     let oldPictureUrl = existingStudent.profilePicture;
+    
     if (req.file) {
-      const isLocalStorage =
-        (process.env.STORAGE_PROVIDER || "local") === "local";
+      console.log("[UPDATE_STUDENT] File received:", {
+        originalname: req.file?.originalname,
+        size: req.file?.size,
+        hasPath: !!req.file?.path,
+        hasBuffer: !!req.file?.buffer,
+        filename: req.file?.filename
+      });
 
-      if (isLocalStorage) {
-        // For local storage, use the multer-generated path
-        profilePictureUrl = `/uploads/students/${req.file.filename}`;
-      } else {
-        // For cloud storage, upload using storage service
-        const uploadResult = await storageService.uploadFile(
-          req.file,
-          "students"
-        );
-        if (!uploadResult.success) {
-          res.status(500).json({
-            error: "Failed to upload profile picture",
-            details: uploadResult.error,
-          });
-          return;
-        }
-        profilePictureUrl = uploadResult.url;
+      // Use storage service for all uploads (it handles both local and cloud)
+      const uploadResult = await storageService.uploadFile(req.file, "students");
+      
+      if (!uploadResult.success) {
+        console.error("[UPDATE_STUDENT] Upload failed:", uploadResult.error);
+        res.status(500).json({
+          error: "Failed to upload profile picture",
+          details: uploadResult.error,
+        });
+        return;
       }
+      
+      profilePictureUrl = uploadResult.url;
+      console.log("[UPDATE_STUDENT] File uploaded successfully:", {
+        url: profilePictureUrl,
+        provider: uploadResult.provider
+      });
     }
 
     // Handle biometric update if provided
@@ -500,17 +546,14 @@ export const updateStudent = async (
 
     // Delete old profile picture if it was replaced
     if (req.file && oldPictureUrl) {
-      const isLocalStorage =
-        (process.env.STORAGE_PROVIDER || "local") === "local";
-      if (isLocalStorage) {
-        // For local storage, delete from filesystem
-        const oldPath = path.join(__dirname, "../../", oldPictureUrl);
-        if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
-      } else {
-        // For cloud storage, delete using storage service
+      console.log("[UPDATE_STUDENT] Deleting old profile picture:", oldPictureUrl);
+      try {
+        // Storage service will auto-detect provider based on URL
         await storageService.deleteFile(oldPictureUrl);
+        console.log("[UPDATE_STUDENT] Old profile picture deleted successfully");
+      } catch (error) {
+        console.error("[UPDATE_STUDENT] Failed to delete old profile picture:", error);
+        // Don't fail the update if deletion fails
       }
     }
 
@@ -555,9 +598,13 @@ export const updateStudent = async (
       student: updatedStudent,
     });
   } catch (error) {
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    // Clean up uploaded file on error (only for local disk storage)
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error("[UPDATE_STUDENT] Failed to cleanup file:", cleanupError);
+      }
     }
 
     if (error instanceof z.ZodError) {

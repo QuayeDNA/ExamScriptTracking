@@ -9,6 +9,7 @@ import {
 } from "@/api/students";
 import { getFileUrl } from "@/lib/api-client";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
+import { downloadStudentTemplate } from "@/utils/csvTemplates";
 import {
   Plus,
   Search,
@@ -23,6 +24,7 @@ import {
   List,
   Fingerprint,
   MoreHorizontal,
+  User,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import {
@@ -79,6 +81,7 @@ export default function StudentsPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -478,33 +481,9 @@ export default function StudentsPage() {
     }
   };
 
-  // Download CSV template
+  // Use centralized CSV template
   const handleDownloadTemplate = () => {
-    const headers = [
-      "indexNumber",
-      "firstName",
-      "lastName",
-      "program",
-      "option",
-      "department",
-      "level",
-    ];
-    const exampleRows = [
-      ["2024001", "John", "Doe", "Information Technology", "Software Option", "Computer Science", "100"],
-      ["2024002", "Jane", "Smith", "Engineering", "Electrical Option", "Engineering", "200"],
-      ["2024003", "Mike", "Johnson", "Business", "", "Business Administration", "300"],
-    ];
-
-    const csv = [headers, ...exampleRows]
-      .map((row) => row.join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "student_import_template.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadStudentTemplate("student_import_template.csv");
   };
 
   return (
@@ -681,16 +660,20 @@ export default function StudentsPage() {
                   {studentsData?.students.map((student) => (
                     <TableRow key={student.id}>
                       <TableCell>
-                        <img
-                          src={getFileUrl(student.profilePicture)}
-                          alt={`${student.firstName} ${student.lastName}`}
-                          className="w-10 h-10 rounded-lg object-cover"
-                          onError={(e) => {
-                            // Fallback to default avatar if image fails to load
-                            (e.target as HTMLImageElement).src =
-                              "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
-                          }}
-                        />
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center">
+                          {imageErrors[student.id] ? (
+                            <User className="w-6 h-6 text-gray-400" />
+                          ) : (
+                            <img
+                              src={getFileUrl(student.profilePicture)}
+                              alt={`${student.firstName} ${student.lastName}`}
+                              className="w-full h-full object-cover"
+                              onError={() => {
+                                setImageErrors(prev => ({ ...prev, [student.id]: true }));
+                              }}
+                            />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-medium">
                         {student.indexNumber}
@@ -806,16 +789,20 @@ export default function StudentsPage() {
                       <CardContent className="p-0">
                         {/* Profile Picture Section */}
                         <div className="h-32 bg-linear-to-br from-primary/10 to-primary/20 flex items-center justify-center border-b border-border relative">
-                          <img
-                            src={getFileUrl(student.profilePicture)}
-                            alt={`${student.firstName} ${student.lastName}`}
-                            className="w-20 h-20 rounded-lg object-cover border-2 border-white shadow-lg"
-                            onError={(e) => {
-                              // Fallback to default avatar if image fails to load
-                              (e.target as HTMLImageElement).src =
-                                "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
-                            }}
-                          />
+                          <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center border-2 border-white shadow-lg">
+                            {imageErrors[student.id] ? (
+                              <User className="w-12 h-12 text-gray-400" />
+                            ) : (
+                              <img
+                                src={getFileUrl(student.profilePicture)}
+                                alt={`${student.firstName} ${student.lastName}`}
+                                className="w-full h-full object-cover"
+                                onError={() => {
+                                  setImageErrors(prev => ({ ...prev, [student.id]: true }));
+                                }}
+                              />
+                            )}
+                          </div>
                           {/* QR Code Button */}
                           <Button
                             onClick={() => handleShowQRCode(student)}

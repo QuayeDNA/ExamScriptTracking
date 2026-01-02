@@ -79,16 +79,41 @@ export class StorageService {
 
   /**
    * Delete a file from storage
+   * Automatically detects provider based on URL pattern
    */
   async deleteFile(url: string, publicId?: string): Promise<boolean> {
     try {
-      switch (this.config.provider) {
-        case "local":
-          return await this.deleteFromLocal(url);
-        case "cloudinary":
-          return await this.deleteFromCloudinary(publicId || url);
-        default:
-          return false;
+      // Detect provider from URL
+      const isCloudinaryUrl = url.includes('cloudinary.com') || url.includes('res.cloudinary');
+      const isLocalUrl = url.startsWith('/uploads') || url.startsWith('uploads');
+
+      if (isCloudinaryUrl) {
+        console.log("[DELETE] Detected Cloudinary URL, using Cloudinary delete");
+        
+        // If publicId not provided, extract it from the URL
+        if (!publicId) {
+          // Cloudinary URL format: https://res.cloudinary.com/{cloud_name}/image/upload/v{version}/{folder}/{public_id}.{extension}
+          // Extract public_id with folder path
+          const urlParts = url.split('/upload/');
+          if (urlParts.length > 1) {
+            // Remove version (v1234567890) and get the rest
+            const pathAfterUpload = urlParts[1].replace(/^v\d+\//, '');
+            // Remove file extension
+            publicId = pathAfterUpload.replace(/\.[^/.]+$/, '');
+            console.log("[DELETE] Extracted public_id from URL:", publicId);
+          } else {
+            console.error("[DELETE] Could not extract public_id from Cloudinary URL:", url);
+            return false;
+          }
+        }
+        
+        return await this.deleteFromCloudinary(publicId);
+      } else if (isLocalUrl) {
+        console.log("[DELETE] Detected local URL, using local delete");
+        return await this.deleteFromLocal(url);
+      } else {
+        console.warn("[DELETE] Unknown URL pattern, skipping deletion:", url);
+        return false;
       }
     } catch (error) {
       console.error("Storage delete error:", error);
@@ -103,16 +128,43 @@ export class StorageService {
     file: Express.Multer.File,
     folder: string
   ): Promise<UploadResult> {
-    // This would use the existing local upload logic
-    // For now, return a placeholder - will be integrated with existing middleware
-    const fileName = `${uuidv4()}-${file.originalname}`;
-    const relativePath = `uploads/${folder}/${fileName}`;
+    try {
+      // For disk storage (file.path exists), file is already saved by multer
+      if (file.path) {
+        const relativePath = path.relative(process.cwd(), file.path).replace(/\\/g, '/');
+        console.log("[LOCAL_STORAGE] File already saved by multer at:", relativePath);
+        return {
+          success: true,
+          url: `/${relativePath}`,
+          provider: "local",
+        };
+      }
 
-    return {
-      success: true,
-      url: `/${relativePath}`,
-      provider: "local",
-    };
+      // For memory storage (file.buffer exists), manually save the file
+      // Add prefix based on folder type (student- for students, incident- for incidents, etc.)
+      const prefix = folder === "students" ? "student-" : folder === "incidents" ? "incident-" : "";
+      const fileName = `${prefix}${uuidv4()}-${file.originalname}`;
+      const uploadDir = path.join(process.cwd(), "uploads", folder);
+      const filePath = path.join(uploadDir, fileName);
+      const relativePath = `uploads/${folder}/${fileName}`;
+
+      // Ensure directory exists
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      // Write file to disk
+      await fs.writeFile(filePath, file.buffer);
+      
+      console.log("[LOCAL_STORAGE] File saved to:", relativePath);
+
+      return {
+        success: true,
+        url: `/${relativePath}`,
+        provider: "local",
+      };
+    } catch (error) {
+      console.error("[LOCAL_STORAGE] Upload error:", error);
+      throw error;
+    }
   }
 
   /**
@@ -126,6 +178,15 @@ export class StorageService {
       throw new Error("Cloudinary configuration missing");
     }
 
+    console.log("[CLOUDINARY] Starting upload for folder:", folder);
+    console.log("[CLOUDINARY] File details:", {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      hasBuffer: !!file.buffer,
+      bufferLength: file.buffer?.length
+    });
+
     // Dynamic import to avoid requiring cloudinary in production if not used
     const cloudinary = await import("cloudinary").then((m) => m.v2);
 
@@ -135,6 +196,8 @@ export class StorageService {
       api_key: this.config.cloudinary.apiKey,
       api_secret: this.config.cloudinary.apiSecret,
     });
+
+    console.log("[CLOUDINARY] Configured with cloud_name:", this.config.cloudinary.cloudName);
 
     // Upload to cloudinary
     const uploadOptions: any = {
@@ -151,8 +214,13 @@ export class StorageService {
       const uploadStream = cloudinary.uploader.upload_stream(
         uploadOptions,
         (error: any, result: any) => {
-          if (error) reject(error);
-          else resolve(result);
+          if (error) {
+            console.error("[CLOUDINARY] Upload error:", error);
+            reject(error);
+          } else {
+            console.log("[CLOUDINARY] Upload successful:", result.secure_url);
+            resolve(result);
+          }
         }
       );
 
@@ -179,9 +247,13 @@ export class StorageService {
     try {
       // Extract relative path from URL
       const relativePath = url.startsWith("/") ? url.substring(1) : url;
+      // Use process.cwd() to get project root instead of __dirname
       const fullPath = path.join(process.cwd(), relativePath);
+      
+      console.log("[DELETE_LOCAL] Attempting to delete:", fullPath);
 
       await fs.unlink(fullPath);
+      console.log("[DELETE_LOCAL] File deleted successfully");
       return true;
     } catch (error) {
       console.error("Local file delete error:", error);
@@ -217,11 +289,14 @@ export class StorageService {
 
 // Factory function to create storage service based on environment
 export function createStorageService(): StorageService {
-  // Check for explicit STORAGE_PROVIDER setting first
+  const nodeEnv = process.env.NODE_ENV || "development";
   const explicitProvider = process.env.STORAGE_PROVIDER as StorageProvider;
+
+  // Priority 1: Check for explicit STORAGE_PROVIDER setting (overrides NODE_ENV)
   if (explicitProvider && ["local", "cloudinary"].includes(explicitProvider)) {
-    console.log(`📁 Using explicitly set ${explicitProvider} storage provider`);
+    console.log(`📁 Using explicitly set ${explicitProvider} storage provider (NODE_ENV: ${nodeEnv})`);
     const config: StorageConfig = { provider: explicitProvider };
+    
     // Configure based on explicit provider
     if (explicitProvider === "local") {
       config.local = {
@@ -245,37 +320,32 @@ export function createStorageService(): StorageService {
     return new StorageService(config);
   }
 
-  // Auto-select provider based on NODE_ENV
-  const nodeEnv = process.env.NODE_ENV || "development";
-  const provider: StorageProvider =
-    nodeEnv === "production" ? "cloudinary" : "local";
-
-  console.log(`📁 Using ${provider} storage for ${nodeEnv} environment`);
+  // Priority 2: Auto-select based on NODE_ENV
+  // Development: default to local storage
+  // Production: default to cloudinary
+  const provider: StorageProvider = nodeEnv === "production" ? "cloudinary" : "local";
+  console.log(`📁 Auto-selected ${provider} storage for ${nodeEnv} environment`);
 
   const config: StorageConfig = { provider };
 
-  switch (provider) {
-    case "local":
-      config.local = {
-        uploadDir: process.env.UPLOAD_DIR || "uploads",
-      };
-      break;
-
-    case "cloudinary":
-      if (
-        !process.env.CLOUDINARY_CLOUD_NAME ||
-        !process.env.CLOUDINARY_API_KEY ||
-        !process.env.CLOUDINARY_API_SECRET
-      ) {
-        throw new Error("Cloudinary environment variables not configured");
-      }
-      config.cloudinary = {
-        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-        apiKey: process.env.CLOUDINARY_API_KEY,
-        apiSecret: process.env.CLOUDINARY_API_SECRET,
-        uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET,
-      };
-      break;
+  if (provider === "local") {
+    config.local = {
+      uploadDir: process.env.UPLOAD_DIR || "uploads",
+    };
+  } else if (provider === "cloudinary") {
+    if (
+      !process.env.CLOUDINARY_CLOUD_NAME ||
+      !process.env.CLOUDINARY_API_KEY ||
+      !process.env.CLOUDINARY_API_SECRET
+    ) {
+      throw new Error("Cloudinary environment variables not configured");
+    }
+    config.cloudinary = {
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      apiSecret: process.env.CLOUDINARY_API_SECRET,
+      uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET,
+    };
   }
 
   return new StorageService(config);

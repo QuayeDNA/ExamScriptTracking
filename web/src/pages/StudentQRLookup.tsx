@@ -17,6 +17,7 @@ export default function StudentQRLookup() {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState(false);
 
   const handleLookup = async () => {
     if (!indexNumber.trim()) {
@@ -31,6 +32,7 @@ export default function StudentQRLookup() {
     try {
       const studentData = await studentsApi.getStudentQR(indexNumber.trim());
       setStudent(studentData);
+      setImageError(false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setError(error.error || "Student not found or QR code not available");
@@ -160,16 +162,18 @@ export default function StudentQRLookup() {
               {/* Profile Picture and Basic Info */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
                 <div className="shrink-0">
-                  <img
-                    src={getFileUrl(student.profilePicture)}
-                    alt={`${student.firstName} ${student.lastName}`}
-                    className="w-24 h-24 rounded-lg object-cover border-2 border-border shadow-md"
-                    onError={(e) => {
-                      // Fallback to default avatar if image fails to load
-                      (e.target as HTMLImageElement).src =
-                        "https://res.cloudinary.com/dgxtybk3p/image/upload/v1735516800/default-avatar.png";
-                    }}
-                  />
+                  <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center border-2 border-border shadow-md">
+                    {imageError ? (
+                      <User className="w-12 h-12 text-gray-400" />
+                    ) : (
+                      <img
+                        src={getFileUrl(student.profilePicture)}
+                        alt={`${student.firstName} ${student.lastName}`}
+                        className="w-full h-full object-cover"
+                        onError={() => setImageError(true)}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex-1 text-center sm:text-left">

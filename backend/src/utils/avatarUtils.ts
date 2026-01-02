@@ -3,28 +3,34 @@ import { getFileUrl } from "./fileUtils";
 
 /**
  * Get the default avatar URL based on environment
- * In production, uses Cloudinary URL from students/ folder
- * In development, uses local file path
+ * Priority: Explicit STORAGE_PROVIDER > NODE_ENV
+ * - Cloudinary mode: uses CLOUDINARY_DEFAULT_AVATAR_URL
+ * - Local mode: uses local file path
  */
 export const getDefaultAvatarUrl = (): string => {
-  // Check for explicit environment variable first
-  const defaultAvatarUrl = process.env.DEFAULT_AVATAR_URL;
-  if (defaultAvatarUrl) {
-    return defaultAvatarUrl;
+  const nodeEnv = process.env.NODE_ENV || "development";
+  const explicitProvider = process.env.STORAGE_PROVIDER;
+  
+  // Determine actual provider (explicit setting overrides NODE_ENV)
+  let provider: string;
+  if (explicitProvider && ["local", "cloudinary"].includes(explicitProvider)) {
+    provider = explicitProvider;
+  } else {
+    provider = nodeEnv === "production" ? "cloudinary" : "local";
   }
 
-  // Fallback to environment-based logic
-  if (process.env.NODE_ENV === "production") {
+  console.log(`[AVATAR] Using ${provider} default avatar (NODE_ENV: ${nodeEnv}, STORAGE_PROVIDER: ${explicitProvider || 'not set'})`);
+
+  if (provider === "cloudinary") {
     // Use Cloudinary URL from environment variable
     const cloudinaryUrl = process.env.CLOUDINARY_DEFAULT_AVATAR_URL;
-    if (cloudinaryUrl) {
-      return cloudinaryUrl;
+    if (!cloudinaryUrl) {
+      throw new Error("CLOUDINARY_DEFAULT_AVATAR_URL environment variable must be set when using Cloudinary");
     }
-    // If no environment variable set, throw error or use a placeholder
-    throw new Error("CLOUDINARY_DEFAULT_AVATAR_URL environment variable must be set in production");
+    return cloudinaryUrl;
   }
 
-  // In development, use local file
-  const localPath = process.env.DEFAULT_AVATAR_LOCAL_PATH || "/uploads/students/default-avatar.png";
+  // In local mode, use local file
+  const localPath = process.env.DEFAULT_AVATAR_URL || "/uploads/students/default-avatar.png";
   return getFileUrl(localPath);
 };
