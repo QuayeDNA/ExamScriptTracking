@@ -421,4 +421,8 @@ export const examSessionsApi = {
       };
     }>(`/exam-sessions/${examSessionId}/attendance-summary`);
   },
+
+  exportSessionPDF: async (id: string): Promise<Blob> => {
+    return apiClient.getBlob(`/exam-sessions/${id}/export-pdf`);
+  },
 };

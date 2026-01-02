@@ -174,6 +174,14 @@ class ApiClient {
     return response.data;
   }
 
+  async getBlob(url: string, config?: AxiosRequestConfig): Promise<Blob> {
+    const response = await this.client.get<Blob>(url, {
+      ...config,
+      responseType: "blob",
+    });
+    return response.data;
+  }
+
   setToken(token: string) {
     localStorage.setItem("token", token);
   }

@@ -9,6 +9,7 @@ import {
 } from "../socket/handlers/batchEvents";
 import { incidentService } from "../services/incidentService";
 import { BatchTransferAutomationService } from "../services/batchTransferAutomationService";
+import { pdfService } from "../services/pdfService";
 
 const prisma = new PrismaClient();
 
@@ -1061,3 +1062,101 @@ export const endExamSession = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to end exam session" });
   }
 };
+
+// Export exam session as PDF
+export const exportExamSessionPDF = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch exam session with stats and creator info
+    const examSession = await prisma.examSession.findUnique({
+      where: { id },
+      include: {
+        createdBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        attendances: {
+          select: {
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!examSession) {
+      res.status(404).json({ message: "Exam session not found" });
+      return;
+    }
+
+    // Calculate stats
+    const totalAttended = examSession.attendances?.length || 0;
+    const submitted = examSession.attendances?.filter(
+      (a: any) => a.status === "SUBMITTED"
+    ).length || 0;
+    const present = examSession.attendances?.filter(
+      (a: any) => a.status === "PRESENT"
+    ).length || 0;
+
+    // Get expected students count
+    const expectedStudents = await prisma.examSessionStudent.count({
+      where: { examSessionId: id },
+    });
+
+    const attendanceRate =
+      expectedStudents > 0
+        ? ((totalAttended / expectedStudents) * 100).toFixed(1)
+        : null;
+
+    const examSessionWithStats = {
+      ...examSession,
+      stats: {
+        expectedStudents,
+        totalAttended,
+        submitted,
+        present,
+        attendanceRate,
+      },
+    };
+
+    // Generate QR code
+    const qrData = {
+      type: "EXAM_BATCH",
+      id: examSession.id,
+      batchQrCode: examSession.batchQrCode,
+      courseCode: examSession.courseCode,
+      courseName: examSession.courseName,
+      examDate: examSession.examDate.toISOString(),
+      venue: examSession.venue,
+      timestamp: new Date().toISOString(),
+    };
+
+    const qrCodeDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
+      width: 400,
+      margin: 2,
+    });
+
+    // Generate PDF
+    const pdfBuffer = await pdfService.generateExamSessionPDF(
+      examSessionWithStats,
+      qrCodeDataUrl
+    );
+
+    // Set response headers for PDF download
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="exam-session-${examSession.batchQrCode}.pdf"`
+    );
+    res.setHeader("Content-Length", pdfBuffer.length);
+
+    // Send PDF
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Export exam session PDF error:", error);
+    res.status(500).json({ message: "Failed to export exam session PDF" });
+  }
+};
+

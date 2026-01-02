@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { examSessionsApi } from "@/api/examSessions";
 import {
   ArrowLeft,
@@ -17,6 +19,7 @@ import {
   Eye,
   ShieldCheck,
   User,
+  FileDown,
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import Papa from "papaparse";
@@ -51,7 +54,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { toast } from "sonner";
 import {
   downloadExpectedStudentsTemplate,
   parseStudentCSV,
@@ -181,6 +183,13 @@ export default function BatchDetailsPage() {
   const { data: expectedStudentsData } = useQuery({
     queryKey: ["expectedStudents", id],
     queryFn: () => examSessionsApi.getExpectedStudents(id!),
+    enabled: !!id,
+  });
+
+  // Fetch QR code
+  const { data: qrCodeData } = useQuery({
+    queryKey: ["examSessionQRCode", id],
+    queryFn: () => examSessionsApi.getQRCode(id!),
     enabled: !!id,
   });
 
@@ -319,6 +328,22 @@ export default function BatchDetailsPage() {
     toast.success("Data refreshed");
   };
 
+  const handleExportPDF = async () => {
+    try {
+      const blob = await examSessionsApi.exportSessionPDF(id!);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `exam-session-${session.batchQrCode}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF exported successfully");
+    } catch (error) {
+      toast.error("Failed to export PDF");
+      console.error("Export PDF error:", error);
+    }
+  };
+
   if (isLoading || !sessionData) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -344,7 +369,8 @@ export default function BatchDetailsPage() {
       {/* Header */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
+          <div className="space-y-4">
+            {/* First Row: Back button, Title and Status Badge */}
             <div className="flex items-center gap-4">
               <Button
                 onClick={() => navigate("/dashboard/exam-sessions")}
@@ -353,9 +379,9 @@ export default function BatchDetailsPage() {
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
-              <div>
-                <div className="flex items-center gap-3">
-                  <CardTitle className="text-2xl">
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <CardTitle className="text-xl sm:text-2xl">
                     {session.courseCode} - {session.courseName}
                   </CardTitle>
                   <Badge variant={getStatusBadgeVariant(session.status)}>
@@ -364,7 +390,9 @@ export default function BatchDetailsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
+
+            {/* Second Row: Action Buttons */}
+            <div className="flex flex-wrap gap-2 pl-0 sm:pl-14">
               <Button
                 onClick={() => {
                   // Open QR code modal or section
@@ -375,7 +403,13 @@ export default function BatchDetailsPage() {
                 size="sm"
               >
                 <QrCode className="w-4 h-4 mr-2" />
-                View QR
+                <span className="hidden sm:inline">View QR</span>
+                <span className="sm:hidden">QR</span>
+              </Button>
+              <Button onClick={handleExportPDF} variant="outline" size="sm">
+                <FileDown className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Export PDF</span>
+                <span className="sm:hidden">PDF</span>
               </Button>
               <Select
                 value={session.status}
@@ -386,7 +420,7 @@ export default function BatchDetailsPage() {
                 }}
                 disabled={updateStatusMutation.isPending}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-32 sm:w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -417,9 +451,13 @@ export default function BatchDetailsPage() {
                     }
                   }}
                   disabled={endSessionMutation.isPending}
+                  size="sm"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  {endSessionMutation.isPending ? "Ending..." : "End Session"}
+                  <span className="hidden sm:inline">
+                    {endSessionMutation.isPending ? "Ending..." : "End Session"}
+                  </span>
+                  <span className="sm:hidden">End</span>
                 </Button>
               )}
               <Button
@@ -438,11 +476,15 @@ export default function BatchDetailsPage() {
                 disabled={deleteSessionMutation.isPending}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                {deleteSessionMutation.isPending ? "Deleting..." : "Delete"}
+                <span className="hidden sm:inline">
+                  {deleteSessionMutation.isPending ? "Deleting..." : "Delete"}
+                </span>
+                <span className="sm:hidden">Delete</span>
               </Button>
-              <Button onClick={handleRefresh} variant="outline">
+              <Button onClick={handleRefresh} variant="outline" size="sm">
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
+                <span className="sm:hidden">Sync</span>
               </Button>
             </div>
           </div>
@@ -462,47 +504,26 @@ export default function BatchDetailsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center space-y-4">
-            <div className="p-4 bg-white border rounded-lg">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                  session.batchQrCode
-                )}`}
-                alt="Batch QR Code"
-                className="w-48 h-48"
-              />
-            </div>
+            {qrCodeData ? (
+              <QRCodeDisplay data={qrCodeData.qrCode} size={200} />
+            ) : (
+              <div className="w-48 h-48 bg-muted animate-pulse rounded-lg" />
+            )}
             <div className="text-center">
               <p className="font-medium text-lg">{session.batchQrCode}</p>
               <p className="text-sm text-muted-foreground">Scan to check in</p>
             </div>
             <Button
               onClick={() => {
-                const canvas = document.createElement("canvas");
-                const ctx = canvas.getContext("2d");
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => {
-                  canvas.width = 300;
-                  canvas.height = 300;
-                  ctx?.drawImage(img, 0, 0, 300, 300);
-                  canvas.toBlob((blob) => {
-                    if (blob) {
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `batch-${session.batchQrCode}.png`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                    }
-                  });
-                };
-                img.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-                  session.batchQrCode
-                )}`;
+                if (!qrCodeData?.qrCode) return;
+                const link = document.createElement("a");
+                link.href = qrCodeData.qrCode;
+                link.download = `batch-${session.batchQrCode}.png`;
+                link.click();
+                toast.success("QR Code downloaded");
               }}
               variant="outline"
+              disabled={!qrCodeData}
             >
               <Download className="w-4 h-4 mr-2" />
               Download QR Code

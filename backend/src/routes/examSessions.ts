@@ -12,6 +12,7 @@ import {
   getExamSessionManifest,
   getDepartments,
   getFaculties,
+  exportExamSessionPDF,
 } from "../controllers/examSessionController";
 import {
   addExpectedStudents,
@@ -41,6 +42,9 @@ router.get("/:id", getExamSession);
 
 // Get batch QR code (accessible to all authenticated users)
 router.get("/:id/qr-code", generateBatchQRCodeEndpoint);
+
+// Export exam session as PDF (accessible to all authenticated users)
+router.get("/:id/export-pdf", exportExamSessionPDF);
 
 // Get exam session manifest (accessible to all authenticated users)
 router.get("/:id/manifest", getExamSessionManifest);
