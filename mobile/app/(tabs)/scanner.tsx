@@ -25,6 +25,8 @@ function ScannerScreen() {
   const colors = useThemeColors();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState("");
   const [scanMode, setScanMode] = useState<"ENTRY" | "EXIT">("ENTRY");
   const [activeExamSession, setActiveExamSession] =
     useState<ExamSession | null>(null);
@@ -67,6 +69,8 @@ function ScannerScreen() {
   };
 
   const loadExamSession = async (batchId: string) => {
+    setProcessing(true);
+    setProcessingMessage("Loading exam session...");
     try {
       // Load session and expected students in parallel
       const [session, studentsData] = await Promise.all([
@@ -86,7 +90,7 @@ function ScannerScreen() {
       // Use requestAnimationFrame to ensure state is updated before opening drawer
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          drawerRef.current?.snapToIndex(1); // Start at HALF height for better visibility
+          drawerRef.current?.snapToIndex(0); // Start at PEEK (25%) height
         });
       });
 
@@ -103,6 +107,9 @@ function ScannerScreen() {
         text1: "Load Error",
         text2: error.error || "Failed to load exam session",
       });
+    } finally {
+      setProcessing(false);
+      setProcessingMessage("");
     }
   };
 
@@ -116,6 +123,7 @@ function ScannerScreen() {
       return;
     }
 
+    setProcessing(true);
     try {
       const studentIndexNumber = qrData.indexNumber;
 
@@ -123,6 +131,7 @@ function ScannerScreen() {
       const expectedStudent = expectedStudents.get(studentIndexNumber);
 
       if (!expectedStudent) {
+        setProcessing(false);
         Toast.show({
           type: "error",
           text1: "Student Not Expected",
@@ -132,12 +141,15 @@ function ScannerScreen() {
       }
 
       // Store last scanned student for profile display
+      // Log the student data to debug profile picture issue
+      console.log("Expected Student Data:", expectedStudent);
       setLastScannedStudent(expectedStudent);
 
       const studentName = `${expectedStudent.firstName || ""} ${expectedStudent.lastName || ""}`;
 
       if (scanMode === "ENTRY") {
         if (expectedStudent.attendance) {
+          setProcessing(false);
           Toast.show({
             type: "info",
             text1: "Already Entered",
@@ -146,16 +158,18 @@ function ScannerScreen() {
           return;
         }
 
+        setProcessingMessage("Recording entry...");
         await recordStudentEntry(qrData.id);
 
+        setProcessingMessage("Updating session...");
         Toast.show({
           type: "success",
           text1: "✓ Entry Recorded",
           text2: `${studentName} (${studentIndexNumber})`,
         });
-        setShowProfileModal(true);
       } else {
         if (!expectedStudent.attendance) {
+          setProcessing(false);
           Toast.show({
             type: "warning",
             text1: "Not Entered Yet",
@@ -165,6 +179,7 @@ function ScannerScreen() {
         }
 
         if (expectedStudent.attendance.exitTime) {
+          setProcessing(false);
           Toast.show({
             type: "info",
             text1: "Already Exited",
@@ -173,14 +188,15 @@ function ScannerScreen() {
           return;
         }
 
+        setProcessingMessage("Recording exit...");
         await recordStudentExit(expectedStudent.attendance.id);
 
+        setProcessingMessage("Updating session...");
         Toast.show({
           type: "success",
           text1: "✓ Exit Recorded",
           text2: `${studentName} (${studentIndexNumber})`,
         });
-        setShowProfileModal(true);
       }
 
       // Update cached student data after attendance change
@@ -203,6 +219,9 @@ function ScannerScreen() {
         text1: "Processing Error",
         text2: error.error || "Failed to process student scan",
       });
+    } finally {
+      setProcessing(false);
+      setProcessingMessage("");
     }
   };
 
@@ -548,6 +567,10 @@ function ScannerScreen() {
                 source={{ uri: lastScannedStudent.profilePicture }}
                 style={styles.profileImage}
                 resizeMode="cover"
+                onError={(error) => {
+                  console.log("Profile image load error:", error.nativeEvent.error);
+                  console.log("Image URI:", lastScannedStudent.profilePicture);
+                }}
               />
             ) : (
               <View style={[styles.profilePlaceholder, { backgroundColor: colors.muted }]}>
@@ -568,6 +591,22 @@ function ScannerScreen() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Processing/Loading Modal */}
+      <Modal
+        visible={processing}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingModal, { backgroundColor: colors.card }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.foreground }]}>
+              {processingMessage || "Processing..."}
+            </Text>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -639,6 +678,7 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
     width: "100%",
+    aspectRatio: 3/4,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -775,6 +815,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModal: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    gap: 16,
+    minWidth: 200,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
 
