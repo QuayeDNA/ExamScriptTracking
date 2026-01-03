@@ -57,6 +57,7 @@ import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferP
 import { MobileLoginPage } from "@/pages/mobile/MobileLoginPage";
 import { MobileQRRegistrationPage } from "@/pages/mobile/MobileQRRegistrationPage";
 import { MobileChangePasswordPage } from "@/pages/mobile/MobileChangePasswordPage";
+import { StudentAttendancePage } from "@/pages/StudentAttendancePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +97,7 @@ function App() {
                   element={<DesignSystemDemo />}
                 />
                 <Route path="/student-qr" element={<StudentQRLookup />} />
+                <Route path="/student-attendance" element={<StudentAttendancePage />} />
                 <Route path="/enroll-biometric" element={<BiometricEnrollmentPage />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 

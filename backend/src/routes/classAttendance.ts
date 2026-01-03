@@ -7,6 +7,7 @@ import {
   recordAttendanceByBiometric,
   getActiveSessions,
   getSession,
+  getSessionLiveStats,
   getAttendanceHistory,
   generateAttendanceLink,
   enrollBiometric,
@@ -68,6 +69,17 @@ router.get(
   "/sessions/:id",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
   getSession
+);
+
+/**
+ * Get live statistics for a specific session
+ * GET /api/class-attendance/sessions/:id/live-stats
+ * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ */
+router.get(
+  "/sessions/:id/live-stats",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  getSessionLiveStats
 );
 
 // ============================================================================

@@ -242,6 +242,45 @@ export interface EnrollBiometricResponse {
   };
 }
 
+export interface SessionLiveStats {
+  sessionId: string;
+  courseCode: string;
+  courseName?: string;
+  status: RecordingStatus;
+  startTime: string;
+  endTime?: string;
+  durationMinutes: number;
+  statistics: {
+    totalRecorded: number;
+    presentCount: number;
+    lateCount: number;
+    excusedCount: number;
+    totalRegisteredStudents: number;
+    attendanceRate: number | null;
+  };
+  methodBreakdown: {
+    biometric: number;
+    biometricPercent: number;
+    qrCode: number;
+    qrPercent: number;
+    manual: number;
+    manualPercent: number;
+  };
+  peakAttendance: {
+    hour: string;
+    count: number;
+    attendanceByHour: Record<string, number>;
+  };
+  recentAttendance: Array<{
+    studentId: string;
+    studentName: string;
+    indexNumber?: string;
+    scanTime: string;
+    verificationMethod?: AttendanceMethod;
+    status: ClassAttendanceStatus;
+  }>;
+}
+
 // ============================================================================
 // API CLIENT
 // ============================================================================
@@ -267,9 +306,9 @@ export const classAttendanceApi = {
    * End an active attendance session
    */
   endSession: async (data: EndSessionRequest): Promise<EndSessionResponse> => {
-    return apiClient.put<EndSessionResponse>(
-      `/class-attendance/sessions/${data.recordId}/end`,
-      {}
+    return apiClient.post<EndSessionResponse>(
+      "/class-attendance/sessions/end",
+      data
     );
   },
 
@@ -290,6 +329,17 @@ export const classAttendanceApi = {
   ): Promise<{ record: ClassAttendanceRecord }> => {
     return apiClient.get<{ record: ClassAttendanceRecord }>(
       `/class-attendance/sessions/${recordId}`
+    );
+  },
+
+  /**
+   * Get live statistics for a specific attendance session
+   */
+  getSessionLiveStats: async (
+    recordId: string
+  ): Promise<SessionLiveStats> => {
+    return apiClient.get<SessionLiveStats>(
+      `/class-attendance/sessions/${recordId}/live-stats`
     );
   },
 
@@ -386,7 +436,7 @@ export const classAttendanceApi = {
     data: GenerateLinkRequest
   ): Promise<GenerateLinkResponse> => {
     return apiClient.post<GenerateLinkResponse>(
-      "/class-attendance/links",
+      "/class-attendance/links/generate",
       data
     );
   },

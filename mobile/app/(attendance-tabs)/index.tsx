@@ -3,23 +3,122 @@
  * Main landing screen for the attendance app
  */
 
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
 import { useAuthStore } from "@/store/auth";
 import { Card } from "@/components/ui/card";
+import { classAttendanceApi, type SessionLiveStats } from "@/api/classAttendance";
+import { useSocket } from "@/hooks/useSocket";
+import type { ClassAttendanceRecord } from "@/types";
 
 export default function AttendanceDashboard() {
   const colors = useThemeColors();
   const { user } = useAuthStore();
+  const socket = useSocket();
+  const [activeSessions, setActiveSessions] = useState<ClassAttendanceRecord[]>([]);
+  const [liveStats, setLiveStats] = useState<SessionLiveStats | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const setupSocketListeners = useCallback(() => {
+    const unsubscribers: (() => void)[] = [];
+
+    // Listen for session started events
+    unsubscribers.push(socket.on("session:started", (data: unknown) => {
+      const typedData = data as { record: ClassAttendanceRecord };
+      setActiveSessions((prev) => [typedData.record, ...prev]);
+    }));
+
+    // Listen for session ended events
+    unsubscribers.push(socket.on("session:ended", (data: unknown) => {
+      const typedData = data as { record: ClassAttendanceRecord };
+      setActiveSessions((prev) => prev.filter((s) => s.id !== typedData.record.id));
+      setLiveStats((prev) => prev && prev.sessionId === typedData.record.id ? null : prev);
+    }));
+
+    // Listen for attendance recorded events
+    unsubscribers.push(socket.on("attendance:recorded", (data: unknown) => {
+      const typedData = data as { record: ClassAttendanceRecord };
+      setActiveSessions((prev) =>
+        prev.map((session) => (session.id === typedData.record.id ? typedData.record : session))
+      );
+    }));
+
+    // Listen for live attendance updates
+    unsubscribers.push(socket.on("attendance:live_update", (data: unknown) => {
+      const typedData = data as { recordId: string; stats: any };
+      setActiveSessions((prev) =>
+        prev.map((session) => {
+          if (session.id === typedData.recordId) {
+            return { ...session, totalStudents: typedData.stats.totalRecorded };
+          }
+          return session;
+        })
+      );
+    }));
+
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    loadActiveSessions();
+    const cleanup = setupSocketListeners();
+    return cleanup;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load live stats for the first active session
+  useEffect(() => {
+    if (activeSessions.length > 0 && activeSessions[0].status === 'IN_PROGRESS') {
+      loadLiveStats(activeSessions[0].id);
+    } else {
+      setLiveStats(null);
+    }
+  }, [activeSessions]);
+
+  const loadActiveSessions = async () => {
+    try {
+      const response = await classAttendanceApi.getActiveSessions();
+      setActiveSessions(response.sessions || []);
+    } catch (error: any) {
+      console.error("Failed to load sessions:", error);
+    }
+  };
+
+  const loadLiveStats = async (sessionId: string) => {
+    try {
+      const stats = await classAttendanceApi.getSessionLiveStats(sessionId);
+      setLiveStats(stats);
+    } catch (error: any) {
+      console.error("Failed to load live stats:", error);
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadActiveSessions();
+    setRefreshing(false);
+  };
+
+
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: colors.foregroundMuted }]}>
@@ -104,6 +203,75 @@ export default function AttendanceDashboard() {
           </View>
         </View>
 
+        {/* Live Session Stats */}
+        {activeSessions.length > 0 && liveStats && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Live Session
+              </Text>
+              <TouchableOpacity onPress={() => router.push({
+                pathname: "/session-details" as any,
+                params: { sessionId: activeSessions[0].id }
+              })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>View Details</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Card elevation="sm" style={styles.liveSessionCard}>
+              <View style={styles.liveSessionHeader}>
+                <View>
+                  <Text style={[styles.liveSessionTitle, { color: colors.foreground }]}>
+                    {liveStats.courseCode} - {liveStats.courseName}
+                  </Text>
+                  <Text style={[styles.liveSessionSubtitle, { color: colors.foregroundMuted }]}>
+                    {liveStats.statistics.totalRecorded}/{liveStats.statistics.totalRegisteredStudents || 'N/A'} students
+                    {liveStats.statistics.attendanceRate ? ` (${liveStats.statistics.attendanceRate}%)` : ''}
+                  </Text>
+                </View>
+                <View style={[styles.liveIndicator, { backgroundColor: colors.success }]}>
+                  <Ionicons name="radio-button-on" size={10} color="#fff" />
+                  <Text style={styles.liveIndicatorText}>LIVE</Text>
+                </View>
+              </View>
+
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.min(liveStats.statistics.attendanceRate || 0, 100)}%`,
+                      backgroundColor: (liveStats.statistics.attendanceRate || 0) >= 80 ? colors.success :
+                                      (liveStats.statistics.attendanceRate || 0) >= 60 ? colors.warning : colors.error
+                    }
+                  ]}
+                />
+              </View>
+
+              <View style={styles.methodStats}>
+                <View style={styles.methodStat}>
+                  <Ionicons name="finger-print" size={16} color={colors.primary} />
+                  <Text style={[styles.methodStatText, { color: colors.foreground }]}>
+                    {liveStats.methodBreakdown.biometric} ({liveStats.methodBreakdown.biometricPercent}%)
+                  </Text>
+                </View>
+                <View style={styles.methodStat}>
+                  <Ionicons name="qr-code" size={16} color={colors.success} />
+                  <Text style={[styles.methodStatText, { color: colors.foreground }]}>
+                    {liveStats.methodBreakdown.qrCode} ({liveStats.methodBreakdown.qrPercent}%)
+                  </Text>
+                </View>
+                <View style={styles.methodStat}>
+                  <Ionicons name="create" size={16} color={colors.warning} />
+                  <Text style={[styles.methodStatText, { color: colors.foreground }]}>
+                    {liveStats.methodBreakdown.manual} ({liveStats.methodBreakdown.manualPercent}%)
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          </View>
+        )}
+
         {/* Today's Stats */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -114,21 +282,27 @@ export default function AttendanceDashboard() {
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <Ionicons name="people" size={24} color={colors.primary} />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>0</Text>
+                <Text style={[styles.statValue, { color: colors.foreground }]}>
+                  {activeSessions.length}
+                </Text>
                 <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                   Sessions
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>0</Text>
+                <Text style={[styles.statValue, { color: colors.foreground }]}>
+                  {liveStats?.statistics.presentCount || 0}
+                </Text>
                 <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                   Present
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Ionicons name="time" size={24} color="#f59e0b" />
-                <Text style={[styles.statValue, { color: colors.foreground }]}>0%</Text>
+                <Text style={[styles.statValue, { color: colors.foreground }]}>
+                  {liveStats?.statistics.attendanceRate || 0}%
+                </Text>
                 <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                   Attendance
                 </Text>
@@ -281,5 +455,61 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: "center",
+  },
+  liveSessionCard: {
+    padding: 16,
+  },
+  liveSessionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  liveSessionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    flex: 1,
+  },
+  liveSessionSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  liveIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liveIndicatorText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    borderRadius: 3,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  methodStats: {
+    flexDirection: "row",
+    gap: 16,
+    justifyContent: "space-around",
+  },
+  methodStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  methodStatText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

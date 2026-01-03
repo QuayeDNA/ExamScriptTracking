@@ -24,6 +24,7 @@ const startSessionSchema = z.object({
   courseCode: z.string().min(1, "Course code is required"),
   lecturerName: z.string().optional(),
   notes: z.string().optional(),
+  totalRegisteredStudents: z.number().int().min(0).optional(),
 });
 
 const recordAttendanceSchema = z.object({
@@ -150,6 +151,7 @@ export const startSession = async (req: Request, res: Response) => {
         courseCode: validatedData.courseCode,
         lecturerName: validatedData.lecturerName,
         notes: validatedData.notes,
+        totalStudents: validatedData.totalRegisteredStudents || 0,
         status: RecordingStatus.IN_PROGRESS,
       },
       include: {
@@ -567,6 +569,150 @@ export const getSession = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get live statistics for a specific session
+ * GET /api/class-attendance/sessions/:id/live-stats
+ * Roles: LECTURER, ADMIN, CLASS_REP
+ */
+export const getSessionLiveStats = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    const session = await prisma.classAttendanceRecord.findUnique({
+      where: { id },
+      include: {
+        students: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                indexNumber: true,
+                firstName: true,
+                lastName: true,
+                profilePicture: true,
+              },
+            },
+          },
+          orderBy: {
+            scanTime: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    // Check authorization
+    if (role !== "ADMIN" && session.userId !== userId) {
+      res.status(403).json({ error: "Unauthorized access to this session" });
+      return;
+    }
+
+    // Calculate method breakdown
+    const methodBreakdown = {
+      BIOMETRIC_FINGERPRINT: 0,
+      QR_CODE: 0,
+      MANUAL_INDEX: 0,
+      BIOMETRIC_FACE: 0,
+    };
+
+    session.students.forEach((student) => {
+      if (student.verificationMethod) {
+        methodBreakdown[student.verificationMethod]++;
+      }
+    });
+
+    // Calculate attendance by time (peak attendance tracking)
+    const attendanceByHour: Record<string, number> = {};
+    let peakHour = "";
+    let peakCount = 0;
+
+    session.students.forEach((student) => {
+      const hour = new Date(student.scanTime).getHours();
+      const hourKey = `${hour}:00`;
+      attendanceByHour[hourKey] = (attendanceByHour[hourKey] || 0) + 1;
+      
+      if (attendanceByHour[hourKey] > peakCount) {
+        peakCount = attendanceByHour[hourKey];
+        peakHour = hourKey;
+      }
+    });
+
+    // Get recent attendance (last 10)
+    const recentAttendance = session.students.slice(0, 10).map((s) => ({
+      studentId: s.studentId,
+      studentName: s.student ? `${s.student.firstName} ${s.student.lastName}` : 'Unknown',
+      indexNumber: s.student?.indexNumber,
+      scanTime: s.scanTime,
+      verificationMethod: s.verificationMethod,
+      status: s.status,
+    }));
+
+    // Calculate statistics
+    const totalRecorded = session.students.length;
+    const presentCount = session.students.filter((s) => s.status === "PRESENT").length;
+    const lateCount = session.students.filter((s) => s.status === "LATE").length;
+    const excusedCount = session.students.filter((s) => s.status === "EXCUSED").length;
+
+    // Calculate duration
+    const startTime = new Date(session.startTime);
+    const currentTime = session.endTime ? new Date(session.endTime) : new Date();
+    const durationMinutes = Math.floor((currentTime.getTime() - startTime.getTime()) / 60000);
+
+    // Attendance rate (based on total registered students)
+    const totalRegisteredStudents = session.totalStudents;
+    const attendanceRate = totalRegisteredStudents > 0 
+      ? Math.round((totalRecorded / totalRegisteredStudents) * 100) 
+      : null;
+
+    res.json({
+      sessionId: session.id,
+      courseCode: session.courseCode,
+      courseName: session.courseName,
+      status: session.status,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      durationMinutes,
+      statistics: {
+        totalRecorded,
+        presentCount,
+        lateCount,
+        excusedCount,
+        totalRegisteredStudents,
+        attendanceRate,
+      },
+      methodBreakdown: {
+        biometric: methodBreakdown.BIOMETRIC_FINGERPRINT + methodBreakdown.BIOMETRIC_FACE,
+        biometricPercent: totalRecorded > 0 
+          ? Math.round(((methodBreakdown.BIOMETRIC_FINGERPRINT + methodBreakdown.BIOMETRIC_FACE) / totalRecorded) * 100)
+          : 0,
+        qrCode: methodBreakdown.QR_CODE,
+        qrPercent: totalRecorded > 0 
+          ? Math.round((methodBreakdown.QR_CODE / totalRecorded) * 100)
+          : 0,
+        manual: methodBreakdown.MANUAL_INDEX,
+        manualPercent: totalRecorded > 0 
+          ? Math.round((methodBreakdown.MANUAL_INDEX / totalRecorded) * 100)
+          : 0,
+      },
+      peakAttendance: {
+        hour: peakHour,
+        count: peakCount,
+        attendanceByHour,
+      },
+      recentAttendance,
+    });
+  } catch (error) {
+    console.error("Error getting session live stats:", error);
+    res.status(500).json({ error: "Failed to get session statistics" });
+  }
+};
+
+/**
  * Get attendance history
  * GET /api/class-attendance/history
  * Roles: LECTURER, ADMIN, CLASS_REP
@@ -687,7 +833,7 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
       link: {
         id: link.id,
         token: link.linkToken,
-        url: `${process.env.APP_URL}/attendance/mark/${link.linkToken}`,
+        url: `${process.env.APP_URL || 'http://localhost:5173'}/student-attendance?token=${link.linkToken}`,
         expiresAt: link.expiresAt,
         maxUses: link.maxUses,
       },

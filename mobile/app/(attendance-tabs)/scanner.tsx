@@ -10,10 +10,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   Modal,
   ScrollView,
+  Image,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,6 +28,8 @@ import { classAttendanceApi } from "@/api/classAttendance";
 import { useSocket } from "@/hooks/useSocket";
 import type { ClassAttendanceRecord, RecordAttendanceResponse } from "@/types";
 import * as Device from "expo-device";
+import { toast } from "@/utils/toast";
+import { searchStudents, type Student } from "@/api/students";
 
 type RecordingMethod = "QR" | "MANUAL" | "BIOMETRIC";
 
@@ -45,6 +48,9 @@ export default function AttendanceRecorder() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastRecorded, setLastRecorded] = useState<RecordAttendanceResponse | null>(null);
   const [hasBiometric, setHasBiometric] = useState(false);
+  const [searchResults, setSearchResults] = useState<Student[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   
 
@@ -80,10 +86,14 @@ export default function AttendanceRecorder() {
     requestCameraPermission();
     checkBiometricSupport();
     loadActiveSession();
-    const cleanup = setupSocketListeners();
+  }, [loadActiveSession]);
 
+  useEffect(() => {
+    if (!socket || !activeSession) return;
+
+    const cleanup = setupSocketListeners();
     return cleanup;
-  }, [setupSocketListeners]);
+  }, [socket, activeSession, setupSocketListeners]);
   
   const requestCameraPermission = async () => {
     const { status } = await Camera.requestCameraPermissionsAsync();
@@ -96,7 +106,29 @@ export default function AttendanceRecorder() {
     setHasBiometric(compatible && enrolled);
   };
 
-  const loadActiveSession = async () => {
+  // Search students with debouncing
+  useEffect(() => {
+    const searchTimer = setTimeout(async () => {
+      if (indexNumber.trim().length >= 2) {
+        setSearching(true);
+        try {
+          const response = await searchStudents(indexNumber.trim(), 10);
+          setSearchResults(response.students);
+        } catch (error) {
+          console.error("Search failed:", error);
+          setSearchResults([]);
+        } finally {
+          setSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(searchTimer);
+  }, [indexNumber]);
+
+  const loadActiveSession = useCallback(async () => {
     try {
       setLoading(true);
       if (sessionId) {
@@ -115,7 +147,7 @@ export default function AttendanceRecorder() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId]);
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || !activeSession) return;
@@ -133,21 +165,26 @@ export default function AttendanceRecorder() {
 
       setLastRecorded(response);
       setShowSuccess(true);
+      toast.success(
+        `✓ ${response.student.firstName} ${response.student.lastName}`,
+        `Attendance recorded via QR`
+      );
       setTimeout(() => {
         setShowSuccess(false);
         setScanned(false);
       }, 2000);
     } catch (error: any) {
-      Alert.alert("Error", error?.error || "Failed to record attendance");
+      toast.error("Recording Failed", error?.error || "Failed to record attendance");
       setScanned(false);
     } finally {
       setRecording(false);
     }
   };
 
-  const handleManualEntry = async () => {
-    if (!indexNumber.trim() || !activeSession) {
-      Alert.alert("Error", "Please enter a student index number");
+  const handleManualEntry = async (student?: Student) => {
+    const targetStudent = student || selectedStudent;
+    if (!targetStudent || !activeSession) {
+      toast.warning("No Student Selected", "Please select a student from the list");
       return;
     }
 
@@ -155,18 +192,24 @@ export default function AttendanceRecorder() {
     try {
       const response = await classAttendanceApi.recordAttendanceByIndex({
         recordId: activeSession.id,
-        indexNumber: indexNumber.trim().toUpperCase(),
+        indexNumber: targetStudent.indexNumber.toUpperCase(),
         verificationMethod: "MANUAL_INDEX",
       });
 
       setLastRecorded(response);
       setShowSuccess(true);
+      toast.success(
+        `✓ ${response.student.firstName} ${response.student.lastName}`,
+        `Attendance recorded manually`
+      );
       setIndexNumber("");
+      setSelectedStudent(null);
+      setSearchResults([]);
       setTimeout(() => {
         setShowSuccess(false);
       }, 2000);
     } catch (error: any) {
-      Alert.alert("Error", error?.error || "Failed to record attendance");
+      toast.error("Recording Failed", error?.error || "Failed to record attendance");
     } finally {
       setRecording(false);
     }
@@ -174,7 +217,7 @@ export default function AttendanceRecorder() {
 
   const handleBiometricAuth = async () => {
     if (!activeSession) {
-      Alert.alert("Error", "No active session");
+      toast.error("No Active Session", "Please start a session first");
       return;
     }
 
@@ -190,14 +233,14 @@ export default function AttendanceRecorder() {
         // 1. Get the student's ID associated with this device/biometric
         // 2. Get the actual biometric data (this varies by platform)
         // For now, this is a placeholder showing the flow
-        Alert.alert(
-          "Biometric Verification",
-          "Biometric authentication successful. In production, this would record attendance with biometric data."
+        toast.info(
+          "Biometric Verified",
+          "In production, this would record attendance with biometric data"
         );
         setRecording(false);
       }
     } catch {
-      Alert.alert("Error", "Biometric authentication failed");
+      toast.error("Authentication Failed", "Biometric authentication failed");
     }
   };
 
@@ -400,32 +443,124 @@ export default function AttendanceRecorder() {
         )}
 
         {method === "MANUAL" && (
-          <Card elevation="sm" style={styles.manualCard}>
-            <View style={styles.manualContainer}>
-              <Ionicons name="keypad-outline" size={48} color={colors.primary} />
-              <Text style={[styles.manualTitle, { color: colors.foreground }]}>
-                Enter Index Number
-              </Text>
-              <TextInput
-                style={[styles.indexInput, { backgroundColor: colors.muted, color: colors.foreground }]}
-                placeholder="e.g., 2020001"
-                placeholderTextColor={colors.foregroundMuted}
-                value={indexNumber}
-                onChangeText={setIndexNumber}
-                autoCapitalize="characters"
-                keyboardType="default"
-                autoFocus
-              />
+          <View style={styles.manualWrapper}>
+            <Card elevation="sm" style={styles.manualCard}>
+              <View style={styles.searchContainer}>
+                <View style={styles.searchInputWrapper}>
+                  <Ionicons name="search" size={20} color={colors.foregroundMuted} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.foreground }]}
+                    placeholder="Search by index number or name..."
+                    placeholderTextColor={colors.foregroundMuted}
+                    value={indexNumber}
+                    onChangeText={setIndexNumber}
+                    autoCapitalize="characters"
+                    autoFocus
+                  />
+                  {indexNumber.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setIndexNumber("");
+                        setSearchResults([]);
+                        setSelectedStudent(null);
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.foregroundMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {searching && (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
+                )}
+              </View>
+
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(item) => item.id || item.indexNumber}
+                  style={styles.searchResults}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.studentCard,
+                        {
+                          backgroundColor: selectedStudent?.indexNumber === item.indexNumber
+                            ? `${colors.primary}15`
+                            : colors.muted,
+                          borderColor: selectedStudent?.indexNumber === item.indexNumber
+                            ? colors.primary
+                            : colors.border,
+                        },
+                      ]}
+                      onPress={() => setSelectedStudent(item)}
+                    >
+                      <View style={styles.studentCardLeft}>
+                        {item.profilePicture ? (
+                          <Image
+                            source={{ uri: item.profilePicture }}
+                            style={styles.studentPhoto}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.studentPhotoPlaceholder,
+                              { backgroundColor: colors.border },
+                            ]}
+                          >
+                            <Ionicons name="person" size={24} color={colors.foregroundMuted} />
+                          </View>
+                        )}
+                        <View style={styles.studentInfo}>
+                          <Text style={[styles.studentName, { color: colors.foreground }]}>
+                            {item.firstName} {item.lastName}
+                          </Text>
+                          <Text style={[styles.studentIndex, { color: colors.foregroundMuted }]}>
+                            {item.indexNumber}
+                          </Text>
+                          <Text style={[styles.studentProgram, { color: colors.foregroundMuted }]}>
+                            {item.program} • Level {item.level || "N/A"}
+                          </Text>
+                        </View>
+                      </View>
+                      {selectedStudent?.indexNumber === item.indexNumber && (
+                        <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+
+              {/* No Results */}
+              {indexNumber.trim().length >= 2 && !searching && searchResults.length === 0 && (
+                <View style={styles.noResults}>
+                  <Ionicons name="search" size={48} color={colors.foregroundMuted} />
+                  <Text style={[styles.noResultsText, { color: colors.foregroundMuted }]}>
+                    No students found
+                  </Text>
+                </View>
+              )}
+            </Card>
+
+            {/* Mark Attendance Button */}
+            {selectedStudent && (
               <Button
                 variant="default"
-                onPress={handleManualEntry}
-                disabled={recording || !indexNumber.trim()}
-                style={styles.submitButton}
+                onPress={() => handleManualEntry(selectedStudent)}
+                disabled={recording}
+                style={styles.markButton}
               >
-                {recording ? "Recording..." : "Record Attendance"}
+                {recording ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.markButtonText}>Mark Present</Text>
+                  </>
+                )}
               </Button>
-            </View>
-          </Card>
+            )}
+          </View>
         )}
 
         {method === "BIOMETRIC" && (
@@ -628,28 +763,94 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
   },
+  manualWrapper: {
+    flex: 1,
+  },
   manualCard: {
+    flex: 1,
     marginBottom: 16,
   },
-  manualContainer: {
-    alignItems: "center",
-    paddingVertical: 32,
-    gap: 16,
-  },
-  manualTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  indexInput: {
-    width: "100%",
+  searchContainer: {
     padding: 16,
-    borderRadius: 8,
-    fontSize: 18,
-    textAlign: "center",
-    fontWeight: "600",
+    paddingBottom: 8,
   },
-  submitButton: {
-    width: "100%",
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.05)",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  searchResults: {
+    maxHeight: 350,
+    paddingHorizontal: 16,
+  },
+  studentCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 2,
+  },
+  studentCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  studentPhoto: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  studentPhotoPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  studentInfo: {
+    flex: 1,
+  },
+  studentName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  studentIndex: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  studentProgram: {
+    fontSize: 12,
+  },
+  noResults: {
+    alignItems: "center",
+    paddingVertical: 48,
+    gap: 12,
+  },
+  noResultsText: {
+    fontSize: 16,
+  },
+  markButton: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   biometricCard: {
     marginBottom: 16,
