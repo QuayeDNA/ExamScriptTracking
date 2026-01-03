@@ -20,6 +20,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
 import { classAttendanceApi, type ClassAttendanceRecord } from "@/api/classAttendance";
 import { useSocket } from "@/hooks/useSocket";
+import { getFileUrl } from "@/lib/api-client";
+import { toast } from "@/utils/toast";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SessionDetailsScreen() {
   const colors = useThemeColors();
@@ -35,15 +38,21 @@ export default function SessionDetailsScreen() {
     
     try {
       setLoading(true);
-      // Fetch session details from API
-      const response = await classAttendanceApi.getActiveSessions();
-      const sessionData = response.sessions.find((s: ClassAttendanceRecord) => s.id === sessionId);
+      // Fetch specific session by ID
+      const response = await classAttendanceApi.getSession(sessionId);
+      console.log("Session response:", JSON.stringify(response, null, 2));
       
-      if (sessionData) {
-        setSession(sessionData);
+      // Handle both wrapped and unwrapped responses
+      const sessionData = response.record || response;
+      if (sessionData && sessionData.id) {
+        setSession(sessionData as ClassAttendanceRecord);
+      } else {
+        console.error("Invalid response structure:", response);
+        setSession(null);
       }
     } catch (error) {
       console.error("Failed to load session details:", error);
+      setSession(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -85,11 +94,22 @@ export default function SessionDetailsScreen() {
   };
 
   const getVerificationIcon = (method: string) => {
-    switch (method?.toLowerCase()) {
-      case "qr": return "qr-code";
-      case "manual": return "create";
-      case "photo": return "camera";
-      default: return "help-circle";
+    switch (method?.toUpperCase()) {
+      case "QR_CODE": return "qr-code";
+      case "MANUAL_INDEX": return "create-outline";
+      case "BIOMETRIC_FINGERPRINT": return "finger-print";
+      case "BIOMETRIC_FACE": return "camera-outline";
+      default: return "help-circle-outline";
+    }
+  };
+
+  const getVerificationLabel = (method: string) => {
+    switch (method?.toUpperCase()) {
+      case "QR_CODE": return "QR Scan";
+      case "MANUAL_INDEX": return "Manual Entry";
+      case "BIOMETRIC_FINGERPRINT": return "Fingerprint";
+      case "BIOMETRIC_FACE": return "Face Recognition";
+      default: return method || "Unknown";
     }
   };
 
@@ -144,9 +164,12 @@ export default function SessionDetailsScreen() {
   }
 
   const students = session.students || [];
-  const presentStudents = students.filter((s: any) => s.status === "present");
-  const markingStudents = students.filter((s: any) => s.status === "marking");
-  const absentStudents = students.filter((s: any) => s.status === "absent");
+  const totalRecorded = students.length;
+  const presentStudents = students.filter((s: any) => s.status === "PRESENT");
+  const lateStudents = students.filter((s: any) => s.status === "LATE");
+  const excusedStudents = students.filter((s: any) => s.status === "EXCUSED");
+  const totalExpected = session.totalStudents || 0;
+  const attendancePercentage = totalExpected > 0 ? Math.round((totalRecorded / totalExpected) * 100) : 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -223,6 +246,43 @@ export default function SessionDetailsScreen() {
           )}
         </View>
 
+        {/* Action Buttons */}
+        {session.status === "IN_PROGRESS" && (
+          <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                toast.info("Coming Soon: Export feature is in development");
+              }}
+            >
+              <Ionicons name="download-outline" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>Export Data</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.error, opacity: 0.9 }]}
+              onPress={async () => {
+                if (!session || session.status !== "IN_PROGRESS") {
+                  toast.error("Cannot end: Only IN PROGRESS sessions can be ended");
+                  return;
+                }
+                try {
+                  await classAttendanceApi.endSession({ recordId: session.id });
+                  // Clear recent recordings from AsyncStorage
+                  await AsyncStorage.removeItem(`attendance_recent_${session.id}`);
+                  toast.success("Session ended: Attendance session completed successfully");
+                  router.back();
+                } catch (error: any) {
+                  console.error("Failed to end session:", error);
+                  toast.error(error?.error || "Failed to end session");
+                }
+              }}
+            >
+              <Ionicons name="stop-circle-outline" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>End Session</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Statistics Card */}
         <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
@@ -240,36 +300,67 @@ export default function SessionDetailsScreen() {
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.warning }]}>
-                {markingStudents.length}
+                {lateStudents.length}
               </Text>
               <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-                Marking
+                Late
               </Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.foreground }]}>
-                {session.totalStudents}
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                {excusedStudents.length}
               </Text>
               <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-                Total
+                Excused
               </Text>
             </View>
           </View>
 
-          {/* Progress Bar - Shows present vs total recorded */}
-          <View style={[styles.progressBar, { backgroundColor: colors.muted }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { 
-                  backgroundColor: colors.success, 
-                  width: session.totalStudents > 0 
-                    ? `${Math.round((presentStudents.length / session.totalStudents) * 100)}%` 
-                    : '0%'
-                }
-              ]}
-            />
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.foreground }]}>
+                {totalRecorded}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
+                Recorded
+              </Text>
+            </View>
+            {totalExpected > 0 && (
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.foreground }]}>
+                  {totalExpected}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
+                  Expected
+                </Text>
+              </View>
+            )}
+            {totalExpected > 0 && (
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.primary }]}>
+                  {attendancePercentage}%
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
+                  Rate
+                </Text>
+              </View>
+            )}
           </View>
+
+          {/* Progress Bar - Shows recorded vs expected */}
+          {totalExpected > 0 && (
+            <View style={[styles.progressBar, { backgroundColor: colors.muted }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { 
+                    backgroundColor: colors.success, 
+                    width: `${Math.min(attendancePercentage, 100)}%`
+                  }
+                ]}
+              />
+            </View>
+          )}
         </View>
 
         {/* Student List */}
@@ -287,39 +378,42 @@ export default function SessionDetailsScreen() {
                   Present ({presentStudents.length})
                 </Text>
               </View>
-              {presentStudents.map((student: any) => (
+              {presentStudents.map((record: any) => (
                 <View
-                  key={student.id}
+                  key={record.id}
                   style={[
                     styles.studentItem,
                     { backgroundColor: colors.background, borderLeftColor: colors.success }
                   ]}
                 >
                   <View style={[styles.studentPhoto, { backgroundColor: colors.muted }]}>
-                    {student.photoUrl ? (
-                      <Image source={{ uri: student.photoUrl }} style={styles.studentPhotoImage} />
+                    {record.student?.profilePicture ? (
+                      <Image source={{ uri: getFileUrl(record.student.profilePicture) }} style={styles.studentPhotoImage} />
                     ) : (
                       <Ionicons name="person" size={24} color={colors.foregroundMuted} />
                     )}
                   </View>
                   <View style={styles.studentInfo}>
                     <Text style={[styles.studentName, { color: colors.foreground }]}>
-                      {student.name}
+                      {record.student ? `${record.student.firstName} ${record.student.lastName}` : 'Unknown'}
+                    </Text>
+                    <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                      {record.student?.indexNumber || ''}
                     </Text>
                     <View style={styles.studentMeta}>
                       <View style={styles.verificationBadge}>
                         <Ionicons
-                          name={getVerificationIcon(student.verificationMethod)}
+                          name={getVerificationIcon(record.verificationMethod)}
                           size={12}
                           color={colors.foregroundMuted}
                         />
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {student.verificationMethod}
+                          {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {student.timestamp && (
+                      {(record.confirmedAt || record.scanTime) && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(student.timestamp)}
+                          {formatTime(record.confirmedAt || record.scanTime)}
                         </Text>
                       )}
                     </View>
@@ -329,48 +423,51 @@ export default function SessionDetailsScreen() {
             </View>
           )}
 
-          {/* Marking Students */}
-          {markingStudents.length > 0 && (
+          {/* Late Students */}
+          {lateStudents.length > 0 && (
             <View style={styles.studentCategory}>
               <View style={styles.categoryHeader}>
                 <Ionicons name="time" size={20} color={colors.warning} />
                 <Text style={[styles.categoryTitle, { color: colors.foreground }]}>
-                  Marking ({markingStudents.length})
+                  Late ({lateStudents.length})
                 </Text>
               </View>
-              {markingStudents.map((student: any) => (
+              {lateStudents.map((record: any) => (
                 <View
-                  key={student.id}
+                  key={record.id}
                   style={[
                     styles.studentItem,
                     { backgroundColor: colors.background, borderLeftColor: colors.warning }
                   ]}
                 >
                   <View style={[styles.studentPhoto, { backgroundColor: colors.muted }]}>
-                    {student.photoUrl ? (
-                      <Image source={{ uri: student.photoUrl }} style={styles.studentPhotoImage} />
+                    {record.student?.profilePicture ? (
+                      <Image source={{ uri: getFileUrl(record.student.profilePicture) }} style={styles.studentPhotoImage} />
                     ) : (
                       <Ionicons name="person" size={24} color={colors.foregroundMuted} />
                     )}
                   </View>
                   <View style={styles.studentInfo}>
                     <Text style={[styles.studentName, { color: colors.foreground }]}>
-                      {student.name}
+                      {record.student ? `${record.student.firstName} ${record.student.lastName}` : 'Unknown'}
+                    </Text>
+                    <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                      {record.student?.indexNumber || ''}
                     </Text>
                     <View style={styles.studentMeta}>
                       <View style={styles.verificationBadge}>
                         <Ionicons
-                          name={getVerificationIcon(student.verificationMethod)}
+                          name={getVerificationIcon(record.verificationMethod)}
                           size={12}
                           color={colors.foregroundMuted}
                         />
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {student.verificationMethod}
+                          {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {student.timestamp && (
+                      {(record.confirmedAt || record.scanTime) && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(student.timestamp)}
+                          {formatTime(record.confirmedAt || record.scanTime)}
                         </Text>
                       )}
                     </View>
@@ -380,48 +477,51 @@ export default function SessionDetailsScreen() {
             </View>
           )}
 
-          {/* Absent Students */}
-          {absentStudents.length > 0 && (
+          {/* Excused Students */}
+          {excusedStudents.length > 0 && (
             <View style={styles.studentCategory}>
               <View style={styles.categoryHeader}>
-                <Ionicons name="close-circle" size={20} color={colors.error} />
+                <Ionicons name="alert-circle" size={20} color={colors.primary} />
                 <Text style={[styles.categoryTitle, { color: colors.foreground }]}>
-                  Absent ({absentStudents.length})
+                  Excused ({excusedStudents.length})
                 </Text>
               </View>
-              {absentStudents.map((student: any) => (
+              {excusedStudents.map((record: any) => (
                 <View
-                  key={student.id}
+                  key={record.id}
                   style={[
                     styles.studentItem,
-                    { backgroundColor: colors.background, borderLeftColor: colors.error }
+                    { backgroundColor: colors.background, borderLeftColor: colors.primary }
                   ]}
                 >
                   <View style={[styles.studentPhoto, { backgroundColor: colors.muted }]}>
-                    {student.photoUrl ? (
-                      <Image source={{ uri: student.photoUrl }} style={styles.studentPhotoImage} />
+                    {record.student?.profilePicture ? (
+                      <Image source={{ uri: getFileUrl(record.student.profilePicture) }} style={styles.studentPhotoImage} />
                     ) : (
                       <Ionicons name="person" size={24} color={colors.foregroundMuted} />
                     )}
                   </View>
                   <View style={styles.studentInfo}>
                     <Text style={[styles.studentName, { color: colors.foreground }]}>
-                      {student.name}
+                      {record.student ? `${record.student.firstName} ${record.student.lastName}` : 'Unknown'}
+                    </Text>
+                    <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                      {record.student?.indexNumber || ''}
                     </Text>
                     <View style={styles.studentMeta}>
                       <View style={styles.verificationBadge}>
                         <Ionicons
-                          name={getVerificationIcon(student.verificationMethod)}
+                          name={getVerificationIcon(record.verificationMethod)}
                           size={12}
                           color={colors.foregroundMuted}
                         />
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {student.verificationMethod}
+                          {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {student.timestamp && (
+                      {(record.confirmedAt || record.scanTime) && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(student.timestamp)}
+                          {formatTime(record.confirmedAt || record.scanTime)}
                         </Text>
                       )}
                     </View>
@@ -672,5 +772,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
     textAlign: "center",
+  },
+  actionsCard: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

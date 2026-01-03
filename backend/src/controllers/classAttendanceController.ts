@@ -297,10 +297,27 @@ export const recordAttendanceByQR = async (req: Request, res: Response) => {
   try {
     const validatedData = recordAttendanceByQRSchema.parse(req.body);
 
-    // Find student by QR code
-    const student = await prisma.student.findUnique({
-      where: { qrCode: validatedData.qrCode },
-    });
+    // Try to parse QR code as JSON first to extract student ID
+    let student;
+    try {
+      const qrData = JSON.parse(validatedData.qrCode);
+      if (qrData.type === "STUDENT" && qrData.id) {
+        // Look up by student ID from parsed QR code
+        student = await prisma.student.findUnique({
+          where: { id: qrData.id },
+        });
+      }
+    } catch (parseError) {
+      // QR code is not JSON or doesn't have expected structure
+      // Fall back to direct string match
+    }
+
+    // If not found by parsed ID, try direct string match
+    if (!student) {
+      student = await prisma.student.findUnique({
+        where: { qrCode: validatedData.qrCode },
+      });
+    }
 
     if (!student) {
       res.status(404).json({ error: "Student not found with this QR code" });
@@ -333,6 +350,11 @@ export const recordAttendanceByQR = async (req: Request, res: Response) => {
       return;
     }
     if (error instanceof Error) {
+      // Check if it's a duplicate attendance error
+      if (error.message.includes('has already been recorded')) {
+        res.status(409).json({ error: error.message, code: 'ALREADY_RECORDED' });
+        return;
+      }
       res.status(400).json({ error: error.message });
       return;
     }
@@ -385,6 +407,11 @@ export const recordAttendanceByIndex = async (req: Request, res: Response) => {
       return;
     }
     if (error instanceof Error) {
+      // Check if it's a duplicate attendance error
+      if (error.message.includes('has already been recorded')) {
+        res.status(409).json({ error: error.message, code: 'ALREADY_RECORDED' });
+        return;
+      }
       res.status(400).json({ error: error.message });
       return;
     }

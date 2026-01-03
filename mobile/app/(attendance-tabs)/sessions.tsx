@@ -448,6 +448,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  hint: {
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 16,
+  },
 });
 
 export default function AttendanceSessions() {
@@ -898,7 +903,10 @@ export default function AttendanceSessions() {
 
               <View style={styles.formGroup}>
                 <Text style={[styles.label, { color: colors.foreground }]}>
-                  Total Registered Students
+                  Total Students (Optional)
+                </Text>
+                <Text style={[styles.hint, { color: colors.foregroundMuted }]}>
+                  Set a limit on expected attendance. Leave empty for unlimited.
                 </Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}

@@ -71,6 +71,17 @@ export class AttendanceService {
       throw new Error(`Student ${student.indexNumber} has already been recorded for this session`);
     }
 
+    // Check if attendance limit has been reached (if totalStudents is set)
+    if (record.totalStudents > 0) {
+      const currentAttendanceCount = await prisma.classAttendance.count({
+        where: { recordId },
+      });
+
+      if (currentAttendanceCount >= record.totalStudents) {
+        throw new Error(`Attendance limit reached. Maximum ${record.totalStudents} students expected for this session`);
+      }
+    }
+
     // Create attendance record
     const attendance = await prisma.classAttendance.create({
       data: {
@@ -94,15 +105,9 @@ export class AttendanceService {
       },
     });
 
-    // Update total count
-    await prisma.classAttendanceRecord.update({
-      where: { id: recordId },
-      data: {
-        totalStudents: {
-          increment: 1,
-        },
-      },
-    });
+    // totalStudents is the EXPECTED limit, not the count
+    // The actual count is derived from students.length
+    // No need to increment here
 
     // Get updated record with all students for socket emission
     const updatedRecord = await prisma.classAttendanceRecord.findUnique({

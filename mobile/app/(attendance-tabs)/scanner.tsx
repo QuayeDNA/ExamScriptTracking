@@ -3,7 +3,7 @@
  * QR Scanner, Manual Entry, and Biometric Verification
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,10 @@ import type { ClassAttendanceRecord, RecordAttendanceResponse } from "@/types";
 import * as Device from "expo-device";
 import { toast } from "@/utils/toast";
 import { searchStudents, type Student } from "@/api/students";
+import { getFileUrl } from "@/lib/api-client";
+import { Dialog } from "@/components/ui/dialog";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import RecentRecordingsDrawer, { type RecentRecordingsDrawerRef, type RecentRecording } from "@/components/RecentRecordingsDrawer";
 
 type RecordingMethod = "QR" | "MANUAL" | "BIOMETRIC";
 
@@ -51,6 +55,10 @@ export default function AttendanceRecorder() {
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmingStudent, setConfirmingStudent] = useState<Student | null>(null);
+  const [recentRecordings, setRecentRecordings] = useState<RecentRecording[]>([]);
+  const drawerRef = useRef<RecentRecordingsDrawerRef>(null);
 
   
 
@@ -106,10 +114,10 @@ export default function AttendanceRecorder() {
     setHasBiometric(compatible && enrolled);
   };
 
-  // Search students with debouncing
+  // Search students with debouncing (wait for at least 6 characters for full index)
   useEffect(() => {
     const searchTimer = setTimeout(async () => {
-      if (indexNumber.trim().length >= 2) {
+      if (indexNumber.trim().length >= 6) {
         setSearching(true);
         try {
           const response = await searchStudents(indexNumber.trim(), 10);
@@ -123,10 +131,23 @@ export default function AttendanceRecorder() {
       } else {
         setSearchResults([]);
       }
-    }, 300);
+    }, 500);
 
     return () => clearTimeout(searchTimer);
   }, [indexNumber]);
+
+  // Load recent recordings from AsyncStorage
+  useEffect(() => {
+    if (activeSession?.id) {
+      AsyncStorage.getItem(`attendance_recent_${activeSession.id}`)
+        .then(data => {
+          if (data) {
+            setRecentRecordings(JSON.parse(data));
+          }
+        })
+        .catch(err => console.error('Failed to load recent recordings:', err));
+    }
+  }, [activeSession?.id]);
 
   const loadActiveSession = useCallback(async () => {
     try {
@@ -134,7 +155,8 @@ export default function AttendanceRecorder() {
       if (sessionId) {
         // Load specific session
         const response = await classAttendanceApi.getSession(sessionId);
-        setActiveSession(response.record);
+        // Handle both wrapped and unwrapped responses
+        setActiveSession(response.record || response);
       } else {
         // Load first active session
         const response = await classAttendanceApi.getActiveSessions();
@@ -169,30 +191,54 @@ export default function AttendanceRecorder() {
         `✓ ${response.student.firstName} ${response.student.lastName}`,
         `Attendance recorded via QR`
       );
+
+      // Add to recent recordings
+      const newRecording: RecentRecording = {
+        id: response.attendance.id,
+        studentId: response.student.id,
+        firstName: response.student.firstName,
+        lastName: response.student.lastName,
+        indexNumber: response.student.indexNumber,
+        profilePicture: response.student.profilePicture,
+        timestamp: new Date().toISOString(),
+        method: response.attendance.verificationMethod,
+        status: response.attendance.status,
+      };
+      const updated = [newRecording, ...recentRecordings];
+      setRecentRecordings(updated);
+      await AsyncStorage.setItem(`attendance_recent_${activeSession.id}`, JSON.stringify(updated));
+
       setTimeout(() => {
         setShowSuccess(false);
         setScanned(false);
       }, 2000);
     } catch (error: any) {
-      toast.error("Recording Failed", error?.error || "Failed to record attendance");
+      // Handle duplicate attendance
+      if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
+        toast.info("Already Recorded", error?.error || "Student has already marked attendance");
+      } else {
+        toast.error("Recording Failed", error?.error || "Failed to record attendance");
+      }
       setScanned(false);
     } finally {
       setRecording(false);
     }
   };
 
-  const handleManualEntry = async (student?: Student) => {
-    const targetStudent = student || selectedStudent;
-    if (!targetStudent || !activeSession) {
-      toast.warning("No Student Selected", "Please select a student from the list");
-      return;
-    }
+  const handleStudentSelect = (student: Student) => {
+    setConfirmingStudent(student);
+    setShowConfirmDialog(true);
+  };
 
+  const handleConfirmAttendance = async () => {
+    if (!confirmingStudent || !activeSession) return;
+
+    setShowConfirmDialog(false);
     setRecording(true);
     try {
       const response = await classAttendanceApi.recordAttendanceByIndex({
         recordId: activeSession.id,
-        indexNumber: targetStudent.indexNumber.toUpperCase(),
+        indexNumber: confirmingStudent.indexNumber.toUpperCase(),
         verificationMethod: "MANUAL_INDEX",
       });
 
@@ -202,14 +248,36 @@ export default function AttendanceRecorder() {
         `✓ ${response.student.firstName} ${response.student.lastName}`,
         `Attendance recorded manually`
       );
+
+      // Add to recent recordings
+      const newRecording: RecentRecording = {
+        id: response.attendance.id,
+        studentId: response.student.id,
+        firstName: response.student.firstName,
+        lastName: response.student.lastName,
+        indexNumber: response.student.indexNumber,
+        profilePicture: response.student.profilePicture,
+        timestamp: new Date().toISOString(),
+        method: response.attendance.verificationMethod,
+        status: response.attendance.status,
+      };
+      const updated = [newRecording, ...recentRecordings];
+      setRecentRecordings(updated);
+      await AsyncStorage.setItem(`attendance_recent_${activeSession.id}`, JSON.stringify(updated));
+
       setIndexNumber("");
       setSelectedStudent(null);
+      setConfirmingStudent(null);
       setSearchResults([]);
       setTimeout(() => {
         setShowSuccess(false);
       }, 2000);
     } catch (error: any) {
-      toast.error("Recording Failed", error?.error || "Failed to record attendance");
+      if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
+        toast.info("Already Recorded", error?.error || "Student has already marked attendance");
+      } else {
+        toast.error("Recording Failed", error?.error || "Failed to record attendance");
+      }
     } finally {
       setRecording(false);
     }
@@ -384,10 +452,15 @@ export default function AttendanceRecorder() {
 
       {/* Session Info Banner */}
       <View style={[styles.sessionBanner, { backgroundColor: `${colors.success}20` }]}>
-        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-        <Text style={[styles.sessionBannerText, { color: colors.success }]}>
-          Session Active • {activeSession.students?.length || 0} recorded
-        </Text>
+        <View style={styles.sessionBannerLeft}>
+          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+          <Text style={[styles.sessionBannerText, { color: colors.success }]}>
+            Session Active • {activeSession.students?.length || 0} recorded
+          </Text>
+        </View>
+        <TouchableOpacity onPress={() => drawerRef.current?.toggle()} style={styles.eyeButton}>
+          <Ionicons name="eye-outline" size={24} color={colors.success} />
+        </TouchableOpacity>
       </View>
 
       {renderMethodSelector()}
@@ -450,7 +523,7 @@ export default function AttendanceRecorder() {
                   <Ionicons name="search" size={20} color={colors.foregroundMuted} />
                   <TextInput
                     style={[styles.searchInput, { color: colors.foreground }]}
-                    placeholder="Search by index number or name..."
+                    placeholder="Enter full index number..."
                     placeholderTextColor={colors.foregroundMuted}
                     value={indexNumber}
                     onChangeText={setIndexNumber}
@@ -469,6 +542,11 @@ export default function AttendanceRecorder() {
                     </TouchableOpacity>
                   )}
                 </View>
+                {indexNumber.trim().length < 6 && indexNumber.trim().length > 0 && (
+                  <Text style={[styles.searchHint, { color: colors.foregroundMuted }]}>
+                    Type at least 6 characters to search...
+                  </Text>
+                )}
                 {searching && (
                   <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
                 )}
@@ -484,21 +562,14 @@ export default function AttendanceRecorder() {
                     <TouchableOpacity
                       style={[
                         styles.studentCard,
-                        {
-                          backgroundColor: selectedStudent?.indexNumber === item.indexNumber
-                            ? `${colors.primary}15`
-                            : colors.muted,
-                          borderColor: selectedStudent?.indexNumber === item.indexNumber
-                            ? colors.primary
-                            : colors.border,
-                        },
+                        { backgroundColor: colors.muted, borderColor: colors.border },
                       ]}
-                      onPress={() => setSelectedStudent(item)}
+                      onPress={() => handleStudentSelect(item)}
                     >
                       <View style={styles.studentCardLeft}>
                         {item.profilePicture ? (
                           <Image
-                            source={{ uri: item.profilePicture }}
+                            source={{ uri: getFileUrl(item.profilePicture) }}
                             style={styles.studentPhoto}
                           />
                         ) : (
@@ -523,16 +594,14 @@ export default function AttendanceRecorder() {
                           </Text>
                         </View>
                       </View>
-                      {selectedStudent?.indexNumber === item.indexNumber && (
-                        <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-                      )}
+                      <Ionicons name="chevron-forward" size={24} color={colors.foregroundMuted} />
                     </TouchableOpacity>
                   )}
                 />
               )}
 
               {/* No Results */}
-              {indexNumber.trim().length >= 2 && !searching && searchResults.length === 0 && (
+              {indexNumber.trim().length >= 6 && !searching && searchResults.length === 0 && (
                 <View style={styles.noResults}>
                   <Ionicons name="search" size={48} color={colors.foregroundMuted} />
                   <Text style={[styles.noResultsText, { color: colors.foregroundMuted }]}>
@@ -541,25 +610,6 @@ export default function AttendanceRecorder() {
                 </View>
               )}
             </Card>
-
-            {/* Mark Attendance Button */}
-            {selectedStudent && (
-              <Button
-                variant="default"
-                onPress={() => handleManualEntry(selectedStudent)}
-                disabled={recording}
-                style={styles.markButton}
-              >
-                {recording ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                    <Text style={styles.markButtonText}>Mark Present</Text>
-                  </>
-                )}
-              </Button>
-            )}
           </View>
         )}
 
@@ -585,38 +635,6 @@ export default function AttendanceRecorder() {
             </View>
           </Card>
         )}
-
-        {/* Recent Records */}
-        {activeSession.students && activeSession.students.length > 0 && (
-          <Card elevation="sm" style={styles.recentCard}>
-            <Text style={[styles.recentTitle, { color: colors.foreground }]}>
-              Recent Records
-            </Text>
-            <ScrollView style={styles.recentList}>
-              {activeSession.students.slice(-5).reverse().map((attendance) => (
-                <View
-                  key={attendance.id}
-                  style={[styles.recentItem, { borderBottomColor: colors.border }]}
-                >
-                  <View style={styles.recentItemLeft}>
-                    <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                    <View>
-                      <Text style={[styles.recentName, { color: colors.foreground }]}>
-                        {attendance.student?.firstName} {attendance.student?.lastName}
-                      </Text>
-                      <Text style={[styles.recentIndex, { color: colors.foregroundMuted }]}>
-                        {attendance.student?.indexNumber}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.recentTime, { color: colors.foregroundMuted }]}>
-                    {new Date(attendance.scanTime).toLocaleTimeString()}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-          </Card>
-        )}
       </View>
 
       {/* Success Modal */}
@@ -640,6 +658,59 @@ export default function AttendanceRecorder() {
           </View>
         </View>
       </Modal>
+
+      {/* Confirmation Dialog */}
+      {confirmingStudent && (
+        <Dialog
+          visible={showConfirmDialog}
+          onClose={() => {
+            setShowConfirmDialog(false);
+            setConfirmingStudent(null);
+          }}
+          title="Confirm Attendance"
+          variant="default"
+          primaryAction={{
+            label: recording ? "Recording..." : "Mark Present",
+            onPress: handleConfirmAttendance,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onPress: () => {
+              setShowConfirmDialog(false);
+              setConfirmingStudent(null);
+            },
+          }}
+          icon="person"
+        >
+          <View style={styles.confirmDialogContent}>
+            {confirmingStudent.profilePicture ? (
+              <Image
+                source={{ uri: getFileUrl(confirmingStudent.profilePicture) }}
+                style={styles.confirmStudentPhoto}
+              />
+            ) : (
+              <View style={[styles.confirmStudentPhotoPlaceholder, { backgroundColor: colors.border }]}>
+                <Ionicons name="person" size={60} color={colors.foregroundMuted} />
+              </View>
+            )}
+            <Text style={[styles.confirmStudentName, { color: colors.foreground }]}>
+              {confirmingStudent.firstName} {confirmingStudent.lastName}
+            </Text>
+            <Text style={[styles.confirmStudentIndex, { color: colors.primary }]}>
+              {confirmingStudent.indexNumber}
+            </Text>
+            <Text style={[styles.confirmStudentProgram, { color: colors.foregroundMuted }]}>
+              {confirmingStudent.program}
+            </Text>
+            <Text style={[styles.confirmStudentLevel, { color: colors.foregroundMuted }]}>
+              Level {confirmingStudent.level || "N/A"}
+            </Text>
+          </View>
+        </Dialog>
+      )}
+
+      {/* Recent Recordings Drawer */}
+      <RecentRecordingsDrawer ref={drawerRef} recordings={recentRecordings} />
     </SafeAreaView>
   );
 }
@@ -676,15 +747,24 @@ const styles = StyleSheet.create({
   },
   sessionBanner: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     gap: 4,
     paddingVertical: 8,
     paddingHorizontal: 24,
     marginBottom: 16,
   },
+  sessionBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   sessionBannerText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  eyeButton: {
+    padding: 4,
   },
   methodSelector: {
     flexDirection: "row",
@@ -773,6 +853,11 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: 16,
     paddingBottom: 8,
+  },
+  searchHint: {
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   searchInputWrapper: {
     flexDirection: "row",
@@ -949,5 +1034,42 @@ const styles = StyleSheet.create({
   },
   successIndex: {
     fontSize: 14,
+  },
+  confirmDialogContent: {
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 20,
+  },
+  confirmStudentPhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 8,
+  },
+  confirmStudentPhotoPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  confirmStudentName: {
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  confirmStudentIndex: {
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  confirmStudentProgram: {
+    fontSize: 16,
+    textAlign: "center",
+  },
+  confirmStudentLevel: {
+    fontSize: 14,
+    textAlign: "center",
   },
 });
