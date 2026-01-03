@@ -41,6 +41,9 @@ import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
 import BiometricEnrollmentPage from "@/pages/BiometricEnrollmentPage";
+import { AttendancePortal } from "@/pages/attendance/AttendancePortal";
+import { BiometricEnrollment } from "@/pages/enroll/BiometricEnrollment";
+import { MyAttendancePage } from "@/pages/attendance/MyAttendancePage";
 
 // Mobile pages
 import { MobileHomePage } from "@/pages/mobile/MobileHomePage";
@@ -99,6 +102,12 @@ function App() {
                 <Route path="/student-qr" element={<StudentQRLookup />} />
                 <Route path="/student-attendance" element={<StudentAttendancePage />} />
                 <Route path="/enroll-biometric" element={<BiometricEnrollmentPage />} />
+                
+                {/* Student Self-Service Attendance Portal */}
+                <Route path="/attendance/:token" element={<AttendancePortal />} />
+                <Route path="/my-attendance" element={<MyAttendancePage />} />
+                <Route path="/enroll/biometric" element={<BiometricEnrollment />} />
+                
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
                 {/* Desktop Auth routes - shared AuthLayout */}

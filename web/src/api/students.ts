@@ -232,14 +232,4 @@ export const studentsApi = {
       });
     return response.data;
   },
-
-  generateBiometricEnrollmentLink: async (
-    studentId: string,
-    hoursValid: number = 24
-  ): Promise<BiometricEnrollmentLinkResponse> => {
-    return apiClient.post<BiometricEnrollmentLinkResponse>(
-      `/students/${studentId}/biometric-enrollment-link`,
-      { hoursValid }
-    );
-  },
 };
