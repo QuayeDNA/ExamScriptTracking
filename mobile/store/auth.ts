@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type { User } from "@/types";
 import * as storage from "@/utils/storage";
 import { apiClient } from "@/lib/api-client";
-import { initializeAppContext } from "./appContext";
 
 interface AuthState {
   user: User | null;
@@ -39,7 +38,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           isLoading: false,
         });
 
-        // Initialize app context with user data
+        // Initialize app context with user data (dynamic import to avoid cycle)
+        const { initializeAppContext } = await import("./appContext");
         await initializeAppContext();
 
         // Validate token in background to refresh user data

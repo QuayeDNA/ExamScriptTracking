@@ -1,6 +1,6 @@
 /**
- * Attendance History & Statistics Screen
- * View past sessions, analytics, and student attendance records
+ * Attendance Analytics Screen
+ * View attendance statistics, insights, and export data
  */
 
 import React, { useState, useEffect } from "react";
@@ -18,21 +18,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
 import { classAttendanceApi } from "@/api/classAttendance";
+import { toast } from "@/utils/toast";
 import type {
   ClassAttendanceRecord,
   AttendanceStats,
   RecordingStatus,
 } from "@/types";
 
-type ViewMode = "HISTORY" | "STATS";
+type ViewMode = "STATS" | "EXPORT";
 
-export default function AttendanceHistory() {
+export default function AttendanceAnalytics() {
   const colors = useThemeColors();
-  const [viewMode, setViewMode] = useState<ViewMode>("HISTORY");
+  const [viewMode, setViewMode] = useState<ViewMode>("STATS");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [history, setHistory] = useState<ClassAttendanceRecord[]>([]);
-  const [stats, setStats] = useState<AttendanceStats | null>(null);
   const [lecturerStats, setLecturerStats] = useState<any>(null);
 
   useEffect(() => {
@@ -42,17 +42,20 @@ export default function AttendanceHistory() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [historyResponse, statsResponse, lecturerStatsResponse] = await Promise.all([
+      const [historyResponse, lecturerStatsResponse] = await Promise.all([
         classAttendanceApi.getAttendanceHistory({ limit: 20 }),
-        classAttendanceApi.getAttendanceStats(),
         classAttendanceApi.getLecturerStats(),
       ]);
 
+      console.log("History response:", historyResponse);
+      console.log("Lecturer stats response:", lecturerStatsResponse);
+
       setHistory(historyResponse.records || []);
-      setStats(statsResponse);
       setLecturerStats(lecturerStatsResponse);
     } catch (error: any) {
       console.error("Failed to load data:", error);
+      const errorMessage = error.error || error.message || "Failed to load attendance data";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -182,7 +185,7 @@ export default function AttendanceHistory() {
   };
 
   const renderStats = () => {
-    if (!stats || !lecturerStats) {
+    if (!lecturerStats) {
       return (
         <Card elevation="sm">
           <View style={styles.emptyState}>
@@ -198,6 +201,10 @@ export default function AttendanceHistory() {
       );
     }
 
+    const overview = lecturerStats.overview || lecturerStats;
+    const byCourse = lecturerStats.byCourse || [];
+    const methodBreakdown = lecturerStats.methodBreakdown || [];
+
     return (
       <View style={styles.statsContainer}>
         {/* Overview Stats */}
@@ -206,7 +213,7 @@ export default function AttendanceHistory() {
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.primary }]}>
-                {lecturerStats.totalSessions || 0}
+                {overview.totalSessions || overview.completedSessions || 0}
               </Text>
               <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                 Total Sessions
@@ -214,7 +221,7 @@ export default function AttendanceHistory() {
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.success }]}>
-                {lecturerStats.totalStudentsRecorded || 0}
+                {overview.totalStudentsRecorded || 0}
               </Text>
               <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                 Students Recorded
@@ -222,7 +229,7 @@ export default function AttendanceHistory() {
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.primary }]}>
-                {Math.round(lecturerStats.averageAttendanceRate || 0)}%
+                {Math.round(overview.averageAttendanceRate || lecturerStats.averageAttendanceRate || 0)}%
               </Text>
               <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
                 Avg. Attendance
@@ -231,12 +238,48 @@ export default function AttendanceHistory() {
           </View>
         </Card>
 
+        {/* Recording Methods */}
+        {methodBreakdown.length > 0 && (
+          <Card elevation="sm" style={styles.statsCard}>
+            <Text style={[styles.statsTitle, { color: colors.foreground }]}>Recording Methods</Text>
+            <View style={{ gap: 12, marginTop: 12 }}>
+              {methodBreakdown.map((method: any) => {
+                const total = methodBreakdown.reduce((sum: number, m: any) => sum + m.count, 0);
+                const percentage = total > 0 ? (method.count / total) * 100 : 0;
+                const methodName = method.method === 'QR_CODE' ? 'QR Code' : 
+                                  method.method === 'MANUAL_INDEX' ? 'Index Number' : 
+                                  method.method === 'BIOMETRIC' ? 'Biometric' : method.method;
+                return (
+                  <View key={method.method}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: '500' }}>
+                        {methodName}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
+                        {method.count} ({Math.round(percentage)}%)
+                      </Text>
+                    </View>
+                    <View style={{ height: 8, backgroundColor: colors.muted, borderRadius: 4, overflow: 'hidden' }}>
+                      <View style={{ 
+                        height: '100%', 
+                        width: `${percentage}%`, 
+                        backgroundColor: colors.primary,
+                        borderRadius: 4
+                      }} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        )}
+
         {/* By Course */}
-        {lecturerStats.byCourse && lecturerStats.byCourse.length > 0 && (
+        {byCourse.length > 0 && (
           <Card elevation="sm" style={styles.statsCard}>
             <Text style={[styles.statsTitle, { color: colors.foreground }]}>By Course</Text>
             <View style={styles.courseList}>
-              {lecturerStats.byCourse.map((course: any) => (
+              {byCourse.map((course: any) => (
                 <View key={course.courseCode} style={styles.courseItem}>
                   <View style={styles.courseItemHeader}>
                     <Text style={[styles.courseCodeText, { color: colors.foreground }]}>
@@ -279,61 +322,11 @@ export default function AttendanceHistory() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Attendance</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Analytics</Text>
           <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-            History & Statistics
+            Insights and statistics
           </Text>
         </View>
-      </View>
-
-      {/* Tab Selector */}
-      <View style={[styles.tabSelector, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            viewMode === "HISTORY" && { borderBottomColor: colors.primary },
-          ]}
-          onPress={() => setViewMode("HISTORY")}
-        >
-          <Ionicons
-            name="time-outline"
-            size={20}
-            color={viewMode === "HISTORY" ? colors.primary : colors.foregroundMuted}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {
-                color: viewMode === "HISTORY" ? colors.primary : colors.foregroundMuted,
-              },
-            ]}
-          >
-            History
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            viewMode === "STATS" && { borderBottomColor: colors.primary },
-          ]}
-          onPress={() => setViewMode("STATS")}
-        >
-          <Ionicons
-            name="bar-chart-outline"
-            size={20}
-            color={viewMode === "STATS" ? colors.primary : colors.foregroundMuted}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {
-                color: viewMode === "STATS" ? colors.primary : colors.foregroundMuted,
-              },
-            ]}
-          >
-            Statistics
-          </Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -347,7 +340,7 @@ export default function AttendanceHistory() {
           />
         }
       >
-        {viewMode === "HISTORY" ? renderHistory() : renderStats()}
+        {renderStats()}
       </ScrollView>
     </SafeAreaView>
   );

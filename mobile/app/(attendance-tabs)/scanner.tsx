@@ -74,6 +74,17 @@ export default function AttendanceRecorder() {
       }
     }));
 
+    // Listen for session ended events
+    unsubscribers.push(socket.on("session:ended", (data: unknown) => {
+      const typedData = data as { record: ClassAttendanceRecord };
+      console.log("Session ended:", typedData);
+      if (activeSession && typedData.record.id === activeSession.id) {
+        toast.info("Session ended by lecturer");
+        setActiveSession(null);
+        setLoading(false);
+      }
+    }));
+
     // Listen for live updates
     unsubscribers.push(socket.on("attendance:live_update", (data: unknown) => {
       const typedData = data as { recordId: string; stats: any };
@@ -213,11 +224,14 @@ export default function AttendanceRecorder() {
         setScanned(false);
       }, 2000);
     } catch (error: any) {
+      console.error("QR scan error:", error);
       // Handle duplicate attendance
       if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
-        toast.info("Already Recorded", error?.error || "Student has already marked attendance");
+        toast.info("Student already marked attendance");
       } else {
-        toast.error("Recording Failed", error?.error || "Failed to record attendance");
+        // Show user-friendly error message
+        const errorMessage = error.error || error.message || "Failed to record attendance";
+        toast.error(errorMessage);
       }
       setScanned(false);
     } finally {
@@ -273,10 +287,12 @@ export default function AttendanceRecorder() {
         setShowSuccess(false);
       }, 2000);
     } catch (error: any) {
+      console.error("Manual entry error:", error);
       if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
-        toast.info("Already Recorded", error?.error || "Student has already marked attendance");
+        toast.info("Student already marked attendance");
       } else {
-        toast.error("Recording Failed", error?.error || "Failed to record attendance");
+        const errorMessage = error.error || error.message || "Failed to record attendance";
+        toast.error(errorMessage);
       }
     } finally {
       setRecording(false);

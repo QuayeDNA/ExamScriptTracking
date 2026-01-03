@@ -87,6 +87,8 @@ class ApiClient {
             error.message ||
             "Network error",
           details: error.response?.data?.details,
+          status: error.response?.status,
+          code: error.response?.data?.code,
         };
         return Promise.reject(apiError);
       }

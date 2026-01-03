@@ -86,12 +86,12 @@ export default function AttendanceTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="history"
+        name="analytics"
         options={{
-          title: "History",
+          title: "Analytics",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "time" : "time-outline"}
+              name={focused ? "stats-chart" : "stats-chart-outline"}
               size={24}
               color={color}
             />

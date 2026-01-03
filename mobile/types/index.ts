@@ -144,6 +144,8 @@ export interface ApiError {
     path: string[];
     message: string;
   }[];
+  status?: number;
+  code?: string;
 }
 
 // ============================================

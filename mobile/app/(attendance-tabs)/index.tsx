@@ -20,6 +20,7 @@ export default function AttendanceDashboard() {
   const { user } = useAuthStore();
   const socket = useSocket();
   const [activeSessions, setActiveSessions] = useState<ClassAttendanceRecord[]>([]);
+  const [recentSessions, setRecentSessions] = useState<ClassAttendanceRecord[]>([]);
   const [liveStats, setLiveStats] = useState<SessionLiveStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -67,6 +68,7 @@ export default function AttendanceDashboard() {
 
   useEffect(() => {
     loadActiveSessions();
+    loadRecentSessions();
     const cleanup = setupSocketListeners();
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,6 +92,18 @@ export default function AttendanceDashboard() {
     }
   };
 
+  const loadRecentSessions = async () => {
+    try {
+      const response = await classAttendanceApi.getAttendanceHistory({ 
+        limit: 5,
+        status: 'COMPLETED'
+      });
+      setRecentSessions(response.records || []);
+    } catch (error: any) {
+      console.error("Failed to load recent sessions:", error);
+    }
+  };
+
   const loadLiveStats = async (sessionId: string) => {
     try {
       const stats = await classAttendanceApi.getSessionLiveStats(sessionId);
@@ -99,9 +113,9 @@ export default function AttendanceDashboard() {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    loadActiveSessions();
+    await Promise.all([loadActiveSessions(), loadRecentSessions()]);
     setRefreshing(false);
   };
 
@@ -311,28 +325,100 @@ export default function AttendanceDashboard() {
           </Card>
         </View>
 
-        {/* Recent Sessions - Placeholder */}
+        {/* Recent Sessions */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
               Recent Sessions
             </Text>
-            <TouchableOpacity onPress={() => router.push("/(attendance-tabs)/sessions")}>
+            <TouchableOpacity onPress={() => router.push("/(attendance-tabs)/history")}>
               <Text style={[styles.seeAll, { color: colors.primary }]}>See All</Text>
             </TouchableOpacity>
           </View>
           
-          <Card elevation="sm">
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={colors.foregroundMuted} />
-              <Text style={[styles.emptyText, { color: colors.foregroundMuted }]}>
-                No recent sessions
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.foregroundMuted }]}>
-                Start recording attendance to see sessions here
-              </Text>
+          {recentSessions.length > 0 ? (
+            <View style={{ gap: 12 }}>
+              {recentSessions.map((session) => (
+                <TouchableOpacity 
+                  key={session.id}
+                  onPress={() => router.push(`/session-details?sessionId=${session.id}`)}
+                >
+                  <Card elevation="sm" style={{ padding: 16 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={[{ 
+                          fontSize: 18, 
+                          fontWeight: 'bold', 
+                          color: colors.foreground,
+                          marginBottom: 4 
+                        }]}>
+                          {session.courseCode}
+                        </Text>
+                        {session.courseName && (
+                          <Text style={[{ 
+                            fontSize: 14, 
+                            color: colors.foregroundMuted,
+                            marginBottom: 8
+                          }]}>
+                            {session.courseName}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={[{ 
+                        backgroundColor: colors.success + '20',
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 12,
+                      }]}>
+                        <Text style={[{ color: colors.success, fontSize: 11, fontWeight: '700' }]}>
+                          COMPLETED
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="calendar-outline" size={14} color={colors.foregroundMuted} />
+                        <Text style={[{ fontSize: 13, color: colors.foregroundMuted }]}>
+                          {new Date(session.startTime).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="people-outline" size={14} color={colors.foregroundMuted} />
+                        <Text style={[{ fontSize: 13, color: colors.foregroundMuted }]}>
+                          {session.students?.length || 0} students
+                        </Text>
+                      </View>
+                      {session.lecturerName && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="person-outline" size={14} color={colors.foregroundMuted} />
+                          <Text style={[{ fontSize: 13, color: colors.foregroundMuted }]}>
+                            {session.lecturerName}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </Card>
+                </TouchableOpacity>
+              ))}
             </View>
-          </Card>
+          ) : (
+            <Card elevation="sm">
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={48} color={colors.foregroundMuted} />
+                <Text style={[styles.emptyText, { color: colors.foregroundMuted }]}>
+                  No recent sessions
+                </Text>
+                <Text style={[styles.emptySubtext, { color: colors.foregroundMuted }]}>
+                  Start recording attendance to see sessions here
+                </Text>
+              </View>
+            </Card>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

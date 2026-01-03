@@ -765,18 +765,19 @@ export const getAttendanceHistory = async (req: Request, res: Response) => {
     const [records, total] = await Promise.all([
       prisma.classAttendanceRecord.findMany({
         where: whereClause,
-        include: {
-          user: {
+        select: {
+          id: true,
+          courseCode: true,
+          courseName: true,
+          lecturerName: true,
+          startTime: true,
+          endTime: true,
+          status: true,
+          totalStudents: true,
+          students: {
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
-              role: true,
-            },
-          },
-          students: {
-            include: {
-              student: true,
+              studentId: true,
             },
           },
         },
