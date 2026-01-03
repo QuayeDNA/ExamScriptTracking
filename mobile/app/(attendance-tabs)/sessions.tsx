@@ -15,7 +15,9 @@ import {
   RefreshControl,
   Modal,
   Clipboard,
+  Switch,
 } from "react-native";
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
@@ -31,6 +33,7 @@ import type {
   RecordingStatus,
 } from "@/types";
 import * as Device from "expo-device";
+import * as Location from "expo-location";
 import { toast } from "@/utils/toast";
 
 const styles = StyleSheet.create({
@@ -434,6 +437,47 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
   },
+  securitySection: {
+    padding: 16,
+    borderRadius: 8,
+    gap: 16,
+    marginVertical: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  settingRow: {
+    gap: 8,
+  },
+  settingInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  settingLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  settingDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  sliderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  slider: {
+    flex: 1,
+    height: 40,
+  },
+  sliderValue: {
+    fontSize: 12,
+    width: 50,
+    textAlign: "center",
+  },
   endButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -480,6 +524,15 @@ export default function AttendanceSessions() {
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [sessionToEnd, setSessionToEnd] = useState<ClassAttendanceRecord | null>(null);
   const [endingSession, setEndingSession] = useState(false);
+  
+  // Security settings for link generation
+  const [securitySettings, setSecuritySettings] = useState({
+    enableGeofencing: true,
+    radius: 50, // meters
+    enforceTimeWindow: true,
+    oneSubmissionOnly: true,
+  });
+  const [capturingLocation, setCapturingLocation] = useState(false);
 
   const loadActiveSessions = useCallback(async () => {
     try {
@@ -589,18 +642,47 @@ export default function AttendanceSessions() {
     
     try {
       setGeneratingLink(true);
+      
+      // Capture location if geofencing is enabled
+      let geolocation;
+      if (securitySettings.enableGeofencing) {
+        setCapturingLocation(true);
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        
+        if (status !== 'granted') {
+          toast.error('Location permission is required for geofencing');
+          setCapturingLocation(false);
+          setGeneratingLink(false);
+          return;
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        
+        geolocation = {
+          lat: location.coords.latitude,
+          lng: location.coords.longitude,
+          radius: securitySettings.radius,
+        };
+        setCapturingLocation(false);
+      }
+      
       const response = await classAttendanceApi.generateAttendanceLink({
         recordId: selectedSessionForLink.id,
         expiresInMinutes: parseInt(linkExpiration),
         maxUses: 100,
+        geolocation,
       });
 
       setGeneratedLink(response.link.url);
+      toast.success('Attendance link generated successfully');
     } catch (error: any) {
       console.error("Failed to generate link:", error);
       toast.error(error?.error || "Failed to generate attendance link");
     } finally {
       setGeneratingLink(false);
+      setCapturingLocation(false);
     }
   };
 
@@ -1206,6 +1288,104 @@ export default function AttendanceSessions() {
                     </View>
                   </View>
 
+                  {/* Security Settings Section */}
+                  <View style={[styles.securitySection, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                      Security Settings
+                    </Text>
+                    
+                    {/* Geofencing Toggle */}
+                    <View style={styles.settingRow}>
+                      <View style={styles.settingInfo}>
+                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+                          Enable Location Validation
+                        </Text>
+                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
+                          Restrict attendance to within a specific radius
+                        </Text>
+                      </View>
+                      <Switch
+                        value={securitySettings.enableGeofencing}
+                        onValueChange={(value) => 
+                          setSecuritySettings({...securitySettings, enableGeofencing: value})
+                        }
+                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
+                        thumbColor={securitySettings.enableGeofencing ? colors.primary : colors.foregroundMuted}
+                      />
+                    </View>
+
+                    {/* Radius Slider (conditional) */}
+                    {securitySettings.enableGeofencing && (
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+                            Validation Radius: {securitySettings.radius}m
+                          </Text>
+                          <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
+                            Students must be within this distance to mark attendance
+                          </Text>
+                        </View>
+                        <View style={styles.sliderContainer}>
+                          <Text style={[styles.sliderValue, { color: colors.foregroundMuted }]}>10m</Text>
+                          <Slider
+                            style={styles.slider}
+                            minimumValue={10}
+                            maximumValue={5000}
+                            step={10}
+                            value={securitySettings.radius}
+                            onValueChange={(value: number) => 
+                              setSecuritySettings({...securitySettings, radius: value})
+                            }
+                            minimumTrackTintColor={colors.primary}
+                            maximumTrackTintColor={colors.muted}
+                            thumbTintColor={colors.primary}
+                          />
+                          <Text style={[styles.sliderValue, { color: colors.foregroundMuted }]}>5000m</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Time Window Enforcement */}
+                    <View style={styles.settingRow}>
+                      <View style={styles.settingInfo}>
+                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+                          Enforce Time Window
+                        </Text>
+                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
+                          Only allow attendance during class session times
+                        </Text>
+                      </View>
+                      <Switch
+                        value={securitySettings.enforceTimeWindow}
+                        onValueChange={(value) => 
+                          setSecuritySettings({...securitySettings, enforceTimeWindow: value})
+                        }
+                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
+                        thumbColor={securitySettings.enforceTimeWindow ? colors.primary : colors.foregroundMuted}
+                      />
+                    </View>
+
+                    {/* One Submission Only */}
+                    <View style={styles.settingRow}>
+                      <View style={styles.settingInfo}>
+                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
+                          Prevent Duplicate Submissions
+                        </Text>
+                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
+                          Each student can only mark attendance once
+                        </Text>
+                      </View>
+                      <Switch
+                        value={securitySettings.oneSubmissionOnly}
+                        onValueChange={(value) => 
+                          setSecuritySettings({...securitySettings, oneSubmissionOnly: value})
+                        }
+                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
+                        thumbColor={securitySettings.oneSubmissionOnly ? colors.primary : colors.foregroundMuted}
+                      />
+                    </View>
+                  </View>
+
                   <View style={[styles.linkInfoBox, { backgroundColor: colors.muted }]}>
                     <Ionicons name="information-circle" size={20} color={colors.primary} />
                     <Text style={[styles.linkInfoText, { color: colors.foreground }]}>
@@ -1250,9 +1430,14 @@ export default function AttendanceSessions() {
                     variant="default"
                     onPress={handleGenerateLink}
                     style={styles.modalButton}
-                    disabled={generatingLink}
+                    disabled={generatingLink || capturingLocation}
                   >
-                    {generatingLink ? "Generating..." : "Generate Link"}
+                    {capturingLocation 
+                      ? "Capturing Location..." 
+                      : generatingLink 
+                      ? "Generating..." 
+                      : "Generate Link"
+                    }
                   </Button>
                 </>
               ) : (

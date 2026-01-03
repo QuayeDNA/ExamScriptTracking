@@ -10,6 +10,7 @@ import {
   getSessionLiveStats,
   getAttendanceHistory,
   generateAttendanceLink,
+  validateAttendanceLink,
   enrollBiometric,
   getAttendanceStats,
 } from "../controllers/classAttendanceController";
@@ -19,7 +20,19 @@ import { Role } from "@prisma/client";
 
 const router = Router();
 
-// All routes require authentication
+// ============================================================================
+// PUBLIC ROUTES (No authentication required)
+// ============================================================================
+
+/**
+ * Validate attendance link and enforce security settings
+ * POST /api/class-attendance/links/validate
+ * Access: Public (no authentication)
+ * Body: { token, studentLocation?: { lat, lng } }
+ */
+router.post("/links/validate", validateAttendanceLink);
+
+// All other routes require authentication
 router.use(authenticate);
 
 // ============================================================================

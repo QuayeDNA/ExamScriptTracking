@@ -81,6 +81,42 @@ const validateBiometricEnrollmentSchema = z.object({
   provider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT']),
 });
 
+const validateLinkSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  studentLocation: z.object({
+    lat: z.number(),
+    lng: z.number(),
+  }).optional(),
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * Returns distance in meters
+ */
+function calculateDistance(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371000; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // ============================================================================
 // SESSION MANAGEMENT
 // ============================================================================
@@ -873,6 +909,138 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
     }
     console.error("Error generating attendance link:", error);
     res.status(500).json({ error: "Failed to generate attendance link" });
+  }
+};
+
+/**
+ * Validate attendance link and enforce security settings
+ * POST /api/class-attendance/links/validate
+ * Public endpoint (no authentication required)
+ */
+export const validateAttendanceLink = async (req: Request, res: Response) => {
+  try {
+    const validatedData = validateLinkSchema.parse(req.body);
+    const { token, studentLocation } = validatedData;
+
+    // Find the link
+    const link = await prisma.attendanceLink.findUnique({
+      where: { linkToken: token },
+    });
+
+    if (!link) {
+      res.status(404).json({ 
+        valid: false, 
+        error: "Invalid or expired attendance link" 
+      });
+      return;
+    }
+
+    // Check if link is expired
+    if (new Date() > link.expiresAt) {
+      res.status(400).json({ 
+        valid: false, 
+        error: "This attendance link has expired" 
+      });
+      return;
+    }
+
+    // Check if link has reached max uses
+    if (link.maxUses && link.usesCount >= link.maxUses) {
+      res.status(400).json({ 
+        valid: false, 
+        error: "This attendance link has reached its maximum usage limit" 
+      });
+      return;
+    }
+
+    // Get the attendance record
+    if (!link.recordId) {
+      res.status(400).json({ 
+        valid: false, 
+        error: "This link is not associated with an attendance session" 
+      });
+      return;
+    }
+
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id: link.recordId },
+      include: {
+        session: true,
+      },
+    });
+
+    if (!record) {
+      res.status(404).json({ 
+        valid: false, 
+        error: "Attendance session not found" 
+      });
+      return;
+    }
+
+    // Check if session is still active
+    if (record.status !== RecordingStatus.IN_PROGRESS) {
+      res.status(400).json({ 
+        valid: false, 
+        error: "This attendance session has ended" 
+      });
+      return;
+    }
+
+    // Enforce geofencing if configured
+    let distanceFromVenue: number | null = null;
+    if (link.geolocation && studentLocation) {
+      const geolocation = link.geolocation as { lat: number; lng: number; radius: number };
+      
+      distanceFromVenue = calculateDistance(
+        geolocation.lat,
+        geolocation.lng,
+        studentLocation.lat,
+        studentLocation.lng
+      );
+
+      // Round to 2 decimal places
+      distanceFromVenue = Math.round(distanceFromVenue * 100) / 100;
+
+      if (distanceFromVenue > geolocation.radius) {
+        res.status(403).json({
+          valid: false,
+          error: `You must be within ${geolocation.radius}m of the venue to mark attendance`,
+          distanceFromVenue,
+          requiredRadius: geolocation.radius,
+        });
+        return;
+      }
+    } else if (link.geolocation && !studentLocation) {
+      // Geofencing is enabled but student location not provided
+      res.status(400).json({
+        valid: false,
+        error: "Location validation is required for this attendance session",
+        requiresLocation: true,
+      });
+      return;
+    }
+
+    // Link is valid - return session details
+    res.status(200).json({
+      valid: true,
+      session: {
+        id: record.id,
+        courseCode: record.courseCode,
+        courseName: record.courseName,
+        lecturerName: record.lecturerName,
+        startTime: record.startTime,
+        notes: record.notes,
+      },
+      distanceFromVenue,
+      requiresLocation: !!link.geolocation,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.issues });
+      return;
+    }
+    console.error("Error validating attendance link:", error);
+    res.status(500).json({ error: "Failed to validate attendance link" });
   }
 };
 

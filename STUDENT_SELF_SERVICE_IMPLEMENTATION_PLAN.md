@@ -1054,7 +1054,109 @@ Students maintain their own attendance history on their device (not server). Thi
 
 ---
 
-### **Phase 2: Biometric System** ⏳ **READY TO START (Week 2)**
+### **Phase 2: Biometric System** ✅ **PHASE 2.1 COMPLETED (Week 2 - Days 1-3)**
+
+Self-service biometric enrollment + attendance verification system using WebAuthn.
+
+#### **2.1 Biometric Enrollment Portal** ✅
+- [x] Create multi-step enrollment flow
+  - Step 1: Index number validation (student lookup)
+  - Step 2: Device capability check (WebAuthn support)
+  - Step 3: Unsupported device handler (alternative methods)
+  - Step 4: WebAuthn registration (biometric capture)
+  - Step 5: Backend enrollment (save to database)
+  - Step 6: Success confirmation (enrollment details)
+- [x] Created `webauthn.ts` service utility
+  - `registerBiometric()` - Enrollment flow with credential creation
+  - `verifyBiometric()` - Authentication flow for attendance
+  - `calculateConfidenceScore()` - 70-100% confidence calculation
+  - `generateBiometricHash()` - SHA-256 hashing of credential ID
+  - Error handling with user-friendly messages
+- [x] Complete `BiometricEnrollment.tsx` component (580+ lines)
+  - Progress indicator (5 steps)
+  - Student card display with profile picture
+  - Device capability detection
+  - Biometric capture with WebAuthn
+  - Backend enrollment with API integration
+  - Success screen with enrollment summary
+  - Back navigation and error recovery
+- [x] Profile picture caching integration
+- [x] Device support detection integration
+- [x] API client integration (lookupStudent, enrollBiometric)
+
+**Completed:** January 3, 2026
+
+**Features Delivered:**
+- ✅ Complete 6-step enrollment wizard
+- ✅ WebAuthn integration with credential creation
+- ✅ SHA-256 biometric hash generation
+- ✅ Confidence score calculation (70-100%)
+- ✅ Device capability detection
+- ✅ Student verification with profile display
+- ✅ Error handling and user cancellation
+- ✅ Backend enrollment storage
+- ✅ Success confirmation with next steps
+
+#### **2.2 WebAuthn Integration Service** ✅
+(Completed as part of 2.1)
+
+#### **2.3 Enrollment Status Hook** ✅ **COMPLETED (Week 2 - Day 6)**
+- [x] Create `useBiometricStatus.ts` custom hook
+  - Fetch enrollment status from API
+  - Check device capability in parallel
+  - Cache result in sessionStorage (24h)
+  - Return combined state object
+  - Refetch function for manual refresh
+- [x] Enrollment status caching
+  - Key by student index number
+  - 24-hour expiration
+  - Session-scoped (cleared on browser close)
+- [x] Created `useBiometricStatus()` hook
+  - Returns: {enrolled, provider, enrolledAt, deviceSupported, deviceType, loading, error, refetch}
+  - Parallel API + device checks for performance
+  - Automatic cache management
+
+**Completed:** January 3, 2026
+
+**Features Delivered:**
+- ✅ Enrollment status fetching with caching
+- ✅ Device capability detection
+- ✅ Combined status object
+- ✅ Performance optimized with parallel checks
+- ✅ 24-hour cache duration
+- ✅ Manual refetch support
+
+#### **2.4 Enrollment Prompt Component** ✅ **COMPLETED (Week 2 - Day 7)**
+- [x] Create `EnrollmentPrompt.tsx` component
+  - Display when: not enrolled + device supported + not dismissed
+  - Benefits grid (3 cards: speed, security, offline)
+  - "Enroll Now" CTA button → `/enroll/biometric`
+  - "Maybe Later" dismiss button
+  - "Don't show again" checkbox
+  - Trust badge about data security
+- [x] Create dismissal utility functions
+  - `enrollmentPromptStorage.ts` utilities
+  - `isEnrollmentPromptDismissed()` - check status
+  - `setEnrollmentPromptDismissed()` - mark as dismissed
+  - `clearEnrollmentPromptDismissal()` - reset (testing)
+- [x] Integrate into AttendancePortal
+  - Show after successful session validation
+  - Conditional rendering based on status
+  - Smooth dismissal animation
+
+**Completed:** January 3, 2026
+
+**Features Delivered:**
+- ✅ Attractive enrollment prompt UI
+- ✅ Benefits grid with icons
+- ✅ Dismissal preference storage
+- ✅ Integrated into AttendancePortal
+- ✅ Conditional visibility logic
+- ✅ Device-specific messaging
+
+---
+
+### **Phase 3: Attendance Verification Methods** ⏳ **NEXT (Week 3)**
 - [ ] Enrollment portal (0%)
 - [ ] WebAuthn integration (0%)
 - [ ] Status check hook (0%)
