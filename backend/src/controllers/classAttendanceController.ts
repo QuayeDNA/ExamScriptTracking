@@ -119,7 +119,7 @@ export const startSession = async (req: Request, res: Response) => {
     // Create or reactivate session
     let session = existingSession;
     if (!session) {
-      session = await prisma.attendanceSession.create({
+      const newSession = await prisma.attendanceSession.create({
         data: {
           deviceId: validatedData.deviceId,
           deviceName: validatedData.deviceName,
@@ -127,6 +127,18 @@ export const startSession = async (req: Request, res: Response) => {
           isActive: true,
         },
       });
+      // Re-fetch with attendanceRecords relation
+      session = await prisma.attendanceSession.findUnique({
+        where: { id: newSession.id },
+        include: {
+          attendanceRecords: true,
+        },
+      });
+    }
+
+    if (!session) {
+      res.status(500).json({ error: "Failed to create session" });
+      return;
     }
 
     // Create attendance record
@@ -141,14 +153,7 @@ export const startSession = async (req: Request, res: Response) => {
         status: RecordingStatus.IN_PROGRESS,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-          },
-        },
+        user: true,
         students: {
           include: {
             student: true,
@@ -171,7 +176,7 @@ export const startSession = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     console.error("Error starting attendance session:", error);
@@ -269,7 +274,7 @@ export const endSession = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     console.error("Error ending attendance session:", error);
@@ -322,7 +327,7 @@ export const recordAttendanceByQR = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     if (error instanceof Error) {
@@ -374,7 +379,7 @@ export const recordAttendanceByIndex = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     if (error instanceof Error) {
@@ -443,7 +448,7 @@ export const recordAttendanceByBiometric = async (req: Request, res: Response) =
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     if (error instanceof Error) {
@@ -672,7 +677,7 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
         createdBy: userId,
         expiresAt,
         maxUses: validatedData.maxUses,
-        geolocation: validatedData.geolocation || null,
+        geolocation: validatedData.geolocation ? JSON.parse(JSON.stringify(validatedData.geolocation)) : null,
         linkType: "ATTENDANCE",
       },
     });
@@ -689,7 +694,7 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     console.error("Error generating attendance link:", error);
@@ -765,7 +770,7 @@ export const enrollBiometric = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors });
+      res.status(400).json({ error: error.issues });
       return;
     }
     console.error("Error enrolling biometric:", error);

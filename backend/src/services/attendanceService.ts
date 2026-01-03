@@ -139,9 +139,6 @@ export class AttendanceService {
   }> {
     const link = await prisma.attendanceLink.findUnique({
       where: { linkToken },
-      include: {
-        record: true,
-      },
     });
 
     if (!link) {
@@ -160,8 +157,15 @@ export class AttendanceService {
       return { valid: false, error: "Link usage limit reached" };
     }
 
-    if (link.recordId && link.record?.status !== RecordingStatus.IN_PROGRESS) {
-      return { valid: false, error: "Attendance session is no longer active" };
+    // If link is associated with a record, check its status
+    if (link.recordId) {
+      const record = await prisma.classAttendanceRecord.findUnique({
+        where: { id: link.recordId },
+      });
+
+      if (record && record.status !== RecordingStatus.IN_PROGRESS) {
+        return { valid: false, error: "Attendance session is no longer active" };
+      }
     }
 
     return { 

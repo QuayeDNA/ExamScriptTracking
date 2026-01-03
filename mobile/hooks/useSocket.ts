@@ -24,9 +24,5 @@ export function useSocket() {
     };
   }, [isAuthenticated]);
 
-  return {
-    isConnected: mobileSocketService.isConnected(),
-    emit: mobileSocketService.emit.bind(mobileSocketService),
-    on: mobileSocketService.on.bind(mobileSocketService),
-  };
+  return mobileSocketService;
 }

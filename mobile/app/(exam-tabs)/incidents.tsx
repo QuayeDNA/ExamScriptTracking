@@ -53,7 +53,7 @@ export default function IncidentsScreen() {
         ...filters,
         limit: 50,
       });
-      setIncidents(response.incidents);
+      setIncidents(response.incidents as any);
     } catch (error) {
       console.error("Failed to fetch incidents:", error);
     }
