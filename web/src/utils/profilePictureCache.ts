@@ -3,6 +3,8 @@
 // Stores student profile pictures locally as base64
 // ========================================
 
+import { getFileUrl } from "@/lib/api-client";
+
 const CACHE_KEY_PREFIX = 'student_profile_';
 const MAX_IMAGE_SIZE_KB = 100; // 100KB limit per image
 const MAX_CACHE_SIZE_MB = 10;   // 10MB total cache limit
@@ -17,7 +19,7 @@ export interface CachedProfilePicture {
 /**
  * Download and cache a student's profile picture
  * @param indexNumber Student index number
- * @param imageUrl URL of the profile picture
+ * @param imageUrl URL of the profile picture (can be relative path)
  * @returns base64 encoded image data
  */
 export async function cacheProfilePicture(
@@ -31,8 +33,11 @@ export async function cacheProfilePicture(
       return cached.base64Data;
     }
     
+    // Convert relative path to full URL using getFileUrl
+    const fullUrl = getFileUrl(imageUrl);
+    
     // Download image
-    const response = await fetch(imageUrl);
+    const response = await fetch(fullUrl);
     if (!response.ok) {
       throw new Error('Failed to download profile picture');
     }

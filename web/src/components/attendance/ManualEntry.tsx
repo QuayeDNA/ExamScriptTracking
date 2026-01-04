@@ -11,15 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { classAttendancePortalApi, type SessionInfo, type StudentLookupResponse } from "@/api/classAttendancePortal";
+import { getFileUrl } from "@/lib/api-client";
 import type { AttendanceResult } from "./BiometricVerification";
 
 interface ManualEntryProps {
+  token: string;
   session: SessionInfo;
   onSuccess: (data: AttendanceResult) => void;
   onBack: () => void;
 }
 
-export function ManualEntry({ session, onSuccess, onBack }: ManualEntryProps) {
+export function ManualEntry({ token, session, onSuccess, onBack }: ManualEntryProps) {
   const [indexNumber, setIndexNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export function ManualEntry({ session, onSuccess, onBack }: ManualEntryProps) {
 
     try {
       // Lookup student
-      const studentData = await classAttendancePortalApi.lookupStudent(indexNumber);
+      const studentData = await classAttendancePortalApi.lookupStudent(token, indexNumber);
       setStudent(studentData);
       setStep("confirm");
     } catch (err) {
@@ -59,7 +61,7 @@ export function ManualEntry({ session, onSuccess, onBack }: ManualEntryProps) {
 
     try {
       const response = await classAttendancePortalApi.recordManual({
-        recordId: session.id,
+        token,
         indexNumber,
       });
 
@@ -176,7 +178,7 @@ export function ManualEntry({ session, onSuccess, onBack }: ManualEntryProps) {
           {step === "confirm" && student && (
             <>
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-green-600">
+                <div className="flex items-center gap-2 text-success">
                   <UserCheck className="h-5 w-5" />
                   <p className="font-medium">Student Found</p>
                 </div>
@@ -185,9 +187,12 @@ export function ManualEntry({ session, onSuccess, onBack }: ManualEntryProps) {
                 <div className="p-6 border-2 border-primary/20 rounded-lg bg-primary/5">
                   <div className="flex items-center gap-4">
                     <img
-                      src={student.profilePicture || "/placeholder-avatar.png"}
+                      src={getFileUrl(student.profilePicture)}
                       alt={student.firstName}
                       className="w-20 h-20 rounded-full object-cover border-2 border-primary"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/%3E%3Ccircle cx='12' cy='7' r='4'/%3E%3C/svg%3E";
+                      }}
                     />
                     <div className="flex-1">
                       <p className="text-xl font-semibold">

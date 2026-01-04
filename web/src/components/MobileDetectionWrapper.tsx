@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { Outlet } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Monitor, Smartphone } from "lucide-react";
@@ -6,7 +7,7 @@ import { Monitor, Smartphone } from "lucide-react";
 export function MobileDetectionWrapper({
   children,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   const [isMobile, setIsMobile] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
@@ -111,5 +112,7 @@ export function MobileDetectionWrapper({
     );
   }
 
-  return <>{children}</>;
+  // When used as a route element, use Outlet for nested routes
+  // When used as a wrapper component, render children
+  return <>{children || <Outlet />}</>;
 }

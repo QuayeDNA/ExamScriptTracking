@@ -56,11 +56,16 @@ export interface RecordAttendanceResponse {
 export const classAttendancePortalApi = {
   /**
    * Validate session link token
-   * GET /api/class-attendance/links/validate?token=ABC123
+   * POST /api/class-attendance/links/validate
+   * Body: { token, studentLocation?: { lat, lng } }
    */
-  validateLink: async (token: string): Promise<ValidateLinkResponse> => {
-    return apiClient.get<ValidateLinkResponse>(
-      `/class-attendance/links/validate?token=${encodeURIComponent(token)}`
+  validateLink: async (
+    token: string, 
+    studentLocation?: { lat: number; lng: number }
+  ): Promise<ValidateLinkResponse> => {
+    return apiClient.post<ValidateLinkResponse>(
+      `/class-attendance/links/validate`,
+      { token, studentLocation }
     );
   },
 
@@ -77,86 +82,66 @@ export const classAttendancePortalApi = {
   },
 
   /**
-   * Lookup student by index number
-   * GET /api/students/lookup?indexNumber=20230001
+   * Lookup student by index number (PUBLIC)
+   * POST /api/public/attendance/lookup-student
+   * Body: { token, indexNumber }
    */
   lookupStudent: async (
+    token: string,
     indexNumber: string
   ): Promise<StudentLookupResponse> => {
-    return apiClient.get<StudentLookupResponse>(
-      `/students/lookup?indexNumber=${encodeURIComponent(indexNumber)}`
+    return apiClient.post<StudentLookupResponse>(
+      `/public/attendance/lookup-student`,
+      { token, indexNumber }
     );
   },
 
   /**
-   * Record attendance via biometric verification
-   * POST /api/class-attendance/record/biometric
+   * Record attendance via biometric verification (PUBLIC)
+   * POST /api/public/attendance/record-biometric
    */
   recordBiometric: async (data: {
-    recordId: string;
+    token: string;
+    indexNumber: string;
     biometricHash: string;
     biometricConfidence: number;
     deviceId: string;
     location?: { lat: number; lng: number };
   }): Promise<RecordAttendanceResponse> => {
     return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/biometric",
+      "/public/attendance/record-biometric",
       data
     );
   },
 
   /**
-   * Record attendance via QR code self-scan
-   * POST /api/class-attendance/record/qr
+   * Record attendance via QR code self-scan (PUBLIC)
+   * POST /api/public/attendance/record-qr
    */
   recordQR: async (data: {
-    recordId: string;
+    token: string;
+    indexNumber: string;
     qrData: string;
     location?: { lat: number; lng: number };
   }): Promise<RecordAttendanceResponse> => {
     return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/qr",
+      "/public/attendance/record-qr",
       data
     );
   },
 
   /**
-   * Record attendance via manual index number entry
-   * POST /api/class-attendance/record/index
+   * Record attendance via manual index number entry (PUBLIC)
+   * POST /api/public/attendance/record-manual
    */
   recordManual: async (data: {
-    recordId: string;
+    token: string;
     indexNumber: string;
     location?: { lat: number; lng: number };
   }): Promise<RecordAttendanceResponse> => {
     return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/index",
+      "/public/attendance/record-manual",
       data
     );
-  },
-
-  /**
-   * Enroll student biometric (self-service)
-   * POST /api/class-attendance/biometric/enroll
-   */
-  enrollBiometric: async (data: {
-    studentId: string;
-    biometricHash: string;
-    deviceId: string;
-    provider: string;
-  }): Promise<{
-    success: boolean;
-    student: {
-      id: string;
-      indexNumber: string;
-      firstName: string;
-      lastName: string;
-    };
-    biometric: {
-      enrolledAt: string;
-      provider: string;
-    };
-  }> => {
-    return apiClient.post("/class-attendance/biometric/enroll", data);
   },
 };

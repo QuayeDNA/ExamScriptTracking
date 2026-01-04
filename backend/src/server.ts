@@ -9,6 +9,7 @@ import studentRoutes from "./routes/students";
 import examSessionRoutes from "./routes/examSessions";
 import attendanceRoutes from "./routes/attendance";
 import classAttendanceRoutes from "./routes/classAttendance";
+import publicAttendanceRoutes from "./routes/publicAttendance";
 import batchTransferRoutes from "./routes/batchTransfer";
 import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
@@ -508,6 +509,10 @@ app.get("/api", (req: Request, res: Response) => {
 });
 
 // API Routes
+// Public routes (no auth required)
+app.use("/api/public/attendance", publicAttendanceRoutes);
+
+// Authenticated routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/students", studentRoutes);

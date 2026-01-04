@@ -12,7 +12,6 @@ import {
   generateAttendanceLink,
   validateAttendanceLink,
   getActiveLinks,
-  enrollBiometric,
   getAttendanceStats,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
@@ -177,22 +176,6 @@ router.post(
   "/links/generate",
   authorize(Role.ADMIN, Role.LECTURER),
   generateAttendanceLink
-);
-
-// ============================================================================
-// BIOMETRIC ENROLLMENT
-// ============================================================================
-
-/**
- * Enroll biometric data for a student
- * POST /api/class-attendance/biometric/enroll
- * Access: LECTURER, ADMIN
- * Body: { studentId, biometricHash, deviceId, provider }
- */
-router.post(
-  "/biometric/enroll",
-  authorize(Role.ADMIN, Role.LECTURER),
-  enrollBiometric
 );
 
 // ============================================================================

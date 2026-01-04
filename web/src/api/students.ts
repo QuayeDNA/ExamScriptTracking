@@ -232,4 +232,29 @@ export const studentsApi = {
       });
     return response.data;
   },
+
+  /**
+   * Public biometric enrollment for students
+   * POST /api/students/biometric/enroll
+   */
+  enrollBiometric: async (data: {
+    studentId: string;
+    biometricHash: string;
+    deviceId: string;
+    provider: string;
+  }): Promise<{
+    success: boolean;
+    student: {
+      id: string;
+      indexNumber: string;
+      firstName: string;
+      lastName: string;
+    };
+    biometric: {
+      enrolledAt: string;
+      provider: string;
+    };
+  }> => {
+    return apiClient.post("/students/biometric/enroll", data);
+  },
 };

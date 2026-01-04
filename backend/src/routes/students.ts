@@ -13,6 +13,7 @@ import {
   lookupStudentForIncident,
   exportStudentsPDF,
   uploadStudentPicture,
+  enrollStudentBiometric,
 } from "../controllers/studentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -27,6 +28,13 @@ const router = Router();
  * @access  Public
  */
 router.get("/qr", getStudentByIndexNumber);
+
+/**
+ * @route   POST /api/students/biometric/enroll
+ * @desc    Public biometric enrollment for students
+ * @access  Public
+ */
+router.post("/biometric/enroll", enrollStudentBiometric);
 
 // All other routes require authentication
 router.use(authenticate);

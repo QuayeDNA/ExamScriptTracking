@@ -22,13 +22,13 @@ export function VerificationSuccess({ result, session }: VerificationSuccessProp
   const getMethodBadgeColor = (method: string) => {
     switch (method) {
       case "BIOMETRIC":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "bg-success/10 text-success border-success/20";
       case "QR_SCAN":
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "bg-primary/10 text-primary border-primary/20";
       case "MANUAL":
-        return "bg-orange-100 text-orange-800 border-orange-200";
+        return "bg-warning/10 text-warning border-warning/20";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "bg-muted text-muted-foreground border-border";
     }
   };
 
@@ -46,23 +46,23 @@ export function VerificationSuccess({ result, session }: VerificationSuccessProp
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Success Animation Card */}
-      <Card className="border-2 border-green-500 bg-linear-to-br from-green-50 to-emerald-50">
-        <CardHeader>
-          <div className="flex flex-col items-center text-center space-y-4 py-6">
+      <Card className="border-2 border-success bg-success/5">
+        <CardHeader className="pb-3 sm:pb-4">
+          <div className="flex flex-col items-center text-center space-y-3 sm:space-y-4 py-4 sm:py-6">
             <div className="relative">
-              <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping" />
-              <div className="relative rounded-full bg-green-100 p-6">
-                <CheckCircle2 className="h-16 w-16 text-green-600" />
+              <div className="absolute inset-0 bg-success/20 rounded-full animate-ping" />
+              <div className="relative rounded-full bg-success/10 p-4 sm:p-6">
+                <CheckCircle2 className="h-12 w-12 sm:h-16 sm:w-16 text-success" />
               </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-bold text-green-900">
+            <div className="space-y-1 sm:space-y-2 px-4">
+              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
                 Attendance Recorded!
               </h2>
-              <p className="text-green-700">
-                Your attendance has been successfully marked
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Successfully marked
               </p>
             </div>
           </div>
@@ -71,29 +71,29 @@ export function VerificationSuccess({ result, session }: VerificationSuccessProp
 
       {/* Details Card */}
       <Card>
-        <CardContent className="p-6 space-y-6">
+        <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Student Info */}
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-muted-foreground">Student</p>
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <div>
-                <p className="font-semibold text-lg">{result.studentName}</p>
-                <p className="text-sm text-muted-foreground">{result.indexNumber}</p>
+          <div className="space-y-2 sm:space-y-3">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">Student</p>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="h-2 w-2 rounded-full bg-success shrink-0" />
+              <div className="min-w-0">
+                <p className="font-semibold text-base sm:text-lg truncate">{result.studentName}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{result.indexNumber}</p>
               </div>
             </div>
           </div>
 
           {/* Session Details */}
-          <div className="space-y-3 pt-4 border-t">
-            <p className="text-sm font-medium text-muted-foreground">Session</p>
+          <div className="space-y-2 sm:space-y-3 pt-3 sm:pt-4 border-t">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">Session</p>
             <div className="space-y-2">
-              <div className="flex items-start gap-3">
-                <Calendar className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <div>
-                  <p className="font-medium">{session.courseCode} - {session.courseName}</p>
-                  <p className="text-sm text-muted-foreground">{session.lecturerName}</p>
-                  <p className="text-sm text-muted-foreground">{session.venue}</p>
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Calendar className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium text-sm sm:text-base break-words">{session.courseCode} - {session.courseName}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">{session.lecturerName}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">{session.venue}</p>
                 </div>
               </div>
             </div>

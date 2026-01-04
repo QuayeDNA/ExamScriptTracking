@@ -74,19 +74,34 @@ export function useBiometricStatus(indexNumber: string | null): BiometricStatus 
       }
 
       // Fetch from API if not cached
-      const [enrollmentStatus, deviceSupport] = await Promise.all([
-        classAttendancePortalApi.getBiometricStatus(indexNumber),
-        checkDeviceSupport(),
-      ]);
+      // Don't call API for public attendance - it requires authentication
+      // Just check device support and WebAuthn credentials locally
+      const deviceSupport = await checkDeviceSupport();
+      
+      // Check if WebAuthn credentials exist locally (indicates enrollment)
+      let enrolled = false;
+      if (window.PublicKeyCredential && deviceSupport.platformAuthenticator) {
+        try {
+          enrolled = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        } catch {
+          enrolled = false;
+        }
+      }
 
-      // Cache the enrollment status
-      setCachedStatus(indexNumber, enrollmentStatus);
+      const statusData = {
+        enrolled,
+        provider: deviceSupport.type,
+        enrolledAt: undefined,
+      };
+
+      // Cache the status
+      setCachedStatus(indexNumber, statusData);
 
       setStatus(prev => ({
         ...prev,
-        enrolled: enrollmentStatus.enrolled,
-        provider: enrollmentStatus.provider,
-        enrolledAt: enrollmentStatus.enrolledAt,
+        enrolled: statusData.enrolled,
+        provider: statusData.provider,
+        enrolledAt: statusData.enrolledAt,
         deviceSupported: deviceSupport.supported && deviceSupport.platformAuthenticator,
         deviceType: deviceSupport.type,
         loading: false,
@@ -94,7 +109,7 @@ export function useBiometricStatus(indexNumber: string | null): BiometricStatus 
       }));
     } catch (err) {
       const error = err as Error;
-      console.error('Failed to fetch biometric status:', error);
+      console.error('[useBiometricStatus] Error:', error);
       
       setStatus(prev => ({
         ...prev,

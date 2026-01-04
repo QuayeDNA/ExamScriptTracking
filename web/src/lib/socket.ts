@@ -14,8 +14,9 @@ class SocketService {
       return;
     }
 
-    const SOCKET_URL =
-      import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+    // Use empty string to let Vite proxy handle the connection (proxies to backend)
+    // In production, VITE_SOCKET_URL will be set to the actual backend URL
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "";
 
     this.socket = io(SOCKET_URL, {
       auth: {

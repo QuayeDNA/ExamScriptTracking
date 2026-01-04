@@ -74,13 +74,6 @@ const generateLinkSchema = z.object({
   }).optional(),
 });
 
-const validateBiometricEnrollmentSchema = z.object({
-  studentId: z.string().uuid("Invalid student ID"),
-  biometricHash: z.string().min(1, "Biometric hash is required"),
-  deviceId: z.string().min(1, "Device ID is required"),
-  provider: z.enum(['TOUCHID', 'FACEID', 'FINGERPRINT']),
-});
-
 const validateLinkSchema = z.object({
   token: z.string().min(1, "Token is required"),
   studentLocation: z.object({
@@ -983,6 +976,7 @@ export const getActiveLinks = async (req: Request, res: Response) => {
  * Validate attendance link and enforce security settings
  * POST /api/class-attendance/links/validate
  * Public endpoint (no authentication required)
+ * Body: { token, studentLocation?: { lat, lng } }
  */
 export const validateAttendanceLink = async (req: Request, res: Response) => {
   try {
@@ -995,6 +989,7 @@ export const validateAttendanceLink = async (req: Request, res: Response) => {
     });
 
     if (!link) {
+      console.warn(`[Link Validation] Link not found:`, { token: token.substring(0, 8) + '...' });
       res.status(404).json({ 
         valid: false, 
         error: "Invalid or expired attendance link" 
@@ -1004,6 +999,11 @@ export const validateAttendanceLink = async (req: Request, res: Response) => {
 
     // Check if link is expired
     if (new Date() > link.expiresAt) {
+      console.warn(`[Link Validation] Link expired:`, { 
+        token: token.substring(0, 8) + '...',
+        expiresAt: link.expiresAt,
+        now: new Date(),
+      });
       res.status(400).json({ 
         valid: false, 
         error: "This attendance link has expired" 
@@ -1013,6 +1013,11 @@ export const validateAttendanceLink = async (req: Request, res: Response) => {
 
     // Check if link has reached max uses
     if (link.maxUses && link.usesCount >= link.maxUses) {
+      console.warn(`[Link Validation] Max uses reached:`, { 
+        token: token.substring(0, 8) + '...',
+        usesCount: link.usesCount,
+        maxUses: link.maxUses,
+      });
       res.status(400).json({ 
         valid: false, 
         error: "This attendance link has reached its maximum usage limit" 
@@ -1069,6 +1074,14 @@ export const validateAttendanceLink = async (req: Request, res: Response) => {
       distanceFromVenue = Math.round(distanceFromVenue * 100) / 100;
 
       if (distanceFromVenue > geolocation.radius) {
+        console.warn(`[Geofencing] Student too far from venue:`, {
+          token: token.substring(0, 8) + '...',
+          distanceFromVenue,
+          requiredRadius: geolocation.radius,
+          studentLocation,
+          venueLocation: { lat: geolocation.lat, lng: geolocation.lng },
+        });
+        
         res.status(403).json({
           valid: false,
           error: `You must be within ${geolocation.radius}m of the venue to mark attendance`,
@@ -1120,73 +1133,6 @@ export const validateAttendanceLink = async (req: Request, res: Response) => {
  * POST /api/class-attendance/biometric/enroll
  * Roles: LECTURER, ADMIN
  */
-export const enrollBiometric = async (req: Request, res: Response) => {
-  try {
-    const validatedData = validateBiometricEnrollmentSchema.parse(req.body);
-
-    // Check if student exists
-    const student = await prisma.student.findUnique({
-      where: { id: validatedData.studentId },
-    });
-
-    if (!student) {
-      res.status(404).json({ error: "Student not found" });
-      return;
-    }
-
-    // Check if biometric already enrolled
-    if (student.biometricTemplateHash) {
-      res.status(400).json({ 
-        error: "Student already has biometric data enrolled",
-        enrolledAt: student.biometricEnrolledAt,
-      });
-      return;
-    }
-
-    // Check for hash collision (very unlikely but good practice)
-    const existingBiometric = await prisma.student.findUnique({
-      where: { biometricTemplateHash: validatedData.biometricHash },
-    });
-
-    if (existingBiometric) {
-      res.status(409).json({ 
-        error: "This biometric data is already enrolled to another student" 
-      });
-      return;
-    }
-
-    // Enroll biometric
-    const updatedStudent = await prisma.student.update({
-      where: { id: validatedData.studentId },
-      data: {
-        biometricTemplateHash: validatedData.biometricHash,
-        biometricEnrolledAt: new Date(),
-        biometricDeviceId: validatedData.deviceId,
-        biometricProvider: validatedData.provider,
-      },
-    });
-
-    res.json({
-      message: "Biometric enrollment successful",
-      student: {
-        id: updatedStudent.id,
-        indexNumber: updatedStudent.indexNumber,
-        firstName: updatedStudent.firstName,
-        lastName: updatedStudent.lastName,
-        biometricEnrolledAt: updatedStudent.biometricEnrolledAt,
-        biometricProvider: updatedStudent.biometricProvider,
-      },
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.issues });
-      return;
-    }
-    console.error("Error enrolling biometric:", error);
-    res.status(500).json({ error: "Failed to enroll biometric data" });
-  }
-};
-
 // ============================================================================
 // ANALYTICS
 // ============================================================================

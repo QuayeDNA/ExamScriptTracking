@@ -6,7 +6,9 @@ import axios, {
 } from "axios";
 import type { ApiError } from "@/types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// Use empty string if VITE_API_URL is not set (relies on Vite proxy)
+// Only fallback to localhost if explicitly needed (dev without proxy)
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 class ApiClient {
   private client: AxiosInstance;
@@ -18,7 +20,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: `${API_URL}/api`,
+      baseURL: API_URL ? `${API_URL}/api` : "/api",
       headers: {
         "Content-Type": "application/json",
       },
@@ -63,11 +65,8 @@ class ApiClient {
           const refreshToken = localStorage.getItem("refreshToken");
 
           if (!refreshToken) {
-            // Only logout if not on login page
-            if (
-              window.location.pathname !== "/login" &&
-              window.location.pathname !== "/mobile/login"
-            ) {
+            // Only logout if not on a public route
+            if (!this.isPublicRoute()) {
               this.handleLogout();
             }
             return Promise.reject(error);
@@ -92,11 +91,8 @@ class ApiClient {
           } catch (refreshError) {
             this.processQueue(refreshError, null);
             this.isRefreshing = false;
-            // Only logout if not on login page
-            if (
-              window.location.pathname !== "/login" &&
-              window.location.pathname !== "/mobile/login"
-            ) {
+            // Only logout if not on a public route
+            if (!this.isPublicRoute()) {
               this.handleLogout();
             }
             return Promise.reject(refreshError);
@@ -130,7 +126,30 @@ class ApiClient {
     this.failedQueue = [];
   }
 
+  private isPublicRoute(): boolean {
+    const publicRoutes = [
+      '/login',
+      '/mobile/login',
+      '/student-attendance',
+      '/attendance',
+      '/my-attendance',
+      '/enroll-biometric',
+      '/enroll/biometric',
+      '/student-qr',
+      '/design-system-demo',
+      '/unauthorized'
+    ];
+    
+    const currentPath = window.location.pathname;
+    return publicRoutes.some(route => currentPath.startsWith(route));
+  }
+
   private handleLogout() {
+    // Don't redirect if on a public route
+    if (this.isPublicRoute()) {
+      return;
+    }
+    
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");

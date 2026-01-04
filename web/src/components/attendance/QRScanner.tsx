@@ -13,23 +13,38 @@ import { classAttendancePortalApi, type SessionInfo } from "@/api/classAttendanc
 import type { AttendanceResult } from "./BiometricVerification";
 
 interface QRScannerProps {
+  token: string;
   session: SessionInfo;
   onSuccess: (data: AttendanceResult) => void;
   onBack: () => void;
 }
 
-export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
+export function QRScanner({ token, session, onSuccess, onBack }: QRScannerProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"permission" | "scanning" | "verifying" | "recording">("permission");
   const [scannedData, setScannedData] = useState<string | null>(null);
+  const [cameraTimeout, setCameraTimeout] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isProcessing = useRef(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Set timeout for camera initialization (10 seconds)
+    timeoutRef.current = setTimeout(() => {
+      if (step === "permission") {
+        setCameraTimeout(true);
+        setError("Camera initialization timed out. Please check camera permissions in your browser settings.");
+        setLoading(false);
+      }
+    }, 10000);
+
     startScanning();
 
     return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       stopScanning();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -38,30 +53,85 @@ export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
   const startScanning = async () => {
     setLoading(true);
     setError(null);
+    setCameraTimeout(false);
 
     try {
+      // Check if camera is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not supported on this device/browser");
+      }
+
+      console.log('[QRScanner] Requesting camera permission...');
+
+      // Request camera permission explicitly first
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        });
+        console.log('[QRScanner] Camera permission granted, stream obtained');
+        
+        // Stop the stream - html5-qrcode will create its own
+        stream.getTracks().forEach(track => track.stop());
+      } catch (permErr: any) {
+        console.error('[QRScanner] Camera permission error:', permErr);
+        
+        if (permErr.name === 'NotAllowedError' || permErr.name === 'PermissionDeniedError') {
+          throw new Error("Camera permission denied. Please enable camera access in your browser settings and refresh the page.");
+        } else if (permErr.name === 'NotFoundError' || permErr.name === 'DevicesNotFoundError') {
+          throw new Error("No camera found on this device.");
+        } else if (permErr.name === 'NotReadableError' || permErr.name === 'TrackStartError') {
+          throw new Error("Camera is already in use by another application. Please close other apps using the camera.");
+        } else if (permErr.name === 'OverconstrainedError') {
+          throw new Error("Camera doesn't support the requested configuration. Trying default settings...");
+        } else if (permErr.name === 'SecurityError') {
+          throw new Error("Camera access blocked by browser security policy. Make sure you're using HTTPS.");
+        } else {
+          throw new Error(`Camera error: ${permErr.name || permErr.message}`);
+        }
+      }
+
+      console.log('[QRScanner] Initializing HTML5 QR Code scanner...');
       const scanner = new Html5Qrcode("qr-reader");
       scannerRef.current = scanner;
 
+      console.log('[QRScanner] Starting scanner with environment camera...');
       await scanner.start(
         { facingMode: "environment" }, // Use back camera
         {
           fps: 10, // Scans per second
           qrbox: { width: 250, height: 250 }, // Scanning box size
+          aspectRatio: 1.0,
         },
         onScanSuccess,
         onScanFailure
       );
 
+      console.log('[QRScanner] Scanner started successfully');
+
+      // Clear timeout if successful
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
       setStep("scanning");
       setLoading(false);
     } catch (err) {
       const error = err as Error;
-      console.error("Failed to start QR scanner:", error);
-      setError(
-        error.message || "Failed to access camera. Please check permissions."
-      );
+      console.error('[QRScanner] Failed to start QR scanner:', error);
+      
+      // Clear timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      setError(error.message || "Failed to access camera. Please check permissions and try again.");
       setLoading(false);
+      setCameraTimeout(true);
     }
   };
 
@@ -87,20 +157,32 @@ export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
     stopScanning();
 
     try {
-      // Step 1: Validate QR code format (should be student index number)
-      const indexNumber = decodedText.trim();
+      // Step 1: Validate QR code format (should be student index number or JSON)
+      let indexNumber: string;
+      let qrData: string = decodedText;
+      
+      try {
+        // Try to parse as JSON first (new format)
+        const parsed = JSON.parse(decodedText);
+        indexNumber = parsed.indexNumber;
+      } catch {
+        // Fallback to plain text (old format)
+        indexNumber = decodedText.trim();
+      }
+      
       if (!indexNumber) {
         throw new Error("Invalid QR code format");
       }
 
       // Step 2: Lookup student
-      const student = await classAttendancePortalApi.lookupStudent(indexNumber);
+      const student = await classAttendancePortalApi.lookupStudent(token, indexNumber);
 
       // Step 3: Record attendance
       setStep("recording");
       const response = await classAttendancePortalApi.recordQR({
-        recordId: session.id,
-        qrData: indexNumber,
+        token,
+        indexNumber,
+        qrData,
       });
 
       if (!response.success) {
@@ -163,8 +245,40 @@ export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Permission/Loading State */}
-          {step === "permission" && (
+          {/* QR Reader Container - Always present in DOM, hidden when not scanning */}
+          <div
+            id="qr-reader"
+            className={step === "scanning" ? "w-full rounded-lg overflow-hidden border-2 border-primary" : "hidden"}
+          />
+
+          {/* Error State with Fallback - Show this first if there's an error */}
+          {error && (
+            <div className="space-y-4">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+
+              <div className="text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Can't access camera? Try these options:
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button onClick={startScanning} variant="outline" className="w-full">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Try Again
+                  </Button>
+                  <Button onClick={onBack} variant="secondary" className="w-full">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Use Manual Entry Instead
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Permission/Loading State - Only show if no error */}
+          {!error && step === "permission" && (
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
               <Loader2 className="h-16 w-16 animate-spin text-primary" />
               <div className="text-center space-y-2">
@@ -172,22 +286,21 @@ export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
                 <p className="text-sm text-muted-foreground">
                   Please allow camera access when prompted
                 </p>
+                {cameraTimeout && (
+                  <p className="text-xs text-destructive mt-2">
+                    Taking longer than expected...
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {/* Scanning State */}
-          {step === "scanning" && (
+          {!error && step === "scanning" && (
             <>
               <div className="relative">
-                {/* QR Scanner Container */}
-                <div
-                  id="qr-reader"
-                  className="w-full rounded-lg overflow-hidden border-2 border-primary"
-                />
-
                 {/* Overlay Instructions */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-sm">
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-sm z-10">
                   <Camera className="h-4 w-4 inline mr-2" />
                   Position QR code within the box
                 </div>
@@ -228,7 +341,7 @@ export function QRScanner({ session, onSuccess, onBack }: QRScannerProps) {
           {/* Recording State */}
           {step === "recording" && (
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
-              <CheckCircle2 className="h-16 w-16 text-green-600" />
+              <CheckCircle2 className="h-16 w-16 text-success" />
               <div className="text-center space-y-2">
                 <p className="text-lg font-medium">Recording attendance...</p>
                 <p className="text-sm text-muted-foreground">

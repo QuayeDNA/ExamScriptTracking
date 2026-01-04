@@ -40,7 +40,6 @@ import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
-import BiometricEnrollmentPage from "@/pages/BiometricEnrollmentPage";
 import { AttendancePortal } from "@/pages/attendance/AttendancePortal";
 import { BiometricEnrollment } from "@/pages/enroll/BiometricEnrollment";
 import { MyAttendancePage } from "@/pages/attendance/MyAttendancePage";
@@ -60,7 +59,6 @@ import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferP
 import { MobileLoginPage } from "@/pages/mobile/MobileLoginPage";
 import { MobileQRRegistrationPage } from "@/pages/mobile/MobileQRRegistrationPage";
 import { MobileChangePasswordPage } from "@/pages/mobile/MobileChangePasswordPage";
-import { StudentAttendancePage } from "@/pages/StudentAttendancePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,29 +85,27 @@ function App() {
   useSocket();
 
   return (
-    <MobileDetectionWrapper>
-      <ThemeProvider defaultTheme="system" storageKey="exam-script-theme">
-        <QueryClientProvider client={queryClient}>
-          <Toaster />
-          <ErrorBoundary>
-            <BrowserRouter>
-              <Routes>
-                {/* Public routes */}
-                <Route
-                  path="/design-system-demo"
-                  element={<DesignSystemDemo />}
-                />
-                <Route path="/student-qr" element={<StudentQRLookup />} />
-                <Route path="/student-attendance" element={<StudentAttendancePage />} />
-                <Route path="/enroll-biometric" element={<BiometricEnrollmentPage />} />
+    <ThemeProvider defaultTheme="system" storageKey="exam-script-theme">
+      <QueryClientProvider client={queryClient}>
+        <Toaster />
+        <ErrorBoundary>
+          <BrowserRouter>
+            <Routes>
+              {/* Public Self-Service Routes (outside mobile wrapper - work on all devices) */}
+              <Route path="/student-attendance" element={<AttendancePortal />} />
+              <Route path="/attendance/:token" element={<AttendancePortal />} />
+              <Route path="/my-attendance" element={<MyAttendancePage />} />
+              <Route path="/enroll/biometric" element={<BiometricEnrollment />} />
+              <Route path="/student-qr" element={<StudentQRLookup />} />
+              <Route
+                path="/design-system-demo"
+                element={<DesignSystemDemo />}
+              />
                 
-                {/* Student Self-Service Attendance Portal */}
-                <Route path="/attendance/:token" element={<AttendancePortal />} />
-                <Route path="/my-attendance" element={<MyAttendancePage />} />
-                <Route path="/enroll/biometric" element={<BiometricEnrollment />} />
-                
-                <Route path="/unauthorized" element={<UnauthorizedPage />} />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
+              {/* Authenticated routes with mobile detection */}
+              <Route element={<MobileDetectionWrapper />}>
                 {/* Desktop Auth routes - shared AuthLayout */}
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<LoginPage />} />
@@ -214,13 +210,15 @@ function App() {
                   path="/"
                   element={<Navigate to="/dashboard" replace />}
                 />
-                <Route path="*" element={<ConditionalNotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </ErrorBoundary>
-        </QueryClientProvider>
-      </ThemeProvider>
-    </MobileDetectionWrapper>
+              </Route>
+
+              {/* 404 - outside mobile wrapper */}
+              <Route path="*" element={<ConditionalNotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </ErrorBoundary>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

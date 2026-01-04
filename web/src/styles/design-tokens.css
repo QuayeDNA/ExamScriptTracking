@@ -281,6 +281,15 @@
   .border-border {
     border-color: var(--border);
   }
+  .border-success {
+    border-color: var(--color-success-500);
+  }
+  .border-info {
+    border-color: var(--color-info-500);
+  }
+  .border-warning {
+    border-color: var(--color-warning-500);
+  }
 
   .bg-border {
     background-color: var(--border);

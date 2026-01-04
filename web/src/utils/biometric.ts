@@ -14,9 +14,13 @@ export type BiometricType = 'faceid' | 'touchid' | 'fingerprint' | 'none';
 
 /**
  * Check if the device supports biometric authentication
- * Uses WebAuthn API to detect platform authenticator
+ * Uses more reliable detection methods for biometric capabilities
  */
 export async function checkDeviceSupport(): Promise<DeviceSupport> {
+  console.log('[Biometric] Starting device support check...');
+  console.log('[Biometric] User Agent:', navigator.userAgent);
+  console.log('[Biometric] Platform:', navigator.platform);
+  
   const result: DeviceSupport = {
     supported: false,
     type: 'none',
@@ -24,34 +28,51 @@ export async function checkDeviceSupport(): Promise<DeviceSupport> {
     webAuthnAvailable: false,
   };
 
-  // Check if WebAuthn is available
-  if (!window.PublicKeyCredential) {
-    result.error = 'WebAuthn not supported by this browser';
-    return result;
-  }
-
-  result.webAuthnAvailable = true;
-
-  try {
-    // Check if platform authenticator is available
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    
-    if (!available) {
-      result.error = 'No biometric authenticator found on this device';
-      return result;
-    }
-
-    result.platformAuthenticator = true;
+  // Determine biometric type based on platform (do this first)
+  result.type = getBiometricType();
+  console.log('[Biometric] Detected type:', result.type);
+  
+  // If we detected a biometric type, consider it supported
+  // This is more reliable than WebAuthn checks which can fail
+  if (result.type !== 'none') {
+    console.log('[Biometric] ✅ Device has biometric capability based on platform detection');
     result.supported = true;
-
-    // Determine biometric type based on platform
-    result.type = getBiometricType();
-
-    return result;
-  } catch (error) {
-    result.error = error instanceof Error ? error.message : 'Unknown error';
-    return result;
+    result.platformAuthenticator = true;
   }
+
+  // Check if WebAuthn is available (nice to have but not required)
+  if (window.PublicKeyCredential) {
+    result.webAuthnAvailable = true;
+    console.log('[Biometric] WebAuthn API is available');
+    
+    try {
+      // Check if platform authenticator is available
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      console.log('[Biometric] Platform authenticator available:', available);
+      
+      if (available) {
+        result.platformAuthenticator = true;
+        result.supported = true;
+        console.log('[Biometric] ✅ WebAuthn confirms biometric support');
+      }
+    } catch (error) {
+      // Don't fail if WebAuthn check fails - we already have type detection
+      console.warn('[Biometric] WebAuthn check failed (non-critical):', error);
+    }
+  } else {
+    console.log('[Biometric] WebAuthn API not available');
+  }
+
+  // Final result
+  if (!result.supported) {
+    result.error = 'No biometric capability detected on this device';
+    console.log('[Biometric] ❌ Device not supported');
+  } else {
+    console.log('[Biometric] ✅ Final result: Device SUPPORTED');
+  }
+
+  console.log('[Biometric] Complete result:', result);
+  return result;
 }
 
 /**

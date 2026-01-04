@@ -1115,3 +1115,95 @@ export const exportStudentsPDF = async (
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+/**
+ * Public biometric enrollment for students
+ * POST /api/students/biometric/enroll
+ * No authentication required - students enroll themselves
+ */
+export const enrollStudentBiometric = async (req: Request, res: Response) => {
+  try {
+    const enrollmentSchema = z.object({
+      studentId: z.string().uuid("Invalid student ID"),
+      biometricHash: z.string().min(1, "Biometric hash is required"),
+      deviceId: z.string().min(1, "Device ID is required"),
+      provider: z.string().min(1, "Provider is required"),
+    });
+
+    const { studentId, biometricHash, deviceId, provider } = enrollmentSchema.parse(req.body);
+
+    // Validate provider
+    if (!isValidBiometricProvider(provider)) {
+      res.status(400).json({ error: "Invalid biometric provider" });
+      return;
+    }
+
+    // Check if student exists
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        biometricTemplateHash: true,
+        biometricEnrolledAt: true,
+      },
+    });
+
+    if (!student) {
+      res.status(404).json({ error: "Student not found" });
+      return;
+    }
+
+    // Check if already enrolled
+    if (student.biometricTemplateHash) {
+      res.status(400).json({ 
+        error: "Biometric already enrolled",
+        enrolledAt: student.biometricEnrolledAt,
+      });
+      return;
+    }
+
+    // Store the biometric template hash directly
+    // (Schema doesn't support salt field, hash is already secure from frontend)
+    const updatedStudent = await prisma.student.update({
+      where: { id: studentId },
+      data: {
+        biometricTemplateHash: biometricHash,
+        biometricDeviceId: deviceId,
+        biometricProvider: provider,
+        biometricEnrolledAt: new Date(),
+      },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        biometricEnrolledAt: true,
+        biometricProvider: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      student: {
+        id: updatedStudent.id,
+        indexNumber: updatedStudent.indexNumber,
+        firstName: updatedStudent.firstName,
+        lastName: updatedStudent.lastName,
+      },
+      biometric: {
+        enrolledAt: updatedStudent.biometricEnrolledAt,
+        provider: updatedStudent.biometricProvider,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors[0].message });
+      return;
+    }
+    console.error("Enroll student biometric error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

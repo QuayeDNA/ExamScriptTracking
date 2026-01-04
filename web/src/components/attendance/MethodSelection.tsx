@@ -28,29 +28,31 @@ interface MethodSelectionProps {
 }
 
 export function MethodSelection({ biometricStatus, onSelectMethod }: MethodSelectionProps) {
+  console.log('[MethodSelection] Biometric status:', biometricStatus);
+  
   // Determine method availability
   const methods: MethodOption[] = [
     {
       id: "biometric",
       name: "Biometric Verification",
-      description: biometricStatus.enrolled 
-        ? `Use ${biometricStatus.provider || "biometric"} for instant verification`
-        : "Quick and secure - enroll to use this method",
-      icon: <Fingerprint className="h-8 w-8" />,
-      estimatedTime: "3 seconds",
-      available: biometricStatus.enrolled && biometricStatus.deviceSupported,
+      description: biometricStatus.deviceSupported
+        ? biometricStatus.enrolled 
+          ? "Use fingerprint or face for instant verification"
+          : "Enroll your biometrics during attendance"
+        : "Your device doesn't support biometric authentication",
+      icon: <Fingerprint className="h-10 w-10 sm:h-12 sm:w-12" />,
+      estimatedTime: biometricStatus.enrolled ? "3 seconds" : "30 seconds",
+      available: biometricStatus.deviceSupported,
       recommended: biometricStatus.enrolled && biometricStatus.deviceSupported,
-      disabledReason: !biometricStatus.enrolled 
-        ? "Not enrolled yet" 
-        : !biometricStatus.deviceSupported 
+      disabledReason: !biometricStatus.deviceSupported 
         ? "Device not supported" 
         : undefined,
     },
     {
       id: "qr",
       name: "QR Code Scan",
-      description: "Scan your student ID QR code with camera",
-      icon: <QrCode className="h-8 w-8" />,
+      description: "Scan your student ID QR code with your camera",
+      icon: <QrCode className="h-10 w-10 sm:h-12 sm:w-12" />,
       estimatedTime: "10 seconds",
       available: true,
       recommended: !biometricStatus.enrolled,
@@ -59,106 +61,120 @@ export function MethodSelection({ biometricStatus, onSelectMethod }: MethodSelec
       id: "manual",
       name: "Manual Entry",
       description: "Enter your index number manually",
-      icon: <Keyboard className="h-8 w-8" />,
+      icon: <Keyboard className="h-10 w-10 sm:h-12 sm:w-12" />,
       estimatedTime: "20 seconds",
       available: true,
     },
   ];
 
+  // Simple solid colors for each method
+  const cardColors = {
+    biometric: "#10b981", // emerald-500
+    qr: "#3b82f6",        // blue-500
+    manual: "#8b5cf6",    // violet-500
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-6">
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-bold">Choose Verification Method</h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Choose Verification Method</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Select how you'd like to mark your attendance
         </p>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid gap-4 max-w-3xl mx-auto">
         {methods.map((method) => (
           <Card
             key={method.id}
-            className={`relative transition-all ${
+            className={`relative overflow-hidden border-0 shadow-lg ${
               method.available
-                ? "cursor-pointer hover:shadow-lg hover:border-primary/50"
-                : "opacity-60"
-            } ${method.recommended ? "border-2 border-primary" : ""}`}
+                ? "cursor-pointer active:scale-[0.98] transition-transform"
+                : "opacity-60 cursor-not-allowed"
+            }`}
+            style={{
+              backgroundColor: method.available ? cardColors[method.id] : '#6b7280'
+            }}
             onClick={() => method.available && onSelectMethod(method.id)}
           >
             {method.recommended && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <Badge className="bg-primary text-primary-foreground">
+              <div className="absolute top-3 right-3">
+                <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs font-semibold">
                   Recommended
                 </Badge>
               </div>
             )}
 
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
-                {/* Icon */}
-                <div
-                  className={`rounded-full p-4 ${
-                    method.available
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
+            <CardContent className="p-5 sm:p-6">
+              {/* Icon */}
+              <div className="mb-4">
+                <div className="text-white/90">
                   {method.icon}
                 </div>
+              </div>
 
-                {/* Content */}
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">{method.name}</h3>
-                    {method.available ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </div>
-
-                  <p className="text-sm text-muted-foreground">
+              {/* Content */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
+                    {method.name}
+                  </h3>
+                  <p className="text-sm sm:text-base text-white/90 leading-relaxed">
                     {method.description}
                   </p>
+                </div>
 
-                  <div className="flex items-center gap-4 pt-2">
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      <span>{method.estimatedTime}</span>
-                    </div>
-
-                    {!method.available && method.disabledReason && (
-                      <Badge variant="secondary" className="text-xs">
-                        {method.disabledReason}
-                      </Badge>
-                    )}
+                {/* Features */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="flex items-center gap-1.5 text-white/90">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm font-medium">{method.estimatedTime}</span>
                   </div>
-
+                  
                   {method.available && (
+                    <div className="flex items-center gap-1.5 text-white/90">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-sm font-medium">Available</span>
+                    </div>
+                  )}
+
+                  {!method.available && method.disabledReason && (
+                    <div className="flex items-center gap-1.5 text-white/90">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm font-medium">{method.disabledReason}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Button */}
+                {method.available && (
+                  <div className="pt-3 border-t border-white/20">
                     <Button
-                      className="w-full mt-4"
-                      variant={method.recommended ? "default" : "outline"}
+                      className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm font-semibold"
+                      variant="outline"
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectMethod(method.id);
                       }}
                     >
-                      Use This Method
+                      Select Method
                     </Button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Help Text */}
-      <div className="text-center">
-        <p className="text-sm text-muted-foreground">
-          Need help? Contact your lecturer or IT support
-        </p>
-      </div>
+      {/* Help text */}
+      {!biometricStatus.deviceSupported && (
+        <div className="text-center">
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Biometric not available? Use QR Code or Manual Entry
+          </p>
+        </div>
+      )}
     </div>
   );
 }
