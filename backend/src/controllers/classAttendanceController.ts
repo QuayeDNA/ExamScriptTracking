@@ -23,6 +23,7 @@ const startSessionSchema = z.object({
   courseName: z.string().min(1, "Course name is required"),
   courseCode: z.string().min(1, "Course code is required"),
   lecturerName: z.string().optional(),
+  venue: z.string().optional(),
   notes: z.string().optional(),
   totalRegisteredStudents: z.number().int().min(0).optional(),
 });
@@ -124,7 +125,7 @@ export const startSession = async (req: Request, res: Response) => {
     const validatedData = startSessionSchema.parse(req.body);
     const userId = req.user!.userId;
 
-    // Check if device already has an active session
+    // Check if device already has an active session with in-progress records
     const existingSession = await prisma.attendanceSession.findFirst({
       where: {
         deviceId: validatedData.deviceId,
@@ -139,17 +140,19 @@ export const startSession = async (req: Request, res: Response) => {
     });
 
     if (existingSession && existingSession.attendanceRecords.length > 0) {
-      res.status(400).json({
-        error: "Device already has an active session",
-        activeSession: existingSession.attendanceRecords[0],
+      return res.status(409).json({
+        error: "Device already has an active attendance session. Please end the current session before starting a new one.",
       });
-      return;
     }
 
-    // Create or reactivate session
-    let session = existingSession;
+    // Find or create session for this device
+    let session = await prisma.attendanceSession.findUnique({
+      where: { deviceId: validatedData.deviceId },
+    });
+
     if (!session) {
-      const newSession = await prisma.attendanceSession.create({
+      // Create new session if device doesn't have one
+      session = await prisma.attendanceSession.create({
         data: {
           deviceId: validatedData.deviceId,
           deviceName: validatedData.deviceName,
@@ -157,18 +160,15 @@ export const startSession = async (req: Request, res: Response) => {
           isActive: true,
         },
       });
-      // Re-fetch with attendanceRecords relation
-      session = await prisma.attendanceSession.findUnique({
-        where: { id: newSession.id },
-        include: {
-          attendanceRecords: true,
+    } else {
+      // Reactivate existing session
+      session = await prisma.attendanceSession.update({
+        where: { deviceId: validatedData.deviceId },
+        data: {
+          deviceName: validatedData.deviceName,
+          isActive: true,
         },
       });
-    }
-
-    if (!session) {
-      res.status(500).json({ error: "Failed to create session" });
-      return;
     }
 
     // Create attendance record
@@ -179,6 +179,7 @@ export const startSession = async (req: Request, res: Response) => {
         courseName: validatedData.courseName,
         courseCode: validatedData.courseCode,
         lecturerName: validatedData.lecturerName,
+        venue: validatedData.venue,
         notes: validatedData.notes,
         totalStudents: validatedData.totalRegisteredStudents || 0,
         status: RecordingStatus.IN_PROGRESS,
@@ -212,6 +213,83 @@ export const startSession = async (req: Request, res: Response) => {
     }
     console.error("Error starting attendance session:", error);
     res.status(500).json({ error: "Failed to start attendance session" });
+  }
+};
+
+/**
+ * Delete an attendance recording session and all related data
+ * DELETE /api/class-attendance/sessions/:id
+ * Roles: LECTURER, ADMIN, CLASS_REP
+ */
+export const deleteSession = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    // Get the record
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id },
+      include: {
+        students: true,
+        user: true,
+      },
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    // Verify ownership or admin
+    if (record.userId !== userId && req.user!.role !== "ADMIN") {
+      return res.status(403).json({
+        error: "You do not have permission to delete this session",
+      });
+    }
+
+    // Delete related attendance links first
+    await prisma.attendanceLink.deleteMany({
+      where: { recordId: id },
+    });
+
+    // Delete student attendance records
+    await prisma.classAttendance.deleteMany({
+      where: { recordId: id },
+    });
+
+    // Delete the attendance record
+    await prisma.classAttendanceRecord.delete({
+      where: { id },
+    });
+
+    // Check if session should be deactivated (no more active records)
+    if (record.sessionId) {
+      const remainingRecords = await prisma.classAttendanceRecord.count({
+        where: {
+          sessionId: record.sessionId,
+          status: RecordingStatus.IN_PROGRESS,
+        },
+      });
+
+      if (remainingRecords === 0) {
+        await prisma.attendanceSession.update({
+          where: { id: record.sessionId },
+          data: { isActive: false },
+        });
+      }
+    }
+
+    res.json({
+      message: "Session deleted successfully",
+      deletedRecord: {
+        id: record.id,
+        courseCode: record.courseCode,
+        courseName: record.courseName,
+        studentsCount: record.students.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error deleting attendance session:", error);
+    res.status(500).json({ error: "Failed to delete attendance session" });
   }
 };
 

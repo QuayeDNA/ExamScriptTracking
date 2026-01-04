@@ -29,9 +29,14 @@ const recordAttendanceBaseSchema = z.object({
 });
 
 const recordBiometricSchema = recordAttendanceBaseSchema.extend({
-  biometricHash: z.string().min(10, "Biometric data required"),
-  biometricConfidence: z.number().min(0).max(100),
+  biometricHash: z.string().min(10, "Biometric data required (legacy)"),
+  biometricConfidence: z.number().min(0).max(100).optional(), // Now optional, calculated from verification
   deviceId: z.string().min(1, "Device ID required"),
+  // NEW: WebAuthn fields for real biometric verification
+  credentialId: z.string().optional(),      // Base64 WebAuthn credential ID
+  signature: z.string().optional(),         // Base64 authenticator signature
+  authenticatorData: z.string().optional(), // Base64 authenticator data
+  clientDataJSON: z.string().optional(),    // Base64 client data JSON
 });
 
 const recordQRSchema = recordAttendanceBaseSchema.extend({
@@ -356,7 +361,8 @@ export const recordQR = async (req: Request, res: Response) => {
 /**
  * Record attendance via biometric (public)
  * POST /api/public/attendance/record-biometric
- * Body: { token, indexNumber, biometricHash, biometricConfidence, deviceId, location? }
+ * Body: { token, indexNumber, biometricHash, biometricConfidence?, deviceId, location?, credentialId?, signature?, authenticatorData?, clientDataJSON? }
+ * NOW SUPPORTS REAL WEBAUTHN VERIFICATION!
  */
 export const recordBiometric = async (req: Request, res: Response) => {
   try {
@@ -366,7 +372,11 @@ export const recordBiometric = async (req: Request, res: Response) => {
       biometricHash, 
       biometricConfidence, 
       deviceId,
-      location 
+      location,
+      credentialId,
+      signature,
+      authenticatorData,
+      clientDataJSON
     } = recordBiometricSchema.parse(req.body);
 
     // Validate token and get record
@@ -380,6 +390,16 @@ export const recordBiometric = async (req: Request, res: Response) => {
           mode: "insensitive",
         },
       },
+      select: {
+        id: true,
+        indexNumber: true,
+        firstName: true,
+        lastName: true,
+        biometricTemplateHash: true,
+        biometricCredentialId: true,
+        biometricPublicKey: true,
+        biometricCounter: true,
+      },
     });
 
     if (!student) {
@@ -390,15 +410,85 @@ export const recordBiometric = async (req: Request, res: Response) => {
     }
 
     // Verify biometric enrollment (check if student has biometric data)
-    if (!student.biometricTemplateHash) {
+    if (!student.biometricTemplateHash && !student.biometricCredentialId) {
       res.status(400).json({ 
         error: "Biometric not enrolled. Please enroll first or use another method." 
       });
       return;
     }
 
-    // In production, you'd verify the biometric hash matches
-    // For now, we'll accept it if they have an enrollment record
+    let finalConfidence = biometricConfidence || 0;
+    let isWebAuthnVerified = false;
+
+    // REAL WEBAUTHN VERIFICATION if data provided
+    if (credentialId && signature && authenticatorData && clientDataJSON && student.biometricCredentialId && student.biometricPublicKey) {
+      try {
+        // Import WebAuthn utilities
+        const { verifyWebAuthnSignature, validateCounter } = await import('../utils/webauthn');
+
+        // Verify that the credential ID matches
+        if (credentialId !== student.biometricCredentialId) {
+          res.status(400).json({ 
+            error: "Credential ID mismatch. Please re-enroll your biometric." 
+          });
+          return;
+        }
+
+        // Perform signature verification
+        const verificationResult = await verifyWebAuthnSignature({
+          publicKey: student.biometricPublicKey,
+          signature: signature,
+          authenticatorData: authenticatorData,
+          clientDataJSON: clientDataJSON,
+        });
+
+        if (!verificationResult.verified) {
+          res.status(401).json({ 
+            error: "Biometric verification failed. Please try again.",
+            details: verificationResult.errorMessage 
+          });
+          return;
+        }
+
+        // Validate counter (prevent replay attacks)
+        const storedCounter = student.biometricCounter || 0;
+        if (!validateCounter(verificationResult.counter, storedCounter)) {
+          res.status(401).json({ 
+            error: "Replay attack detected. Please re-enroll your biometric." 
+          });
+          return;
+        }
+
+        // Update counter in database
+        await prisma.student.update({
+          where: { id: student.id },
+          data: { biometricCounter: verificationResult.counter },
+        });
+
+        // Use calculated confidence from verification
+        finalConfidence = verificationResult.confidence;
+        isWebAuthnVerified = true;
+
+        console.log(`[WebAuthn] Verified ${student.indexNumber} with confidence ${finalConfidence}%`);
+      } catch (error) {
+        console.error("[WebAuthn] Verification error:", error);
+        res.status(500).json({ 
+          error: "Biometric verification failed due to server error" 
+        });
+        return;
+      }
+    } else if (!student.biometricCredentialId) {
+      // Legacy mode - student has only legacy enrollment
+      console.log(`[Legacy Biometric] Student ${student.indexNumber} using legacy enrollment`);
+      // Accept provided confidence or default to lower value for legacy
+      finalConfidence = biometricConfidence || 70;
+    } else {
+      // Student has WebAuthn enrollment but didn't provide verification data
+      res.status(400).json({ 
+        error: "WebAuthn verification data required. Please use a compatible device." 
+      });
+      return;
+    }
 
     // Check for duplicate attendance
     const existingAttendance = await prisma.classAttendance.findFirst({
@@ -425,7 +515,7 @@ export const recordBiometric = async (req: Request, res: Response) => {
         recordId: link.recordId!,
         studentId: student.id,
         verificationMethod: AttendanceMethod.BIOMETRIC_FINGERPRINT,
-        biometricConfidence: biometricConfidence,
+        biometricConfidence: finalConfidence,
         status: "PRESENT",
         scanTime: new Date(),
         deviceId: deviceId,
@@ -449,13 +539,14 @@ export const recordBiometric = async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: "Attendance recorded successfully",
+      webauthn: isWebAuthnVerified, // Indicate if real WebAuthn was used
       attendance: {
         id: attendance.id,
         studentId: attendance.studentId,
         studentName: `${attendance.student.firstName} ${attendance.student.lastName}`,
         verificationMethod: attendance.verificationMethod,
         scanTime: attendance.scanTime,
-        confidence: biometricConfidence,
+        confidence: finalConfidence,
       },
     });
   } catch (error) {

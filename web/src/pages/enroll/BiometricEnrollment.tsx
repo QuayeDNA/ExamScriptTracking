@@ -130,7 +130,7 @@ export function BiometricEnrollment() {
   };
 
   // ========================================
-  // STEP 3: WebAuthn Registration (Simplified)
+  // STEP 3: REAL WebAuthn Registration
   // ========================================
   const handleCaptureBiometric = async () => {
     if (!enrollmentData.student) {
@@ -141,7 +141,7 @@ export function BiometricEnrollment() {
     // Show confirmation before proceeding
     const confirmed = window.confirm(
       `Ready to enroll biometric for ${enrollmentData.student.firstName} ${enrollmentData.student.lastName}?\n\n` +
-      `This will bind your ${getBiometricName(enrollmentData.deviceSupport?.type as BiometricType)} to your student account.\n\n` +
+      `This will prompt you to use your ${getBiometricName(enrollmentData.deviceSupport?.type as BiometricType)}.\n\n` +
       `Click OK to continue.`
     );
 
@@ -154,61 +154,58 @@ export function BiometricEnrollment() {
     setDetailedError(null);
 
     try {
-      console.log('Starting biometric enrollment...');
-      console.log('Student ID:', enrollmentData.student.id);
-      console.log('Index Number:', indexNumber);
+      console.log('[WebAuthn] Starting REAL biometric enrollment...');
+      console.log('[WebAuthn] Student ID:', enrollmentData.student.id);
+      console.log('[WebAuthn] Index Number:', indexNumber);
       
-      // Generate a simple biometric hash from index number + device fingerprint + student ID
-      const deviceId = `${navigator.userAgent}-${Date.now()}`;
-      const biometricData = `${indexNumber}-${enrollmentData.student.id}-${deviceId}-${Date.now()}`;
+      // Import WebAuthn service
+      const { registerBiometric } = await import('@/services/webauthn');
       
-      // Create SHA-256 hash
-      const encoder = new TextEncoder();
-      const data = encoder.encode(biometricData);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const biometricHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      // THIS WILL PROMPT FOR REAL BIOMETRIC (fingerprint/Face ID/Windows Hello)
+      const result = await registerBiometric(
+        enrollmentData.student.id,
+        indexNumber,
+        enrollmentData.student.firstName,
+        enrollmentData.student.lastName
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to register biometric');
+      }
       
-      console.log('Generated biometric hash for index:', indexNumber);
-      console.log('Hash preview:', biometricHash.substring(0, 20) + '...');
-      
-      // High confidence for successful hash generation
-      const confidence = 95;
+      console.log('[WebAuthn] Registration successful!');
+      console.log('[WebAuthn] Credential ID:', result.credentialId.substring(0, 20) + '...');
+      console.log('[WebAuthn] Confidence:', result.confidence);
+
+      // Store credential ID in localStorage for future verifications
+      localStorage.setItem(`biometric_credential_${indexNumber}`, result.credentialId);
 
       // Store biometric data
       setEnrollmentData(prev => ({
         ...prev,
-        credentialId: biometricHash.substring(0, 32),
-        biometricHash: biometricHash,
-        confidence: confidence,
+        credentialId: result.credentialId,
+        biometricHash: result.biometricHash,
+        confidence: result.confidence,
       }));
 
       // Move to saving step
       setStep("saving");
       
-      // Save directly to backend
-      const result = {
-        credentialId: biometricHash.substring(0, 32),
-        biometricHash: biometricHash,
-        publicKey: '',
-        deviceId: deviceId,
-        confidence: confidence,
-      };
-      
+      // Save to backend with WebAuthn data
       saveToBackend(result);
     } catch (err) {
       const error = err as Error;
       
       const errorInfo: DetailedError = {
-        message: error.message || "Failed to generate biometric hash",
-        details: `Error Type: ${error.name}\nStudent ID: ${enrollmentData.student.id}\nIndex: ${indexNumber}\nDevice: ${enrollmentData.deviceSupport?.type || 'unknown'}\nURL: ${window.location.origin}`,
+        message: error.message || "Failed to enroll biometric",
+        details: `Error Type: ${error.name}\nStudent ID: ${enrollmentData.student.id}\nIndex: ${indexNumber}\nDevice: ${enrollmentData.deviceSupport?.type || 'unknown'}\nURL: ${window.location.origin}\n\nThis is REAL WebAuthn - requires actual biometric hardware.`,
         timestamp: new Date().toISOString(),
         stack: error.stack,
       };
       
-      console.error('Biometric enrollment error:', errorInfo);
+      console.error('[WebAuthn] Enrollment error:', errorInfo);
       setDetailedError(errorInfo);
-      setError(error.message || "Failed to generate biometric");
+      setError(error.message || "Failed to enroll biometric");
       setLoading(false);
     }
   };
@@ -221,26 +218,36 @@ export function BiometricEnrollment() {
     biometricHash: string;
     publicKey: string;
     deviceId: string;
+    authenticatorData: string;
+    transports: string[];
     confidence: number;
   }) => {
     if (!enrollmentData.student) return;
 
     try {
-      console.log('Saving biometric to backend...');
-      console.log('Payload:', {
+      console.log('[WebAuthn] Saving biometric to backend...');
+      console.log('[WebAuthn] Payload:', {
         studentId: enrollmentData.student.id,
+        credentialId: biometricData.credentialId.substring(0, 20) + '...',
+        publicKey: biometricData.publicKey.substring(0, 20) + '...',
         deviceId: biometricData.deviceId,
         provider: enrollmentData.deviceSupport?.type || 'unknown',
       });
 
+      // Send WebAuthn credentials to backend
       await studentsApi.enrollBiometric({
         studentId: enrollmentData.student.id,
         biometricHash: biometricData.biometricHash,
         deviceId: biometricData.deviceId,
         provider: enrollmentData.deviceSupport?.type || 'unknown',
+        // NEW: WebAuthn fields
+        credentialId: biometricData.credentialId,
+        publicKey: biometricData.publicKey,
+        authenticatorData: biometricData.authenticatorData,
+        transports: biometricData.transports,
       });
 
-      console.log('Enrollment saved successfully');
+      console.log('[WebAuthn] Enrollment saved successfully');
 
       // Enrollment successful
       setEnrollmentData(prev => ({

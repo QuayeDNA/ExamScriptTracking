@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   startSession,
   endSession,
+  deleteSession,
   recordAttendanceByQR,
   recordAttendanceByIndex,
   recordAttendanceByBiometric,
@@ -82,6 +83,17 @@ router.get(
   "/sessions/:id",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
   getSession
+);
+
+/**
+ * Delete an attendance session
+ * DELETE /api/class-attendance/sessions/:id
+ * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ */
+router.delete(
+  "/sessions/:id",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  deleteSession
 );
 
 /**

@@ -49,43 +49,53 @@ export function BiometricVerification({
       return;
     }
 
+    // Check if student has credential ID stored
+    const credentialId = localStorage.getItem(`biometric_credential_${studentIdentity.indexNumber}`);
+    if (!credentialId) {
+      setError("No biometric credential found. Please enroll your biometric first.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setStep("verifying");
 
     try {
-      console.log('[BiometricVerification] Starting verification...');
-      console.log('[BiometricVerification] Student:', studentIdentity.indexNumber);
+      console.log('[WebAuthn] Starting REAL biometric verification...');
+      console.log('[WebAuthn] Student:', studentIdentity.indexNumber);
 
-      // Generate biometric hash (same approach as enrollment)
-      const deviceId = generateDeviceId();
-      const biometricData = `${studentIdentity.indexNumber}-${studentIdentity.firstName}-${studentIdentity.lastName}-${deviceId}-${Date.now()}`;
+      // Import WebAuthn service
+      const { verifyBiometric } = await import('@/services/webauthn');
       
-      // Create SHA-256 hash
-      const encoder = new TextEncoder();
-      const data = encoder.encode(biometricData);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const biometricHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      // THIS WILL PROMPT FOR REAL BIOMETRIC (fingerprint/Face ID/Windows Hello)
+      const result = await verifyBiometric(credentialId);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to verify biometric');
+      }
       
-      console.log('[BiometricVerification] Generated hash for verification');
+      console.log('[WebAuthn] Verification successful!');
+      console.log('[WebAuthn] Confidence:', result.confidence);
 
-      // High confidence for successful hash generation
-      const confidence = 95;
-
-      // Step 2: Record attendance
+      // Step 2: Record attendance with WebAuthn data
       setStep("recording");
-      console.log('[BiometricVerification] Recording attendance...');
+      console.log('[WebAuthn] Recording attendance...');
 
+      const deviceId = generateDeviceId();
       const response = await classAttendancePortalApi.recordBiometric({
         token,
         indexNumber: studentIdentity.indexNumber,
-        biometricHash: biometricHash,
-        biometricConfidence: confidence,
+        biometricHash: '', // Legacy field, not used for WebAuthn
+        biometricConfidence: result.confidence,
         deviceId,
+        // NEW: WebAuthn fields
+        credentialId: result.credentialId,
+        signature: result.signature,
+        authenticatorData: result.authenticatorData,
+        clientDataJSON: result.clientDataJSON,
       });
 
-      console.log('[BiometricVerification] Attendance recorded:', response);
+      console.log('[WebAuthn] Attendance recorded:', response);
 
       if (!response.success) {
         throw new Error(response.message || "Failed to record attendance");
@@ -98,7 +108,7 @@ export function BiometricVerification({
         studentName: response.attendance.studentName,
         indexNumber: studentIdentity.indexNumber,
         verificationMethod: "BIOMETRIC",
-        confidence: confidence,
+        confidence: result.confidence, // Use confidence from WebAuthn result
         timestamp: response.attendance.scanTime,
       });
     } catch (err) {

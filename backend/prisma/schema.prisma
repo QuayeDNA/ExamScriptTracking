@@ -118,11 +118,17 @@ model Student {
   option     String?  // Program option (e.g., "Software Option", "Networking Option")
   department String?  // Student's department
 
-  // NEW: Biometric Fields
-  biometricTemplateHash String?  @unique  // Hashed biometric template
+  // NEW: Biometric Fields (Legacy + WebAuthn)
+  biometricTemplateHash String?  @unique  // Hashed biometric template (backward compatibility)
   biometricEnrolledAt   DateTime?          // When biometrics were enrolled
   biometricDeviceId     String?            // Device used for enrollment
   biometricProvider     String?            // 'TOUCHID', 'FACEID', 'FINGERPRINT'
+  
+  // WebAuthn Fields for Real Biometric Authentication
+  biometricCredentialId String?  @unique  // Base64 WebAuthn credential ID
+  biometricPublicKey    String?           // Base64 public key for signature verification
+  biometricCounter      Int?     @default(0) // Signature counter for replay attack prevention
+  biometricTransports   String[] @default([]) // Authenticator transports ['internal', 'usb', etc.]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -515,6 +521,7 @@ model ClassAttendanceRecord {
   lecturerName     String?           // Optional label
   courseName       String?           // Optional label
   courseCode       String?           // Optional label
+  venue            String?           // Venue/location where class is held
   startTime        DateTime          @default(now())
   endTime          DateTime?
   status           RecordingStatus   @default(IN_PROGRESS)

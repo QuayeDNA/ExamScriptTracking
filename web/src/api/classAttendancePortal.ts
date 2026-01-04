@@ -97,7 +97,7 @@ export const classAttendancePortalApi = {
   },
 
   /**
-   * Record attendance via biometric verification (PUBLIC)
+   * Record attendance via biometric verification (PUBLIC - NOW WITH WEBAUTHN)
    * POST /api/public/attendance/record-biometric
    */
   recordBiometric: async (data: {
@@ -107,6 +107,11 @@ export const classAttendancePortalApi = {
     biometricConfidence: number;
     deviceId: string;
     location?: { lat: number; lng: number };
+    // NEW: WebAuthn fields for REAL verification
+    credentialId?: string;
+    signature?: string;
+    authenticatorData?: string;
+    clientDataJSON?: string;
   }): Promise<RecordAttendanceResponse> => {
     return apiClient.post<RecordAttendanceResponse>(
       "/public/attendance/record-biometric",

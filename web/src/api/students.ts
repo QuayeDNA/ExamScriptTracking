@@ -234,7 +234,7 @@ export const studentsApi = {
   },
 
   /**
-   * Public biometric enrollment for students
+   * Public biometric enrollment for students (NOW WITH WEBAUTHN)
    * POST /api/students/biometric/enroll
    */
   enrollBiometric: async (data: {
@@ -242,8 +242,14 @@ export const studentsApi = {
     biometricHash: string;
     deviceId: string;
     provider: string;
+    // NEW: WebAuthn fields
+    credentialId?: string;
+    publicKey?: string;
+    authenticatorData?: string;
+    transports?: string[];
   }): Promise<{
     success: boolean;
+    webauthn?: boolean;
     student: {
       id: string;
       indexNumber: string;

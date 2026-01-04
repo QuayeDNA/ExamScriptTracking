@@ -23,6 +23,7 @@ import { useSocket } from "@/hooks/useSocket";
 import { getFileUrl } from "@/lib/api-client";
 import { toast } from "@/utils/toast";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Dialog } from "@/components/ui/dialog";
 
 export default function SessionDetailsScreen() {
   const colors = useThemeColors();
@@ -32,6 +33,8 @@ export default function SessionDetailsScreen() {
   const [session, setSession] = useState<ClassAttendanceRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletingSession, setDeletingSession] = useState(false);
 
   const loadSessionDetails = useCallback(async () => {
     if (!sessionId) return;
@@ -91,6 +94,26 @@ export default function SessionDetailsScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     loadSessionDetails();
+  };
+
+  const handleDeleteSession = async () => {
+    if (!session) return;
+
+    try {
+      setDeletingSession(true);
+      await classAttendanceApi.deleteSession(session.id);
+      
+      toast.success(
+        `Session deleted: ${session.courseCode}`
+      );
+      
+      setShowDeleteDialog(false);
+      router.back();
+    } catch (error: any) {
+      console.error("Failed to delete session:", error);
+      toast.error(error?.error || "Failed to delete session");
+      setDeletingSession(false);
+    }
   };
 
   const getVerificationIcon = (method: string) => {
@@ -178,7 +201,12 @@ export default function SessionDetailsScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.foreground }]}>Session Details</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity 
+          onPress={() => setShowDeleteDialog(true)} 
+          style={styles.backButton}
+        >
+          <Ionicons name="trash-outline" size={22} color={colors.error} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -205,6 +233,14 @@ export default function SessionDetailsScreen() {
                 <Text style={[styles.lecturer, { color: colors.foregroundMuted }]}>
                   {session.lecturerName}
                 </Text>
+              )}
+              {session.venue && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name="location-outline" size={14} color={colors.foregroundMuted} />
+                  <Text style={[styles.lecturer, { color: colors.foregroundMuted }]}>
+                    {session.venue}
+                  </Text>
+                </View>
               )}
             </View>
             <View style={[
@@ -545,6 +581,26 @@ export default function SessionDetailsScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Delete Session Dialog */}
+      {session && (
+        <Dialog
+          visible={showDeleteDialog}
+          onClose={() => setShowDeleteDialog(false)}
+          title="Delete Attendance Session"
+          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${session.courseCode}${session.courseName ? ` - ${session.courseName}` : ""}\nStudents Recorded: ${session.students?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
+          variant="error"
+          icon="trash-outline"
+          primaryAction={{
+            label: deletingSession ? "Deleting..." : "Delete Session",
+            onPress: handleDeleteSession,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onPress: () => setShowDeleteDialog(false),
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

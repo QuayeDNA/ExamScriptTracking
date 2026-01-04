@@ -522,6 +522,7 @@ export default function AttendanceSessions() {
     courseCode: "",
     courseName: "",
     lecturerName: "",
+    venue: "",
     notes: "",
     totalRegisteredStudents: undefined,
   });
@@ -536,6 +537,11 @@ export default function AttendanceSessions() {
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [sessionToEnd, setSessionToEnd] = useState<ClassAttendanceRecord | null>(null);
   const [endingSession, setEndingSession] = useState(false);
+  
+  // Delete session states
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<ClassAttendanceRecord | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
   
   // Security settings for link generation
   const [securitySettings, setSecuritySettings] = useState({
@@ -742,6 +748,33 @@ export default function AttendanceSessions() {
     }
   };
 
+  const handleDeleteSession = (session: ClassAttendanceRecord) => {
+    setSessionToDelete(session);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!sessionToDelete) return;
+
+    try {
+      setDeletingSession(true);
+      await classAttendanceApi.deleteSession(sessionToDelete.id);
+      
+      toast.success(
+        `Session deleted: ${sessionToDelete.courseCode}`
+      );
+      
+      setShowDeleteDialog(false);
+      setSessionToDelete(null);
+      loadActiveSessions();
+    } catch (error: any) {
+      console.error("Failed to delete session:", error);
+      toast.error(error?.error || "Failed to delete session");
+    } finally {
+      setDeletingSession(false);
+    }
+  };
+
   const formatDuration = (startTime: string) => {
     const start = new Date(startTime);
     const now = new Date();
@@ -818,6 +851,14 @@ export default function AttendanceSessions() {
                     <Ionicons name="person-outline" size={16} color={colors.foregroundMuted} />
                     <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
                       {session.lecturerName}
+                    </Text>
+                  </View>
+                )}
+                {session.venue && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="location-outline" size={16} color={colors.foregroundMuted} />
+                    <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
+                      {session.venue}
                     </Text>
                   </View>
                 )}
@@ -992,30 +1033,47 @@ export default function AttendanceSessions() {
             </TouchableOpacity>
           </View>
         ) : (
-          // Completed session action - just view details
-          <TouchableOpacity
-            style={{ 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              gap: 8,
-              backgroundColor: colors.muted, 
-              padding: 10, 
-              borderRadius: 10,
-              marginTop: 8
-            }}
-            onPress={() => {
-              router.push({
-                pathname: "/session-details" as any,
-                params: { sessionId: session.id }
-              });
-            }}
-          >
-            <Ionicons name="eye-outline" size={18} color={colors.foreground} />
-            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>
-              View Details
-            </Text>
-          </TouchableOpacity>
+          // Completed session actions - view and delete
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <TouchableOpacity
+              style={{ 
+                flex: 1,
+                flexDirection: 'row', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: 8,
+                backgroundColor: colors.muted, 
+                padding: 10, 
+                borderRadius: 10,
+              }}
+              onPress={() => {
+                router.push({
+                  pathname: "/session-details" as any,
+                  params: { sessionId: session.id }
+                });
+              }}
+            >
+              <Ionicons name="eye-outline" size={18} color={colors.foreground} />
+              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>
+                View
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ 
+                width: 44,
+                height: 44,
+                alignItems: 'center', 
+                justifyContent: 'center',
+                backgroundColor: `${colors.error}15`,
+                borderWidth: 1,
+                borderColor: colors.error,
+                borderRadius: 10,
+              }}
+              onPress={() => handleDeleteSession(session)}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
+            </TouchableOpacity>
+          </View>
         )}
       </Card>
     );
@@ -1220,6 +1278,17 @@ export default function AttendanceSessions() {
                   placeholderTextColor={colors.foregroundMuted}
                   value={formData.lecturerName}
                   onChangeText={(text) => setFormData({ ...formData, lecturerName: text })}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.foreground }]}>Venue</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
+                  placeholder="e.g., Room A101, Lecture Hall 3"
+                  placeholderTextColor={colors.foregroundMuted}
+                  value={formData.venue}
+                  onChangeText={(text) => setFormData({ ...formData, venue: text })}
                 />
               </View>
 
@@ -1609,6 +1678,32 @@ export default function AttendanceSessions() {
             onPress: () => {
               setShowEndDialog(false);
               setSessionToEnd(null);
+            },
+          }}
+        />
+      )}
+
+      {/* Delete Session Dialog */}
+      {sessionToDelete && (
+        <Dialog
+          visible={showDeleteDialog}
+          onClose={() => {
+            setShowDeleteDialog(false);
+            setSessionToDelete(null);
+          }}
+          title="Delete Attendance Session"
+          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${sessionToDelete.courseCode}${sessionToDelete.courseName ? ` - ${sessionToDelete.courseName}` : ""}\nStudents Recorded: ${sessionToDelete.students?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
+          variant="error"
+          icon="trash-outline"
+          primaryAction={{
+            label: deletingSession ? "Deleting..." : "Delete Session",
+            onPress: confirmDeleteSession,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onPress: () => {
+              setShowDeleteDialog(false);
+              setSessionToDelete(null);
             },
           }}
         />

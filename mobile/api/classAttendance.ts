@@ -30,6 +30,7 @@ export interface ClassAttendanceRecord {
   lecturerName?: string;
   courseName?: string;
   courseCode?: string;
+  venue?: string;
   startTime: string;
   endTime?: string;
   status: RecordingStatus;
@@ -135,8 +136,7 @@ export interface StartSessionRequest {
   deviceName?: string;
   courseCode: string;
   courseName?: string;
-  lecturerName?: string;
-  notes?: string;
+  lecturerName?: string;  venue?: string;  notes?: string;
   totalRegisteredStudents?: number;
 }
 
@@ -310,6 +310,21 @@ export const classAttendanceApi = {
       "/class-attendance/sessions/end",
       data
     );
+  },
+
+  /**
+   * Delete an attendance session and all related data
+   */
+  deleteSession: async (sessionId: string): Promise<{
+    message: string;
+    deletedRecord: {
+      id: string;
+      courseCode: string;
+      courseName?: string;
+      studentsCount: number;
+    };
+  }> => {
+    return apiClient.delete(`/class-attendance/sessions/${sessionId}`);
   },
 
   /**

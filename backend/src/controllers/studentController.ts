@@ -1120,17 +1120,32 @@ export const exportStudentsPDF = async (
  * Public biometric enrollment for students
  * POST /api/students/biometric/enroll
  * No authentication required - students enroll themselves
+ * Now supports REAL WebAuthn biometric enrollment
  */
 export const enrollStudentBiometric = async (req: Request, res: Response) => {
   try {
     const enrollmentSchema = z.object({
       studentId: z.string().uuid("Invalid student ID"),
-      biometricHash: z.string().min(1, "Biometric hash is required"),
+      biometricHash: z.string().min(1, "Biometric hash is required (legacy)"),
       deviceId: z.string().min(1, "Device ID is required"),
       provider: z.string().min(1, "Provider is required"),
+      // NEW: WebAuthn fields
+      credentialId: z.string().optional(), // Base64 WebAuthn credential ID
+      publicKey: z.string().optional(),    // Base64 public key (SPKI format)
+      authenticatorData: z.string().optional(), // Base64 authenticator data
+      transports: z.array(z.string()).optional(), // ['internal', 'usb', etc.]
     });
 
-    const { studentId, biometricHash, deviceId, provider } = enrollmentSchema.parse(req.body);
+    const { 
+      studentId, 
+      biometricHash, 
+      deviceId, 
+      provider,
+      credentialId,
+      publicKey,
+      authenticatorData,
+      transports
+    } = enrollmentSchema.parse(req.body);
 
     // Validate provider
     if (!isValidBiometricProvider(provider)) {
@@ -1147,6 +1162,7 @@ export const enrollStudentBiometric = async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         biometricTemplateHash: true,
+        biometricCredentialId: true,
         biometricEnrolledAt: true,
       },
     });
@@ -1156,8 +1172,8 @@ export const enrollStudentBiometric = async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if already enrolled
-    if (student.biometricTemplateHash) {
+    // Check if already enrolled (either legacy or WebAuthn)
+    if (student.biometricTemplateHash || student.biometricCredentialId) {
       res.status(400).json({ 
         error: "Biometric already enrolled",
         enrolledAt: student.biometricEnrolledAt,
@@ -1165,39 +1181,104 @@ export const enrollStudentBiometric = async (req: Request, res: Response) => {
       return;
     }
 
-    // Store the biometric template hash directly
-    // (Schema doesn't support salt field, hash is already secure from frontend)
-    const updatedStudent = await prisma.student.update({
-      where: { id: studentId },
-      data: {
-        biometricTemplateHash: biometricHash,
-        biometricDeviceId: deviceId,
-        biometricProvider: provider,
-        biometricEnrolledAt: new Date(),
-      },
-      select: {
-        id: true,
-        indexNumber: true,
-        firstName: true,
-        lastName: true,
-        biometricEnrolledAt: true,
-        biometricProvider: true,
-      },
-    });
+    // Validate WebAuthn data if provided
+    if (credentialId && publicKey) {
+      // This is a real WebAuthn enrollment
+      if (!authenticatorData) {
+        res.status(400).json({ error: "Authenticator data is required for WebAuthn enrollment" });
+        return;
+      }
 
-    res.json({
-      success: true,
-      student: {
-        id: updatedStudent.id,
-        indexNumber: updatedStudent.indexNumber,
-        firstName: updatedStudent.firstName,
-        lastName: updatedStudent.lastName,
-      },
-      biometric: {
-        enrolledAt: updatedStudent.biometricEnrolledAt,
-        provider: updatedStudent.biometricProvider,
-      },
-    });
+      // Validate authenticator data structure
+      try {
+        const { validateAuthenticatorData, base64ToBuffer } = await import('../utils/webauthn');
+        const authDataBuffer = base64ToBuffer(authenticatorData);
+        const validation = validateAuthenticatorData(authDataBuffer);
+        
+        if (!validation.valid) {
+          res.status(400).json({ error: `Invalid authenticator data: ${validation.error}` });
+          return;
+        }
+      } catch (error) {
+        console.error("Authenticator data validation error:", error);
+        res.status(400).json({ error: "Failed to validate authenticator data" });
+        return;
+      }
+
+      // Store WebAuthn credentials
+      const updatedStudent = await prisma.student.update({
+        where: { id: studentId },
+        data: {
+          // Legacy fields (for backward compatibility)
+          biometricTemplateHash: biometricHash,
+          biometricDeviceId: deviceId,
+          biometricProvider: provider,
+          biometricEnrolledAt: new Date(),
+          // NEW: WebAuthn fields
+          biometricCredentialId: credentialId,
+          biometricPublicKey: publicKey,
+          biometricCounter: 0, // Initialize counter
+          biometricTransports: transports || [],
+        },
+        select: {
+          id: true,
+          indexNumber: true,
+          firstName: true,
+          lastName: true,
+          biometricEnrolledAt: true,
+          biometricProvider: true,
+        },
+      });
+
+      res.json({
+        success: true,
+        webauthn: true, // Indicate this is a real WebAuthn enrollment
+        student: {
+          id: updatedStudent.id,
+          indexNumber: updatedStudent.indexNumber,
+          firstName: updatedStudent.firstName,
+          lastName: updatedStudent.lastName,
+        },
+        biometric: {
+          enrolledAt: updatedStudent.biometricEnrolledAt,
+          provider: updatedStudent.biometricProvider,
+        },
+      });
+    } else {
+      // Legacy enrollment (fallback for devices without WebAuthn)
+      const updatedStudent = await prisma.student.update({
+        where: { id: studentId },
+        data: {
+          biometricTemplateHash: biometricHash,
+          biometricDeviceId: deviceId,
+          biometricProvider: provider,
+          biometricEnrolledAt: new Date(),
+        },
+        select: {
+          id: true,
+          indexNumber: true,
+          firstName: true,
+          lastName: true,
+          biometricEnrolledAt: true,
+          biometricProvider: true,
+        },
+      });
+
+      res.json({
+        success: true,
+        webauthn: false, // Legacy enrollment
+        student: {
+          id: updatedStudent.id,
+          indexNumber: updatedStudent.indexNumber,
+          firstName: updatedStudent.firstName,
+          lastName: updatedStudent.lastName,
+        },
+        biometric: {
+          enrolledAt: updatedStudent.biometricEnrolledAt,
+          provider: updatedStudent.biometricProvider,
+        },
+      });
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: error.errors[0].message });

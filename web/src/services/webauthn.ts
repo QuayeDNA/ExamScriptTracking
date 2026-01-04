@@ -1,18 +1,9 @@
 // ========================================
 // WEBAUTHN SERVICE
-// Handles biometric registration and verification
+// Handles REAL biometric registration and verification using WebAuthn API
 // ========================================
 
-import { 
-  startRegistration, 
-  startAuthentication,
-  type RegistrationResponseJSON,
-  type AuthenticationResponseJSON 
-} from '@simplewebauthn/browser';
 import { generateDeviceId } from '@/utils/biometric';
-
-// Base URL for API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export interface BiometricRegistrationResult {
   success: boolean;
@@ -20,6 +11,8 @@ export interface BiometricRegistrationResult {
   biometricHash: string;
   publicKey: string;
   deviceId: string;
+  authenticatorData: string;
+  transports: string[];
   confidence: number;
   error?: string;
 }
@@ -27,234 +20,328 @@ export interface BiometricRegistrationResult {
 export interface BiometricVerificationResult {
   success: boolean;
   credentialId: string;
+  signature: string;
+  authenticatorData: string;
+  clientDataJSON: string;
   confidence: number;
-  authenticatorData?: string;
   error?: string;
 }
 
 /**
- * Register biometric credentials for a student
- * @param studentId Student's unique ID
- * @param indexNumber Student's index number
- * @returns Registration result with credential details
+ * Helper: Convert ArrayBuffer to Base64
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Helper: Convert Base64 to ArrayBuffer
+ */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Helper: Generate random challenge
+ */
+function generateChallenge(): ArrayBuffer {
+  return crypto.getRandomValues(new Uint8Array(32)).buffer;
+}
+
+/**
+ * Register REAL biometric credentials for a student
+ * This prompts for fingerprint/Face ID/Windows Hello
  */
 export async function registerBiometric(
   studentId: string,
-  indexNumber: string
+  indexNumber: string,
+  firstName: string,
+  lastName: string
 ): Promise<BiometricRegistrationResult> {
   try {
-    // Step 1: Get registration options from backend
-    const optionsResponse = await fetch(`${API_BASE_URL}/api/attendance/portal/webauthn/register/options`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        studentId,
-        indexNumber,
-      }),
-    });
-
-    if (!optionsResponse.ok) {
-      throw new Error('Failed to get registration options from server');
+    // Check WebAuthn support
+    if (!window.PublicKeyCredential) {
+      return {
+        success: false,
+        credentialId: '',
+        biometricHash: '',
+        publicKey: '',
+        deviceId: '',
+        authenticatorData: '',
+        transports: [],
+        confidence: 0,
+        error: 'WebAuthn not supported on this device',
+      };
     }
 
-    const options = await optionsResponse.json();
+    // Generate challenge
+    const challenge = generateChallenge();
 
-    // Step 2: Start WebAuthn registration (browser prompts for biometric)
-    let registrationResponse: RegistrationResponseJSON;
-    try {
-      registrationResponse = await startRegistration(options);
-    } catch (error) {
-      const err = error as Error & { name: string };
-      // User cancelled or device doesn't support
-      if (err.name === 'NotAllowedError') {
-        return {
-          success: false,
-          credentialId: '',
-          biometricHash: '',
-          publicKey: '',
-          deviceId: '',
-          confidence: 0,
-          error: 'Biometric authentication was cancelled. Please try again.',
-        };
-      }
-      throw error;
-    }
-
-    // Step 3: Generate device ID
+    // Get device ID
     const deviceId = generateDeviceId();
 
-    // Step 4: Calculate confidence score
-    // Base confidence on authenticator characteristics
-    const confidence = calculateConfidenceScore(registrationResponse);
+    // Create WebAuthn credential
+    // THIS WILL PROMPT FOR BIOMETRIC!
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge: challenge,
+        rp: {
+          name: 'Exam Script Tracking',
+          id: window.location.hostname === 'localhost' ? 'localhost' : window.location.hostname,
+        },
+        user: {
+          id: new TextEncoder().encode(studentId),
+          name: indexNumber,
+          displayName: `${firstName} ${lastName}`,
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' },  // ES256 (ECDSA P-256)
+          { alg: -257, type: 'public-key' }, // RS256 (RSA PKCS#1)
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform', // Prefer device biometric
+          userVerification: 'required',        // MUST verify user (biometric/PIN)
+          residentKey: 'preferred',
+        },
+        timeout: 60000,
+        attestation: 'none', // We don't need attestation for our use case
+      },
+    }) as PublicKeyCredential;
 
-    // Step 5: Generate biometric hash from credential ID
-    const biometricHash = await generateBiometricHash(registrationResponse.id);
+    if (!credential) {
+      throw new Error('Credential creation failed');
+    }
 
-    // Step 6: Return registration data
+    const response = credential.response as AuthenticatorAttestationResponse;
+
+    // Extract credential data
+    const credentialId = arrayBufferToBase64(credential.rawId);
+    const publicKeyBytes = arrayBufferToBase64(response.getPublicKey()!);
+    const authenticatorDataBytes = arrayBufferToBase64(response.getAuthenticatorData());
+
+    // Get transports if available
+    const transports = response.getTransports ? response.getTransports() : [];
+
+    // Generate hash for backward compatibility
+    const biometricHash = await generateBiometricHash(credentialId);
+
+    // Calculate confidence from authenticator data
+    const confidence = calculateRegistrationConfidence(response.getAuthenticatorData());
+
+    console.log('[WebAuthn] Registration successful:', {
+      credentialId: credentialId.substring(0, 20) + '...',
+      confidence,
+      transports,
+    });
+
     return {
       success: true,
-      credentialId: registrationResponse.id,
+      credentialId,
       biometricHash,
-      publicKey: registrationResponse.response.publicKey || '',
+      publicKey: publicKeyBytes,
       deviceId,
+      authenticatorData: authenticatorDataBytes,
+      transports,
       confidence,
     };
   } catch (error) {
-    const err = error as Error;
+    const err = error as Error & { name: string };
     console.error('Biometric registration error:', err);
+
+    // User-friendly error messages
+    let errorMessage = 'Failed to register biometric';
+    if (err.name === 'NotAllowedError') {
+      errorMessage = 'Biometric registration was cancelled or timed out';
+    } else if (err.name === 'NotSupportedError') {
+      errorMessage = 'Your device does not support biometric authentication';
+    } else if (err.name === 'SecurityError') {
+      errorMessage = 'Biometric authentication requires a secure connection (HTTPS)';
+    } else if (err.name === 'InvalidStateError') {
+      errorMessage = 'This biometric is already registered';
+    }
+
     return {
       success: false,
       credentialId: '',
       biometricHash: '',
       publicKey: '',
       deviceId: '',
+      authenticatorData: '',
+      transports: [],
       confidence: 0,
-      error: err.message || 'Failed to register biometric credentials',
+      error: errorMessage,
     };
   }
 }
 
 /**
- * Verify biometric credentials for attendance
- * @param credentialId Previously registered credential ID
- * @returns Verification result with confidence score
+ * Verify REAL biometric credentials for attendance
+ * This prompts for fingerprint/Face ID/Windows Hello
  */
 export async function verifyBiometric(
-  credentialId?: string
+  credentialId: string,
+  challenge?: ArrayBuffer
 ): Promise<BiometricVerificationResult> {
   try {
-    // Step 1: Get authentication options from backend
-    const optionsResponse = await fetch(`${API_BASE_URL}/api/attendance/portal/webauthn/authenticate/options`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Check WebAuthn support
+    if (!window.PublicKeyCredential) {
+      return {
+        success: false,
+        credentialId: '',
+        signature: '',
+        authenticatorData: '',
+        clientDataJSON: '',
+        confidence: 0,
+        error: 'WebAuthn not supported on this device',
+      };
+    }
+
+    // Generate challenge if not provided
+    const authChallenge = challenge || generateChallenge();
+
+    // Convert credential ID from Base64
+    const credentialIdBytes = base64ToArrayBuffer(credentialId);
+
+    // Get WebAuthn assertion
+    // THIS WILL PROMPT FOR BIOMETRIC!
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: authChallenge,
+        allowCredentials: [
+          {
+            id: credentialIdBytes,
+            type: 'public-key',
+            transports: ['internal', 'usb', 'nfc', 'ble'],
+          },
+        ],
+        userVerification: 'required', // MUST verify user (biometric/PIN)
+        timeout: 60000,
       },
-      body: JSON.stringify({
-        credentialId, // Optional: specific credential to use
-      }),
+    }) as PublicKeyCredential;
+
+    if (!assertion) {
+      throw new Error('Assertion failed');
+    }
+
+    const response = assertion.response as AuthenticatorAssertionResponse;
+
+    // Extract assertion data
+    const signatureBytes = arrayBufferToBase64(response.signature);
+    const authenticatorDataBytes = arrayBufferToBase64(response.authenticatorData);
+    const clientDataJSONBytes = arrayBufferToBase64(response.clientDataJSON);
+
+    // Calculate confidence from authenticator data
+    const confidence = calculateVerificationConfidence(response.authenticatorData);
+
+    console.log('[WebAuthn] Verification successful:', {
+      credentialId: credentialId.substring(0, 20) + '...',
+      confidence,
     });
 
-    if (!optionsResponse.ok) {
-      throw new Error('Failed to get authentication options from server');
-    }
-
-    const options = await optionsResponse.json();
-
-    // Step 2: Start WebAuthn authentication (browser prompts for biometric)
-    let authenticationResponse: AuthenticationResponseJSON;
-    try {
-      authenticationResponse = await startAuthentication(options);
-    } catch (error) {
-      const err = error as Error & { name: string };
-      // User cancelled or device doesn't support
-      if (err.name === 'NotAllowedError') {
-        return {
-          success: false,
-          credentialId: '',
-          confidence: 0,
-          error: 'Biometric verification was cancelled. Please try again.',
-        };
-      }
-      throw error;
-    }
-
-    // Step 3: Calculate confidence score
-    const confidence = calculateConfidenceScore(authenticationResponse);
-
-    // Step 4: Return verification data
     return {
       success: true,
-      credentialId: authenticationResponse.id,
+      credentialId: arrayBufferToBase64(assertion.rawId),
+      signature: signatureBytes,
+      authenticatorData: authenticatorDataBytes,
+      clientDataJSON: clientDataJSONBytes,
       confidence,
-      authenticatorData: authenticationResponse.response.authenticatorData,
     };
   } catch (error) {
-    const err = error as Error;
+    const err = error as Error & { name: string };
     console.error('Biometric verification error:', err);
+
+    // User-friendly error messages
+    let errorMessage = 'Failed to verify biometric';
+    if (err.name === 'NotAllowedError') {
+      errorMessage = 'Biometric verification was cancelled or timed out';
+    } else if (err.name === 'NotSupportedError') {
+      errorMessage = 'Your device does not support biometric authentication';
+    } else if (err.name === 'SecurityError') {
+      errorMessage = 'Biometric authentication requires a secure connection (HTTPS)';
+    } else if (err.name === 'InvalidStateError') {
+      errorMessage = 'Biometric credential not found. Please re-enroll.';
+    }
+
     return {
       success: false,
       credentialId: '',
+      signature: '',
+      authenticatorData: '',
+      clientDataJSON: '',
       confidence: 0,
-      error: err.message || 'Failed to verify biometric credentials',
+      error: errorMessage,
     };
   }
 }
 
 /**
- * Calculate confidence score based on authenticator characteristics
- * Higher score = more secure/reliable authentication
- * @returns Confidence score (0-100)
+ * Calculate confidence score from registration authenticator data
  */
-function calculateConfidenceScore(
-  response: RegistrationResponseJSON | AuthenticationResponseJSON
-): number {
-  let confidence = 70; // Base score
-
-  // Check if response has authenticatorData (present in both types)
-  if (response.response.authenticatorData) {
-    confidence += 10;
-  }
-
-  // Parse authenticator flags for additional confidence
-  const flags = response.response.authenticatorData 
-    ? parseAuthenticatorFlags(response.response.authenticatorData)
-    : null;
-
-  if (flags) {
-    if (flags.userPresent) confidence += 5;
-    if (flags.userVerified) confidence += 10;
-    if (!flags.backupEligible) confidence += 5; // Device-bound is more secure
-  }
-
-  // Cap at 100
-  return Math.min(confidence, 100);
-}
-
-/**
- * Parse authenticator data flags
- */
-function parseAuthenticatorFlags(authenticatorData: string): {
-  userPresent: boolean;
-  userVerified: boolean;
-  backupEligible: boolean;
-  backupState: boolean;
-} | null {
+function calculateRegistrationConfidence(authenticatorData: ArrayBuffer): number {
   try {
-    // Decode base64url to get flags byte
-    const decoded = atob(authenticatorData.replace(/-/g, '+').replace(/_/g, '/'));
-    const flags = decoded.charCodeAt(32); // Flags at byte 32
+    const dataView = new Uint8Array(authenticatorData);
+    if (dataView.length < 37) return 60;
 
-    return {
-      userPresent: (flags & 0x01) !== 0,
-      userVerified: (flags & 0x04) !== 0,
-      backupEligible: (flags & 0x08) !== 0,
-      backupState: (flags & 0x10) !== 0,
-    };
+    const flags = dataView[32];
+    
+    let confidence = 60; // Base score
+
+    // User present (UP flag)
+    if ((flags & 0x01) !== 0) confidence += 10;
+    
+    // User verified (UV flag) - THIS IS WHAT MATTERS FOR BIOMETRIC
+    if ((flags & 0x04) !== 0) confidence += 30;
+
+    return Math.min(confidence, 100);
   } catch {
-    return null;
+    return 60;
   }
 }
 
 /**
- * Generate SHA-256 hash from credential ID
- * This serves as the biometric identifier stored in the database
+ * Calculate confidence score from verification authenticator data
+ */
+function calculateVerificationConfidence(authenticatorData: ArrayBuffer): number {
+  try {
+    const dataView = new Uint8Array(authenticatorData);
+    if (dataView.length < 37) return 60;
+
+    const flags = dataView[32];
+    
+    let confidence = 50; // Base score for verification
+
+    // User present (UP flag)
+    if ((flags & 0x01) !== 0) confidence += 20;
+    
+    // User verified (UV flag) - THIS IS WHAT MATTERS FOR BIOMETRIC
+    if ((flags & 0x04) !== 0) confidence += 30;
+
+    return Math.min(confidence, 100);
+  } catch {
+    return 60;
+  }
+}
+
+/**
+ * Generate SHA-256 hash from credential ID (for backward compatibility)
  */
 async function generateBiometricHash(credentialId: string): Promise<string> {
   try {
-    // Convert credential ID to ArrayBuffer
     const encoder = new TextEncoder();
     const data = encoder.encode(credentialId);
-
-    // Generate SHA-256 hash
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-
-    // Convert to hex string
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-    return hashHex;
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (error) {
     console.error('Failed to generate biometric hash:', error);
     throw new Error('Failed to generate biometric hash');
@@ -292,10 +379,10 @@ export function getWebAuthnErrorMessage(error: Error): string {
   const errorName = error.name;
   
   const errorMessages: Record<string, string> = {
-    'NotAllowedError': 'Operation cancelled. Please try again.',
+    'NotAllowedError': 'Operation cancelled or timed out. Please try again.',
     'NotSupportedError': 'Your device does not support biometric authentication.',
-    'InvalidStateError': 'You have already registered on this device.',
-    'SecurityError': 'Security error occurred. Please try again.',
+    'InvalidStateError': 'Biometric credential issue. You may need to re-enroll.',
+    'SecurityError': 'Security error. Please ensure you are on a secure connection (HTTPS).',
     'AbortError': 'Operation timed out. Please try again.',
     'NetworkError': 'Network error. Please check your connection.',
   };
