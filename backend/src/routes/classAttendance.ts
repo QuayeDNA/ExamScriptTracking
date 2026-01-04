@@ -11,6 +11,7 @@ import {
   getAttendanceHistory,
   generateAttendanceLink,
   validateAttendanceLink,
+  getActiveLinks,
   enrollBiometric,
   getAttendanceStats,
 } from "../controllers/classAttendanceController";
@@ -82,6 +83,17 @@ router.get(
   "/sessions/:id",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
   getSession
+);
+
+/**
+ * Get active attendance links for a session
+ * GET /api/class-attendance/sessions/:recordId/links
+ * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ */
+router.get(
+  "/sessions/:recordId/links",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  getActiveLinks
 );
 
 /**

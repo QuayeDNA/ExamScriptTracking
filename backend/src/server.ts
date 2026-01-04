@@ -27,7 +27,11 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const app: Express = express();
+
+// For development, keep it simple: HTTP only
+// Web frontend will use Vite proxy, mobile connects directly
 const httpServer = createServer(app);
+
 const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware

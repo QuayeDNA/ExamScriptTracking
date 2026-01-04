@@ -442,6 +442,17 @@ export const classAttendanceApi = {
   },
 
   /**
+   * Get active attendance links for a session
+   */
+  getActiveLinks: async (
+    recordId: string
+  ): Promise<{ links: Array<{ id: string; token: string; url: string; expiresAt: string; maxUses?: number; usageCount: number; geolocation: any; createdAt: string; }> }> => {
+    return apiClient.get<{ links: Array<{ id: string; token: string; url: string; expiresAt: string; maxUses?: number; usageCount: number; geolocation: any; createdAt: string; }> }>(
+      `/class-attendance/sessions/${recordId}/links`
+    );
+  },
+
+  /**
    * Deactivate an attendance link
    */
   deactivateLink: async (

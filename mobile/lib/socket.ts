@@ -37,7 +37,7 @@ class MobileSocketService {
 
     // Use the same base URL as the API client, but without /api suffix
     const API_BASE =
-      process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+      process.env.EXPO_PUBLIC_API_URL || "http://192.168.43.153:5000/api";
     const SOCKET_URL = API_BASE.replace("/api", "");
 
     console.log("🔌 Attempting socket connection to:", SOCKET_URL);

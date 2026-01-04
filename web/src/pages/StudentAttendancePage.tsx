@@ -97,18 +97,24 @@ export function StudentAttendancePage() {
       setVerifying(true);
       setGettingLocation(true);
       try {
-        // Try to get student location first (non-blocking)
+        // Try to get student location first
         let studentLocation: { lat: number; lng: number } | undefined;
+        let locationError: Error | null = null;
+        
         try {
           studentLocation = await getStudentLocation();
+          setGettingLocation(false);
         } catch (error) {
+          locationError = error instanceof Error ? error : new Error("Failed to get location");
           console.warn("Could not get student location:", error);
-          // Don't fail yet - backend will indicate if location is required
+          setGettingLocation(false);
         }
-        setGettingLocation(false);
 
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-        const response = await fetch(`${API_URL}/api/class-attendance/links/validate`, {
+        // API URL is empty for proxy, or full URL for production
+        const API_BASE = import.meta.env.VITE_API_URL || "";
+        const endpoint = API_BASE ? `${API_BASE}/class-attendance/links/validate` : '/api/class-attendance/links/validate';
+        
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -121,13 +127,22 @@ export function StudentAttendancePage() {
 
         if (!response.ok || !data.valid) {
           setLinkValid(false);
-          setLocationError(data.error || "Invalid link");
           
-          if (data.distanceFromVenue !== undefined && data.requiredRadius !== undefined) {
+          // Special handling for location required error
+          if (data.requiresLocation && !studentLocation) {
+            setRequiresLocation(true);
+            setLocationError(
+              locationError?.message || 
+              "Location access is required for this attendance session. Please enable location permissions and refresh the page."
+            );
+            toast.error("Location permission required. Please allow location access and try again.");
+          } else if (data.distanceFromVenue !== undefined && data.requiredRadius !== undefined) {
+            setLocationError(data.error || "Too far from venue");
             toast.error(
               `You are ${data.distanceFromVenue.toFixed(0)}m away. Must be within ${data.requiredRadius}m.`
             );
           } else {
+            setLocationError(data.error || "Invalid link");
             toast.error(data.error || "This attendance link is invalid");
           }
           return;
@@ -214,7 +229,7 @@ export function StudentAttendancePage() {
 
   if (!linkValid || !sessionInfo) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 px-4">
         <Card className="w-full max-w-md p-8">
           <div className="flex flex-col items-center gap-4">
             {requiresLocation ? (
@@ -228,13 +243,31 @@ export function StudentAttendancePage() {
             <p className="text-sm text-muted-foreground text-center">
               {locationError || "This attendance link is invalid, expired, or has reached its maximum usage limit."}
             </p>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/login")}
-              className="mt-4"
-            >
-              Go to Login
-            </Button>
+            {requiresLocation && (
+              <div className="w-full mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                <p className="text-sm text-orange-800 dark:text-orange-200 text-center">
+                  📍 This session requires location validation. Please allow location access in your browser settings and click "Retry".
+                </p>
+              </div>
+            )}
+            <div className="flex gap-2 mt-4 w-full">
+              {requiresLocation && (
+                <Button
+                  variant="default"
+                  onClick={() => window.location.reload()}
+                  className="flex-1"
+                >
+                  Retry
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => navigate("/login")}
+                className="flex-1"
+              >
+                Go to Login
+              </Button>
+            </div>
           </div>
         </Card>
       </div>

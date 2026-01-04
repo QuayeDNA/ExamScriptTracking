@@ -875,7 +875,20 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
       return;
     }
 
-    // Generate link
+    // Revoke existing active links for this session (single active link strategy)
+    const now = new Date();
+    await prisma.attendanceLink.updateMany({
+      where: {
+        recordId: validatedData.recordId,
+        expiresAt: { gt: now }, // Only revoke non-expired links
+        linkType: "ATTENDANCE",
+      },
+      data: {
+        expiresAt: now, // Set to current time to immediately expire
+      },
+    });
+
+    // Generate new link
     const linkToken = crypto.randomBytes(16).toString('hex');
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + validatedData.expiresInMinutes);
@@ -901,6 +914,7 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
         expiresAt: link.expiresAt,
         maxUses: link.maxUses,
       },
+      note: "If accessing from network IP, you may need to use HTTP instead of HTTPS for development builds without proper SSL certificates",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -909,6 +923,59 @@ export const generateAttendanceLink = async (req: Request, res: Response) => {
     }
     console.error("Error generating attendance link:", error);
     res.status(500).json({ error: "Failed to generate attendance link" });
+  }
+};
+
+/**
+ * Get active attendance links for a session
+ * GET /api/class-attendance/sessions/:recordId/links
+ */
+export const getActiveLinks = async (req: Request, res: Response) => {
+  try {
+    const { recordId } = req.params;
+    const userId = req.user!.userId;
+
+    // Verify record exists and user has access
+    const record = await prisma.classAttendanceRecord.findUnique({
+      where: { id: recordId },
+    });
+
+    if (!record) {
+      res.status(404).json({ error: "Attendance record not found" });
+      return;
+    }
+
+    if (record.userId !== userId && req.user!.role !== "ADMIN") {
+      res.status(403).json({ error: "Unauthorized access to this record" });
+      return;
+    }
+
+    // Find active links (non-expired)
+    const now = new Date();
+    const activeLinks = await prisma.attendanceLink.findMany({
+      where: {
+        recordId,
+        expiresAt: { gt: now },
+        linkType: "ATTENDANCE",
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      links: activeLinks.map(link => ({
+        id: link.id,
+        token: link.linkToken,
+        url: `${process.env.APP_URL || 'http://localhost:5173'}/student-attendance?token=${link.linkToken}`,
+        expiresAt: link.expiresAt,
+        maxUses: link.maxUses,
+        usageCount: link.usesCount,
+        geolocation: link.geolocation as any,
+        createdAt: link.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching active links:", error);
+    res.status(500).json({ error: "Failed to fetch active links" });
   }
 };
 

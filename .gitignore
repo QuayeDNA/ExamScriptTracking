@@ -89,3 +89,5 @@ pnpm-lock.yaml
 
 # APK files
 web/public/ExamTrack.apk
+backend/ssl/cert.pem
+backend/ssl/key.pem

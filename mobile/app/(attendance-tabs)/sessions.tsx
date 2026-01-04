@@ -14,10 +14,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
-  Clipboard,
   Switch,
+  Clipboard as RNClipboard,
 } from "react-native";
-import Slider from '@react-native-community/slider';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
@@ -354,12 +353,13 @@ const styles = StyleSheet.create({
   // Link Modal Styles
   linkModalContent: {
     borderRadius: 16,
-    width: "90%",
-    maxWidth: 600,
-    maxHeight: "85%",
+    width: "100%",
+    maxHeight: "90%",
+    flex: 1,
   },
   linkModalBody: {
     padding: 20,
+    paddingBottom: 100, // Add padding to prevent content from going behind buttons
   },
   linkSessionInfo: {
     padding: 16,
@@ -438,7 +438,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   securitySection: {
-    padding: 16,
     borderRadius: 8,
     gap: 16,
     marginVertical: 8,
@@ -449,11 +448,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   settingRow: {
-    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   settingInfo: {
     flex: 1,
     gap: 4,
+    paddingRight: 8,
   },
   settingLabel: {
     fontSize: 15,
@@ -463,20 +466,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  sliderContainer: {
+  radiusInputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginTop: 8,
+    gap: 6,
   },
-  slider: {
-    flex: 1,
-    height: 40,
-  },
-  sliderValue: {
-    fontSize: 12,
-    width: 50,
+  radiusInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    fontWeight: "600",
+    minWidth: 70,
     textAlign: "center",
+  },
+  radiusUnit: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  radiusHint: {
+    fontSize: 12,
+    marginTop: 4,
   },
   endButton: {
     flexDirection: "row",
@@ -521,6 +531,8 @@ export default function AttendanceSessions() {
   const [linkExpiration, setLinkExpiration] = useState("60"); // minutes
   const [generatingLink, setGeneratingLink] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [existingLink, setExistingLink] = useState<any>(null);
+  const [fetchingExistingLink, setFetchingExistingLink] = useState(false);
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [sessionToEnd, setSessionToEnd] = useState<ClassAttendanceRecord | null>(null);
   const [endingSession, setEndingSession] = useState(false);
@@ -686,6 +698,23 @@ export default function AttendanceSessions() {
     }
   };
 
+  const fetchExistingLink = async (recordId: string) => {
+    try {
+      setFetchingExistingLink(true);
+      const response = await classAttendanceApi.getActiveLinks(recordId);
+      if (response.links && response.links.length > 0) {
+        setExistingLink(response.links[0]); // Get the most recent active link
+      } else {
+        setExistingLink(null);
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch existing link:", error);
+      setExistingLink(null);
+    } finally {
+      setFetchingExistingLink(false);
+    }
+  };
+
   const handleEndSession = (session: ClassAttendanceRecord) => {
     setSessionToEnd(session);
     setShowEndDialog(true);
@@ -710,19 +739,6 @@ export default function AttendanceSessions() {
       toast.error(error?.error || "Failed to end session");
     } finally {
       setEndingSession(false);
-    }
-  };
-
-  const getStatusColor = (status: RecordingStatus) => {
-    switch (status) {
-      case "IN_PROGRESS":
-        return colors.success;
-      case "COMPLETED":
-        return colors.primary;
-      case "CANCELLED":
-        return colors.error;
-      default:
-        return colors.foregroundMuted;
     }
   };
 
@@ -852,6 +868,7 @@ export default function AttendanceSessions() {
         {isActive ? (
           // Active session actions
           <View style={{ gap: 8 }}>
+            {/* First Row: Record and Details */}
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 style={{ 
@@ -900,6 +917,60 @@ export default function AttendanceSessions() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Second Row: Link and Pause/Resume */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={{ 
+                  flex: 1, 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  gap: 6,
+                  backgroundColor: `${colors.primary}20`,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                  padding: 12, 
+                  borderRadius: 12 
+                }}
+                onPress={() => {
+                  setSelectedSessionForLink(session);
+                  setGeneratedLink(null);
+                  setExistingLink(null);
+                  setShowLinkModal(true);
+                  fetchExistingLink(session.id);
+                }}
+              >
+                <Ionicons name="link-outline" size={20} color={colors.primary} />
+                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>
+                  Link
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ 
+                  flex: 1, 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  gap: 6,
+                  backgroundColor: `${colors.warning}20`,
+                  borderWidth: 1,
+                  borderColor: colors.warning,
+                  padding: 12, 
+                  borderRadius: 12 
+                }}
+                onPress={() => {
+                  toast.info('Pause/Resume feature coming soon');
+                }}
+              >
+                <Ionicons name="pause-circle-outline" size={20} color={colors.warning} />
+                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.warning }}>
+                  Pause
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Third Row: End Session (full width at bottom) */}
             <TouchableOpacity
               style={{ 
                 flexDirection: 'row', 
@@ -1221,7 +1292,7 @@ export default function AttendanceSessions() {
         animationType="fade"
         onRequestClose={() => setShowLinkModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0, 0, 0, 0.5)" }]}>
+        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" }]}>
           <View style={[styles.linkModalContent, { backgroundColor: colors.card }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>
@@ -1232,7 +1303,11 @@ export default function AttendanceSessions() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.linkModalBody}>
+            <ScrollView 
+              style={styles.linkModalBody}
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
               {selectedSessionForLink && (
                 <View style={[styles.linkSessionInfo, { backgroundColor: colors.muted }]}>
                   <Text style={[styles.linkSessionCode, { color: colors.primary }]}>
@@ -1241,6 +1316,44 @@ export default function AttendanceSessions() {
                   <Text style={[styles.linkSessionName, { color: colors.foreground }]}>
                     {selectedSessionForLink.courseName}
                   </Text>
+                </View>
+              )}
+
+              {/* Show existing link warning */}
+              {fetchingExistingLink && (
+                <View style={{ padding: 16, backgroundColor: colors.muted, borderRadius: 12, marginBottom: 16 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={{ marginTop: 8, textAlign: "center", color: colors.foregroundMuted }}>
+                    Checking for active links...
+                  </Text>
+                </View>
+              )}
+
+              {!fetchingExistingLink && existingLink && !generatedLink && (
+                <View style={{ padding: 16, backgroundColor: "#FFF3CD", borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: "#FFC107" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+                    <Ionicons name="warning" size={20} color="#FF9800" />
+                    <Text style={{ marginLeft: 8, fontSize: 16, fontWeight: "600", color: "#F57C00" }}>
+                      Active Link Found
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 13, color: "#795548", marginBottom: 8 }}>
+                    An active link already exists for this session. Generating a new link will invalidate the current one.
+                  </Text>
+                  <View style={{ backgroundColor: "#FFF", padding: 12, borderRadius: 8, marginTop: 8 }}>
+                    <Text style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>Current Link:</Text>
+                    <Text style={{ fontSize: 12, color: "#333", fontFamily: "monospace" }} numberOfLines={1}>
+                      {existingLink.url}
+                    </Text>
+                    <View style={{ flexDirection: "row", marginTop: 8, gap: 16 }}>
+                      <Text style={{ fontSize: 11, color: "#666" }}>
+                        Uses: {existingLink.usageCount}/{existingLink.maxUses || '∞'}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#666" }}>
+                        Expires: {new Date(existingLink.expiresAt).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               )}
 
@@ -1319,28 +1432,32 @@ export default function AttendanceSessions() {
                       <View style={styles.settingRow}>
                         <View style={styles.settingInfo}>
                           <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-                            Validation Radius: {securitySettings.radius}m
+                            Validation Radius
                           </Text>
                           <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
-                            Students must be within this distance to mark attendance
+                            Students must be within this distance
                           </Text>
                         </View>
-                        <View style={styles.sliderContainer}>
-                          <Text style={[styles.sliderValue, { color: colors.foregroundMuted }]}>10m</Text>
-                          <Slider
-                            style={styles.slider}
-                            minimumValue={10}
-                            maximumValue={5000}
-                            step={10}
-                            value={securitySettings.radius}
-                            onValueChange={(value: number) => 
-                              setSecuritySettings({...securitySettings, radius: value})
-                            }
-                            minimumTrackTintColor={colors.primary}
-                            maximumTrackTintColor={colors.muted}
-                            thumbTintColor={colors.primary}
+                        <View style={styles.radiusInputContainer}>
+                          <TextInput
+                            style={[styles.radiusInput, { 
+                              color: colors.foreground,
+                              borderColor: colors.border,
+                              backgroundColor: colors.muted,
+                            }]}
+                            value={String(securitySettings.radius)}
+                            onChangeText={(text) => {
+                              const value = parseInt(text) || 50;
+                              const clampedValue = Math.max(10, Math.min(5000, value));
+                              setSecuritySettings({...securitySettings, radius: clampedValue});
+                            }}
+                            keyboardType="numeric"
+                            placeholder="50"
+                            maxLength={4}
                           />
-                          <Text style={[styles.sliderValue, { color: colors.foregroundMuted }]}>5000m</Text>
+                          <Text style={[styles.radiusUnit, { color: colors.foregroundMuted }]}>
+                            m
+                          </Text>
                         </View>
                       </View>
                     )}
@@ -1389,7 +1506,7 @@ export default function AttendanceSessions() {
                   <View style={[styles.linkInfoBox, { backgroundColor: colors.muted }]}>
                     <Ionicons name="information-circle" size={20} color={colors.primary} />
                     <Text style={[styles.linkInfoText, { color: colors.foreground }]}>
-                      Students will use this link to mark their attendance without scanning QR codes
+                      Students will use this link to mark their attendance themselves
                     </Text>
                   </View>
                 </>
@@ -1435,8 +1552,8 @@ export default function AttendanceSessions() {
                     {capturingLocation 
                       ? "Capturing Location..." 
                       : generatingLink 
-                      ? "Generating..." 
-                      : "Generate Link"
+                      ? existingLink ? "Regenerating..." : "Generating..." 
+                      : existingLink ? "Regenerate Link" : "Generate Link"
                     }
                   </Button>
                 </>
@@ -1456,7 +1573,7 @@ export default function AttendanceSessions() {
                     variant="default"
                     onPress={() => {
                       if (generatedLink) {
-                        Clipboard.setString(generatedLink);
+                        RNClipboard.setString(generatedLink);
                         toast.success("Link copied to clipboard");
                       }
                     }}

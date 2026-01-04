@@ -1,12 +1,12 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 import Constants from "expo-constants";
 import type { ApiError } from "@/types";
-import { getToken, clearAuth } from "@/utils/storage";
+import { getToken } from "@/utils/storage";
 
 // Base API URL: allow overriding via EXPO_PUBLIC_API_URL, otherwise fall back to localhost.
 // When running on a physical device or Expo Go, replace 'localhost' with the packager host IP
 // (available via Expo Constants) so the app can reach the machine running the backend.
-let API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api";
+let API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.43.153:5000/api";
 
 try {
   if (API_URL.includes("localhost")) {
