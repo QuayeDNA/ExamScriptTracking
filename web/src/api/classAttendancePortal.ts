@@ -12,6 +12,7 @@ export interface SessionInfo {
   venue: string;
   startTime: string;
   status: string;
+  totalStudents?: number;
 }
 
 export interface ValidateLinkResponse {

@@ -8,6 +8,8 @@
     "dev:backend": "cd backend && npm run dev",
     "dev:web": "cd web && npm run dev",
     "dev:mobile": "cd mobile && npm start",
+    "dev:web-backend": "concurrently -n backend,web -c blue,green \"npm run dev:backend\" \"npm run dev:web\"",
+    "dev:mobile-backend": "concurrently -n backend,mobile -c blue,yellow \"npm run dev:backend\" \"npm run dev:mobile\"",
     "install:all": "npm install && cd backend && npm install && cd ../web && npm install && cd ../mobile && npm install",
     "backend": "npm run dev:backend",
     "web": "npm run dev:web",

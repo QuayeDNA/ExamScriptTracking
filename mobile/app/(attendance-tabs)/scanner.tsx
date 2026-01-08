@@ -376,32 +376,43 @@ export default function AttendanceRecorder() {
         </Text>
       </TouchableOpacity>
 
-      {hasBiometric && (
-        <TouchableOpacity
+      <TouchableOpacity
+        style={[
+          styles.methodButton,
+          { borderColor: method === "BIOMETRIC" ? colors.primary : colors.border },
+          method === "BIOMETRIC" && { backgroundColor: `${colors.primary}10` },
+          !hasBiometric && { opacity: 0.4 },
+        ]}
+        onPress={() => hasBiometric && setMethod("BIOMETRIC")}
+        disabled={!hasBiometric}
+      >
+        <Ionicons
+          name="finger-print-outline"
+          size={24}
+          color={
+            method === "BIOMETRIC"
+              ? colors.primary
+              : !hasBiometric
+              ? colors.foregroundMuted
+              : colors.foregroundMuted
+          }
+        />
+        <Text
           style={[
-            styles.methodButton,
-            { borderColor: method === "BIOMETRIC" ? colors.primary : colors.border },
-            method === "BIOMETRIC" && { backgroundColor: `${colors.primary}10` },
+            styles.methodText,
+            {
+              color:
+                method === "BIOMETRIC"
+                  ? colors.primary
+                  : !hasBiometric
+                  ? colors.foregroundMuted
+                  : colors.foregroundMuted,
+            },
           ]}
-          onPress={() => setMethod("BIOMETRIC")}
         >
-          <Ionicons
-            name="finger-print-outline"
-            size={24}
-            color={method === "BIOMETRIC" ? colors.primary : colors.foregroundMuted}
-          />
-          <Text
-            style={[
-              styles.methodText,
-              {
-                color: method === "BIOMETRIC" ? colors.primary : colors.foregroundMuted,
-              },
-            ]}
-          >
-            Biometric
-          </Text>
-        </TouchableOpacity>
-      )}
+          Biometric
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 

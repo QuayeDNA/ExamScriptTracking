@@ -1,17 +1,21 @@
-import { PrismaClient, AttendanceMethod, ClassAttendanceStatus, RecordingStatus } from "@prisma/client";
+import { PrismaClient, VerificationMethod, AttendanceStatus, SessionStatus } from "@prisma/client";
 import { emitAttendanceRecorded, emitLiveAttendanceUpdate } from "../socket/handlers/classAttendanceEvents";
+import { StudentLookupService } from "./studentLookupService";
+import * as crypto from "crypto";
 
 const prisma = new PrismaClient();
+const studentLookupService = new StudentLookupService();
 
 interface RecordAttendanceParams {
-  recordId: string;
+  sessionId: string;
   studentId: string;
-  verificationMethod: AttendanceMethod;
+  method: VerificationMethod;
   deviceId?: string;
   biometricConfidence?: number;
-  status: ClassAttendanceStatus;
-  lecturerConfirmed: boolean;
+  status: AttendanceStatus;
+  recordedBy: string;
   linkTokenUsed?: string;
+  metadata?: any;
 }
 
 export class AttendanceService {
@@ -21,30 +25,30 @@ export class AttendanceService {
    */
   async recordAttendance(params: RecordAttendanceParams) {
     const {
-      recordId,
+      sessionId,
       studentId,
-      verificationMethod,
+      method,
       deviceId,
       biometricConfidence,
       status,
-      lecturerConfirmed,
+      recordedBy,
       linkTokenUsed,
+      metadata,
     } = params;
 
-    // Verify record exists and is active
-    const record = await prisma.classAttendanceRecord.findUnique({
-      where: { id: recordId },
+    // Verify session exists and is active
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
       include: {
-        user: true,
-        session: true,
+        creator: true,
       },
     });
 
-    if (!record) {
-      throw new Error("Attendance record not found");
+    if (!session) {
+      throw new Error("Attendance session not found");
     }
 
-    if (record.status !== RecordingStatus.IN_PROGRESS) {
+    if (session.status !== SessionStatus.IN_PROGRESS) {
       throw new Error("Attendance session is not active");
     }
 
@@ -58,10 +62,10 @@ export class AttendanceService {
     }
 
     // Check for duplicate attendance
-    const existingAttendance = await prisma.classAttendance.findUnique({
+    const existingAttendance = await prisma.studentAttendance.findUnique({
       where: {
-        recordId_studentId: {
-          recordId,
+        sessionId_studentId: {
+          sessionId,
           studentId,
         },
       },
@@ -71,64 +75,67 @@ export class AttendanceService {
       throw new Error(`Student ${student.indexNumber} has already been recorded for this session`);
     }
 
-    // Check if attendance limit has been reached (if totalStudents is set)
-    if (record.totalStudents > 0) {
-      const currentAttendanceCount = await prisma.classAttendance.count({
-        where: { recordId },
+    // Check if attendance limit has been reached (if expectedStudentCount is set)
+    if (session.expectedStudentCount > 0) {
+      const currentAttendanceCount = await prisma.studentAttendance.count({
+        where: { sessionId },
       });
 
-      if (currentAttendanceCount >= record.totalStudents) {
-        throw new Error(`Attendance limit reached. Maximum ${record.totalStudents} students expected for this session`);
+      if (currentAttendanceCount >= session.expectedStudentCount) {
+        throw new Error(`Attendance limit reached. Maximum ${session.expectedStudentCount} students expected for this session`);
       }
     }
 
+    // Determine if confirmation is required (self-marked attendance via link)
+    const requiresConfirmation = !!linkTokenUsed;
+
     // Create attendance record
-    const attendance = await prisma.classAttendance.create({
+    const attendance = await prisma.studentAttendance.create({
       data: {
-        recordId,
+        sessionId,
         studentId,
-        verificationMethod,
+        verificationMethod: method,
         deviceId,
         biometricConfidence,
         status,
-        lecturerConfirmed,
-        confirmedAt: lecturerConfirmed ? new Date() : null,
+        recordedBy,
+        requiresConfirmation,
+        confirmedBy: requiresConfirmation ? null : recordedBy,
+        confirmedAt: requiresConfirmation ? null : new Date(),
         linkTokenUsed,
+        location: metadata?.location,
+        metadata,
       },
       include: {
         student: true,
-        record: {
+        session: {
           include: {
-            user: true,
+            creator: true,
           },
         },
       },
     });
 
-    // totalStudents is the EXPECTED limit, not the count
-    // The actual count is derived from students.length
-    // No need to increment here
-
-    // Get updated record with all students for socket emission
-    const updatedRecord = await prisma.classAttendanceRecord.findUnique({
-      where: { id: recordId },
+    // Get updated session with all students for socket emission
+    const updatedSession = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
       include: {
-        students: {
+        attendance: {
           include: {
             student: true,
           },
           orderBy: {
-            scanTime: 'desc',
+            markedAt: 'desc',
           },
         },
-        user: true,
+        creator: true,
       },
     });
 
     // Emit real-time events
     emitAttendanceRecorded(attendance);
-    if (updatedRecord) {
-      emitLiveAttendanceUpdate(updatedRecord);
+    if (updatedSession) {
+      emitLiveAttendanceUpdate(updatedSession);
     }
 
     return attendance;
@@ -139,7 +146,7 @@ export class AttendanceService {
    */
   async validateAttendanceLink(linkToken: string): Promise<{
     valid: boolean;
-    recordId?: string;
+    sessionId?: string;
     error?: string;
   }> {
     const link = await prisma.attendanceLink.findUnique({
@@ -162,20 +169,20 @@ export class AttendanceService {
       return { valid: false, error: "Link usage limit reached" };
     }
 
-    // If link is associated with a record, check its status
-    if (link.recordId) {
-      const record = await prisma.classAttendanceRecord.findUnique({
-        where: { id: link.recordId },
+    // If link is associated with a session, check its status
+    if (link.sessionId) {
+      const session = await prisma.attendanceSession.findUnique({
+        where: { id: link.sessionId },
       });
 
-      if (record && record.status !== RecordingStatus.IN_PROGRESS) {
+      if (session && session.status !== SessionStatus.IN_PROGRESS) {
         return { valid: false, error: "Attendance session is no longer active" };
       }
     }
 
     return { 
       valid: true, 
-      recordId: link.recordId || undefined,
+      sessionId: link.sessionId || undefined,
     };
   }
 
@@ -194,28 +201,28 @@ export class AttendanceService {
   }
 
   /**
-   * Get attendance summary for a record
+   * Get attendance summary for a session
    */
-  async getAttendanceSummary(recordId: string) {
-    const [record, attendance] = await Promise.all([
-      prisma.classAttendanceRecord.findUnique({
-        where: { id: recordId },
+  async getAttendanceSummary(sessionId: string) {
+    const [session, attendance] = await Promise.all([
+      prisma.attendanceSession.findUnique({
+        where: { id: sessionId },
         include: {
-          user: true,
+          creator: true,
         },
       }),
-      prisma.classAttendance.findMany({
-        where: { recordId },
+      prisma.studentAttendance.findMany({
+        where: { sessionId },
         include: {
           student: true,
         },
         orderBy: {
-          scanTime: 'asc',
+          markedAt: 'asc',
         },
       }),
     ]);
 
-    if (!record) {
+    if (!session) {
       return null;
     }
 
@@ -232,27 +239,28 @@ export class AttendanceService {
       return acc;
     }, {} as Record<string, number>);
 
-    // Calculate average scan time between students
-    let avgTimeBetweenScans = 0;
+    // Calculate average time between marks
+    let avgTimeBetweenMarks = 0;
     if (attendance.length > 1) {
       const timeDiffs = [];
       for (let i = 1; i < attendance.length; i++) {
-        const diff = attendance[i].scanTime.getTime() - attendance[i - 1].scanTime.getTime();
+        const diff = attendance[i].markedAt.getTime() - attendance[i - 1].markedAt.getTime();
         timeDiffs.push(diff);
       }
-      avgTimeBetweenScans = timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length / 1000; // seconds
+      avgTimeBetweenMarks = timeDiffs.reduce((a, b) => a + b, 0) / timeDiffs.length / 1000; // seconds
     }
 
     return {
-      record,
+      session,
       attendance,
       summary: {
         totalStudents: attendance.length,
+        expectedStudents: session.expectedStudentCount,
         methodBreakdown: methodCounts,
         statusBreakdown: statusCounts,
-        avgTimeBetweenScans: Math.round(avgTimeBetweenScans),
-        duration: record.endTime 
-          ? Math.round((record.endTime.getTime() - record.startTime.getTime()) / 1000 / 60)
+        avgTimeBetweenMarks: Math.round(avgTimeBetweenMarks),
+        duration: session.endTime 
+          ? Math.round((session.endTime.getTime() - session.startTime.getTime()) / 1000 / 60)
           : null,
       },
     };
@@ -266,7 +274,7 @@ export class AttendanceService {
     startDate?: Date;
     endDate?: Date;
   }) {
-    const whereClause: any = { userId };
+    const whereClause: any = { createdBy: userId };
     if (options?.courseCode) whereClause.courseCode = options.courseCode;
     if (options?.startDate || options?.endDate) {
       whereClause.startTime = {};
@@ -275,24 +283,24 @@ export class AttendanceService {
     }
 
     const [sessions, coursesWithSessions] = await Promise.all([
-      prisma.classAttendanceRecord.findMany({
+      prisma.attendanceSession.findMany({
         where: whereClause,
         include: {
-          students: true,
+          attendance: true,
         },
       }),
-      prisma.classAttendanceRecord.groupBy({
+      prisma.attendanceSession.groupBy({
         by: ['courseCode'],
         where: whereClause,
         _count: true,
         _sum: {
-          totalStudents: true,
+          expectedStudentCount: true,
         },
       }),
     ]);
 
-    const completedSessions = sessions.filter(s => s.status === RecordingStatus.COMPLETED);
-    const totalStudents = sessions.reduce((sum, s) => sum + s.totalStudents, 0);
+    const completedSessions = sessions.filter(s => s.status === SessionStatus.COMPLETED);
+    const totalStudents = sessions.reduce((sum, s) => sum + s.attendance.length, 0);
     const avgStudentsPerSession = sessions.length > 0 ? totalStudents / sessions.length : 0;
 
     return {
@@ -306,7 +314,7 @@ export class AttendanceService {
       courses: coursesWithSessions.map(c => ({
         courseCode: c.courseCode,
         sessionCount: c._count,
-        totalStudents: c._sum.totalStudents || 0,
+        expectedStudents: c._sum.expectedStudentCount || 0,
       })),
     };
   }
@@ -324,15 +332,15 @@ export class AttendanceService {
       return { canUse: false, error: linkValidation.error };
     }
 
-    if (!linkValidation.recordId) {
+    if (!linkValidation.sessionId) {
       return { canUse: false, error: "Invalid attendance link" };
     }
 
     // Check if student already marked attendance
-    const existingAttendance = await prisma.classAttendance.findUnique({
+    const existingAttendance = await prisma.studentAttendance.findUnique({
       where: {
-        recordId_studentId: {
-          recordId: linkValidation.recordId,
+        sessionId_studentId: {
+          sessionId: linkValidation.sessionId,
           studentId,
         },
       },
@@ -375,20 +383,20 @@ export class AttendanceService {
   }) {
     const whereClause: any = { studentId };
     if (options?.courseCode) {
-      whereClause.record = { courseCode: options.courseCode };
+      whereClause.session = { courseCode: options.courseCode };
     }
     if (options?.startDate || options?.endDate) {
-      whereClause.scanTime = {};
-      if (options?.startDate) whereClause.scanTime.gte = options.startDate;
-      if (options?.endDate) whereClause.scanTime.lte = options.endDate;
+      whereClause.markedAt = {};
+      if (options?.startDate) whereClause.markedAt.gte = options.startDate;
+      if (options?.endDate) whereClause.markedAt.lte = options.endDate;
     }
 
-    const attendance = await prisma.classAttendance.findMany({
+    const attendance = await prisma.studentAttendance.findMany({
       where: whereClause,
       include: {
-        record: {
+        session: {
           include: {
-            user: {
+            creator: {
               select: {
                 firstName: true,
                 lastName: true,
@@ -398,17 +406,17 @@ export class AttendanceService {
         },
       },
       orderBy: {
-        scanTime: 'desc',
+        markedAt: 'desc',
       },
     });
 
     // Group by course
     const byCourse = attendance.reduce((acc, att) => {
-      const courseCode = att.record.courseCode || 'Unknown';
+      const courseCode = att.session.courseCode || 'Unknown';
       if (!acc[courseCode]) {
         acc[courseCode] = {
           courseCode,
-          courseName: att.record.courseName,
+          courseName: att.session.courseName,
           sessions: [],
           totalSessions: 0,
           presentCount: 0,
@@ -416,7 +424,7 @@ export class AttendanceService {
       }
       acc[courseCode].sessions.push(att);
       acc[courseCode].totalSessions++;
-      if (att.status === ClassAttendanceStatus.PRESENT) {
+      if (att.status === AttendanceStatus.PRESENT) {
         acc[courseCode].presentCount++;
       }
       return acc;
@@ -426,11 +434,651 @@ export class AttendanceService {
       attendance,
       summary: {
         totalSessions: attendance.length,
-        present: attendance.filter(a => a.status === ClassAttendanceStatus.PRESENT).length,
-        late: attendance.filter(a => a.status === ClassAttendanceStatus.LATE).length,
-        excused: attendance.filter(a => a.status === ClassAttendanceStatus.EXCUSED).length,
+        present: attendance.filter(a => a.status === AttendanceStatus.PRESENT).length,
+        late: attendance.filter(a => a.status === AttendanceStatus.LATE).length,
+        excused: attendance.filter(a => a.status === AttendanceStatus.EXCUSED).length,
       },
       byCourse: Object.values(byCourse),
     };
+  }
+
+  /**
+   * Create a new attendance session
+   */
+  async createSession(params: {
+    userId: string;
+    courseCode: string;
+    courseName: string;
+    venue?: string;
+    notes?: string;
+    expectedStudentCount?: number;
+  }) {
+    const { userId, courseCode, courseName, venue, notes, expectedStudentCount } = params;
+
+    // Get lecturer name
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true },
+    });
+
+    const session = await prisma.attendanceSession.create({
+      data: {
+        courseCode,
+        courseName,
+        venue,
+        notes,
+        lecturerName: user ? `${user.firstName} ${user.lastName}` : undefined,
+        createdBy: userId,
+        expectedStudentCount: expectedStudentCount || 0,
+        status: SessionStatus.IN_PROGRESS,
+      },
+      include: {
+        creator: true,
+      },
+    });
+
+    return session;
+  }
+
+  /**
+   * End attendance session
+   */
+  async endSession(sessionId: string, userId: string, notes?: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    if (session.createdBy !== userId) {
+      throw new Error("Unauthorized to end this session");
+    }
+
+    if (session.status !== SessionStatus.IN_PROGRESS) {
+      throw new Error("Session is not active");
+    }
+
+    // Deactivate all active links for this session
+    await prisma.attendanceLink.updateMany({
+      where: {
+        sessionId,
+        isActive: true,
+      },
+      data: {
+        isActive: false,
+        deactivatedAt: new Date(),
+      },
+    });
+
+    const updatedSession = await prisma.attendanceSession.update({
+      where: { id: sessionId },
+      data: {
+        status: SessionStatus.COMPLETED,
+        endTime: new Date(),
+        notes: notes || session.notes,
+      },
+      include: {
+        creator: true,
+        attendance: {
+          include: {
+            student: true,
+          },
+        },
+      },
+    });
+
+    return updatedSession;
+  }
+
+  /**
+   * Delete session
+   */
+  async deleteSession(sessionId: string, userId: string, userRole: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    // Only creator or admin can delete
+    if (session.createdBy !== userId && !['ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
+      throw new Error("Unauthorized to delete this session");
+    }
+
+    await prisma.attendanceSession.delete({
+      where: { id: sessionId },
+    });
+  }
+
+  /**
+   * Get active sessions
+   */
+  async getActiveSessions(userId: string, role: string) {
+    const whereClause: any = { status: SessionStatus.IN_PROGRESS };
+    
+    // Non-admins can only see their own sessions
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      whereClause.createdBy = userId;
+    }
+
+    const sessions = await prisma.attendanceSession.findMany({
+      where: whereClause,
+      include: {
+        creator: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        attendance: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: {
+        startTime: 'desc',
+      },
+    });
+
+    return sessions;
+  }
+
+  /**
+   * Get session with statistics
+   */
+  async getSessionWithStats(sessionId: string, userId: string, role: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        creator: true,
+        attendance: {
+          include: {
+            student: true,
+          },
+          orderBy: {
+            markedAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    // Check access
+    if (session.createdBy !== userId && !['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      throw new Error("Unauthorized to view this session");
+    }
+
+    return session;
+  }
+
+  /**
+   * Get attendance history
+   */
+  async getHistory(
+    userId: string,
+    role: string,
+    filters?: {
+      courseCode?: string;
+      startDate?: Date;
+      endDate?: Date;
+      status?: SessionStatus;
+    },
+    pagination?: {
+      page: number;
+      limit: number;
+    }
+  ) {
+    const whereClause: any = {};
+
+    // Non-admins can only see their own sessions
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      whereClause.createdBy = userId;
+    }
+
+    if (filters?.courseCode) whereClause.courseCode = filters.courseCode;
+    if (filters?.status) whereClause.status = filters.status;
+    if (filters?.startDate || filters?.endDate) {
+      whereClause.startTime = {};
+      if (filters?.startDate) whereClause.startTime.gte = filters.startDate;
+      if (filters?.endDate) whereClause.startTime.lte = filters.endDate;
+    }
+
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [sessions, total] = await Promise.all([
+      prisma.attendanceSession.findMany({
+        where: whereClause,
+        include: {
+          creator: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
+          attendance: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: {
+          startTime: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.attendanceSession.count({ where: whereClause }),
+    ]);
+
+    return {
+      sessions,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Export session to CSV
+   */
+  async exportSessionToCSV(sessionId: string, userId: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        attendance: {
+          include: {
+            student: true,
+          },
+          orderBy: {
+            markedAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    if (session.createdBy !== userId) {
+      throw new Error("Unauthorized to export this session");
+    }
+
+    // Generate CSV
+    const headers = ['Index Number', 'First Name', 'Last Name', 'Program', 'Level', 'Status', 'Method', 'Time Marked', 'Confirmed'];
+    const rows = session.attendance.map(att => [
+      att.student.indexNumber,
+      att.student.firstName,
+      att.student.lastName,
+      att.student.program,
+      att.student.level.toString(),
+      att.status,
+      att.verificationMethod,
+      att.markedAt.toISOString(),
+      att.confirmedAt ? 'Yes' : 'No',
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+    return csv;
+  }
+
+  /**
+   * Self-mark attendance (for students using link)
+   */
+  async selfMarkAttendance(params: {
+    linkToken: string;
+    studentId: string;
+    location?: { lat: number; lng: number };
+  }) {
+    const { linkToken, studentId, location } = params;
+
+    // Validate link
+    const linkValidation = await this.validateAttendanceLink(linkToken);
+    if (!linkValidation.valid) {
+      throw new Error(linkValidation.error || "Invalid link");
+    }
+
+    if (!linkValidation.sessionId) {
+      throw new Error("Link is not associated with a session");
+    }
+
+    // Check if student can use link
+    const canUse = await this.canStudentUseLink(linkToken, studentId);
+    if (!canUse.canUse) {
+      throw new Error(canUse.error || "Cannot use link");
+    }
+
+    // Increment link usage
+    await this.incrementLinkUsage(linkToken);
+
+    // Record attendance
+    return this.recordAttendance({
+      sessionId: linkValidation.sessionId,
+      studentId,
+      method: VerificationMethod.LINK_SELF_MARK,
+      status: AttendanceStatus.PRESENT,
+      recordedBy: studentId, // Self-recorded
+      linkTokenUsed: linkToken,
+      metadata: { location },
+    });
+  }
+
+  /**
+   * Bulk record attendance
+   */
+  async recordBulkAttendance(
+    sessionId: string,
+    students: Array<{ identifier: string; method: VerificationMethod; status?: AttendanceStatus }>,
+    recordedBy: string
+  ) {
+    const results = {
+      success: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (const student of students) {
+      try {
+        const studentRecord = await studentLookupService.findStudent(student.identifier, student.method);
+        if (!studentRecord) {
+          results.failed.push({
+            identifier: student.identifier,
+            error: "Student not found",
+          });
+          continue;
+        }
+
+        const attendance = await this.recordAttendance({
+          sessionId,
+          studentId: studentRecord.id,
+          method: student.method,
+          status: student.status || AttendanceStatus.PRESENT,
+          recordedBy,
+        });
+
+        results.success.push(attendance);
+      } catch (error: any) {
+        results.failed.push({
+          identifier: student.identifier,
+          error: error.message,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Add assistant to session
+   */
+  async addAssistant(sessionId: string, userId: string, assistantUserId: string, role: string = 'ASSISTANT') {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    if (session.createdBy !== userId) {
+      throw new Error("Only session creator can add assistants");
+    }
+
+    if (session.status !== SessionStatus.IN_PROGRESS) {
+      throw new Error("Cannot add assistants to completed sessions");
+    }
+
+    // Check if assistant exists
+    const existingAssistant = await prisma.attendanceSessionAssistant.findUnique({
+      where: {
+        sessionId_userId: {
+          sessionId,
+          userId: assistantUserId,
+        },
+      },
+    });
+
+    if (existingAssistant) {
+      throw new Error("User is already an assistant for this session");
+    }
+
+    const assistant = await prisma.attendanceSessionAssistant.create({
+      data: {
+        sessionId,
+        userId: assistantUserId,
+        role: role as any,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return assistant;
+  }
+
+  /**
+   * Remove assistant from session
+   */
+  async removeAssistant(sessionId: string, userId: string, assistantUserId: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    if (session.createdBy !== userId) {
+      throw new Error("Only session creator can remove assistants");
+    }
+
+    await prisma.attendanceSessionAssistant.delete({
+      where: {
+        sessionId_userId: {
+          sessionId,
+          userId: assistantUserId,
+        },
+      },
+    });
+  }
+
+  /**
+   * Check if user has permission to record attendance for a session
+   */
+  async canRecordAttendance(sessionId: string, userId: string): Promise<boolean> {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        assistants: true,
+      },
+    });
+
+    if (!session) {
+      return false;
+    }
+
+    // Creator can always record
+    if (session.createdBy === userId) {
+      return true;
+    }
+
+    // Check if user is an assistant with recording permissions
+    const assistant = session.assistants.find(a => a.userId === userId);
+    return assistant?.role === 'ASSISTANT'; // OBSERVER role cannot record
+  }
+
+  /**
+   * Bulk confirm attendance records
+   */
+  async bulkConfirmAttendance(sessionId: string, userId: string, attendanceIds: string[], confirm: boolean = true) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    if (session.createdBy !== userId) {
+      throw new Error("Only session creator can confirm attendance");
+    }
+
+    const now = new Date();
+    
+    const updated = await prisma.studentAttendance.updateMany({
+      where: {
+        id: { in: attendanceIds },
+        sessionId,
+        requiresConfirmation: true,
+      },
+      data: confirm ? {
+        confirmedBy: userId,
+        confirmedAt: now,
+        requiresConfirmation: false,
+      } : {
+        // Rejecting means deleting the record
+      },
+    });
+
+    // If rejecting, delete the records
+    if (!confirm) {
+      await prisma.studentAttendance.deleteMany({
+        where: {
+          id: { in: attendanceIds },
+          sessionId,
+        },
+      });
+    }
+
+    return {
+      confirmed: confirm ? updated.count : 0,
+      rejected: confirm ? 0 : attendanceIds.length,
+    };
+  }
+
+  /**
+   * Update attendance status (for late arrivals, excused absences)
+   */
+  async updateAttendanceStatus(attendanceId: string, userId: string, status: AttendanceStatus, notes?: string) {
+    const attendance = await prisma.studentAttendance.findUnique({
+      where: { id: attendanceId },
+      include: {
+        session: true,
+      },
+    });
+
+    if (!attendance) {
+      throw new Error("Attendance record not found");
+    }
+
+    // Check permission
+    const canUpdate = await this.canRecordAttendance(attendance.sessionId, userId);
+    if (!canUpdate) {
+      throw new Error("Unauthorized to update this attendance");
+    }
+
+    const updated = await prisma.studentAttendance.update({
+      where: { id: attendanceId },
+      data: {
+        status,
+        metadata: {
+          ...(typeof attendance.metadata === 'object' ? attendance.metadata : {}),
+          statusNote: notes,
+          statusUpdatedAt: new Date().toISOString(),
+          statusUpdatedBy: userId,
+        },
+      },
+      include: {
+        student: true,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Delete attendance record (undo)
+   */
+  async deleteAttendance(attendanceId: string, userId: string, userRole: string) {
+    const attendance = await prisma.studentAttendance.findUnique({
+      where: { id: attendanceId },
+      include: {
+        session: true,
+      },
+    });
+
+    if (!attendance) {
+      throw new Error("Attendance record not found");
+    }
+
+    // Check permission
+    const canDelete = await this.canRecordAttendance(attendance.sessionId, userId);
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(userRole);
+
+    if (!canDelete && !isAdmin) {
+      throw new Error("Unauthorized to delete this attendance");
+    }
+
+    await prisma.studentAttendance.delete({
+      where: { id: attendanceId },
+    });
+  }
+
+  /**
+   * Save session as template
+   */
+  async saveSessionTemplate(userId: string, name: string, courseCode: string, courseName: string, venue?: string, expectedStudentCount?: number) {
+    // Store in user metadata or separate table
+    // For simplicity, using JSON field on a templates model
+    // You could create a SessionTemplate model if needed
+    
+    const template = {
+      id: crypto.randomBytes(8).toString('hex'),
+      name,
+      courseCode,
+      courseName,
+      venue,
+      expectedStudentCount,
+      createdBy: userId,
+      createdAt: new Date(),
+    };
+
+    // Store in a simple way - could be in a separate table
+    // For now, return the template structure
+    return template;
+  }
+
+  /**
+   * Create session from template
+   */
+  async createSessionFromTemplate(userId: string, templateData: any) {
+    return this.createSession({
+      userId,
+      courseCode: templateData.courseCode,
+      courseName: templateData.courseName,
+      venue: templateData.venue,
+      expectedStudentCount: templateData.expectedStudentCount,
+    });
   }
 }

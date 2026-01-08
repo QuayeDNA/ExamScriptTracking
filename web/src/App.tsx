@@ -17,7 +17,6 @@ import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
 import { UnauthorizedPage } from "@/pages/UnauthorizedPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
-import { MobileLayout } from "@/layouts/MobileLayout";
 import { UsersPage } from "@/pages/dashboard/UsersPage";
 import AuditLogsPage from "@/pages/dashboard/AuditLogsPage";
 import AnalyticsDashboardPage from "@/pages/dashboard/AnalyticsDashboardPage";
@@ -33,32 +32,12 @@ import IncidentDetailsPage from "@/pages/dashboard/IncidentDetailsPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
 import {
   ProtectedRoute,
-  MobileProtectedRoute,
 } from "@/components/ProtectedRoute";
 import { Role } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
-import { AttendancePortal } from "@/pages/attendance/AttendancePortal";
-import { BiometricEnrollment } from "@/pages/enroll/BiometricEnrollment";
-import { MyAttendancePage } from "@/pages/attendance/MyAttendancePage";
-
-// Mobile pages
-import { MobileHomePage } from "@/pages/mobile/MobileHomePage";
-import { MobileCustodyPage } from "@/pages/mobile/MobileCustodyPage";
-import { MobileIncidentsPage } from "@/pages/mobile/MobileIncidentsPage";
-import { MobileScannerPage } from "@/pages/mobile/MobileScannerPage";
-import { MobileProfilePage } from "@/pages/mobile/MobileProfilePage";
-import { MobileBatchDetailsPage } from "@/pages/mobile/MobileBatchDetailsPage";
-import { MobileReportIncidentPage } from "@/pages/mobile/MobileReportIncidentPage";
-import { MobileIncidentDetailsPage } from "@/pages/mobile/MobileIncidentDetailsPage";
-import { MobileRecentActivityPage } from "@/pages/mobile/MobileRecentActivityPage";
-import { MobileInitiateTransferPage } from "@/pages/mobile/MobileInitiateTransferPage";
-import { MobileConfirmTransferPage } from "@/pages/mobile/MobileConfirmTransferPage";
-import { MobileLoginPage } from "@/pages/mobile/MobileLoginPage";
-import { MobileQRRegistrationPage } from "@/pages/mobile/MobileQRRegistrationPage";
-import { MobileChangePasswordPage } from "@/pages/mobile/MobileChangePasswordPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,11 +70,6 @@ function App() {
         <ErrorBoundary>
           <BrowserRouter>
             <Routes>
-              {/* Public Self-Service Routes (outside mobile wrapper - work on all devices) */}
-              <Route path="/student-attendance" element={<AttendancePortal />} />
-              <Route path="/attendance/:token" element={<AttendancePortal />} />
-              <Route path="/my-attendance" element={<MyAttendancePage />} />
-              <Route path="/enroll/biometric" element={<BiometricEnrollment />} />
               <Route path="/student-qr" element={<StudentQRLookup />} />
               <Route
                 path="/design-system-demo"
@@ -120,19 +94,6 @@ function App() {
                   <Route
                     path="/change-password-required"
                     element={<ChangePasswordRequiredPage />}
-                  />
-                </Route>
-
-                {/* Mobile Auth routes - shared AuthLayout */}
-                <Route path="/mobile" element={<AuthLayout />}>
-                  <Route path="login" element={<MobileLoginPage />} />
-                  <Route
-                    path="qr-registration"
-                    element={<MobileQRRegistrationPage />}
-                  />
-                  <Route
-                    path="change-password"
-                    element={<MobileChangePasswordPage />}
                   />
                 </Route>
 
@@ -166,41 +127,6 @@ function App() {
                     <Route
                       path="qr-registration"
                       element={<QRRegistrationPage />}
-                    />
-                  </Route>
-                </Route>
-
-                {/* Mobile Protected routes - MobileLayout */}
-                <Route element={<MobileProtectedRoute />}>
-                  <Route path="/mobile" element={<MobileLayout />}>
-                    <Route index element={<MobileHomePage />} />
-                    <Route path="custody" element={<MobileCustodyPage />} />
-                    <Route path="incidents" element={<MobileIncidentsPage />} />
-                    <Route path="scanner" element={<MobileScannerPage />} />
-                    <Route path="profile" element={<MobileProfilePage />} />
-                    <Route
-                      path="batch-details/:batchId"
-                      element={<MobileBatchDetailsPage />}
-                    />
-                    <Route
-                      path="report-incident"
-                      element={<MobileReportIncidentPage />}
-                    />
-                    <Route
-                      path="incident-details/:id"
-                      element={<MobileIncidentDetailsPage />}
-                    />
-                    <Route
-                      path="recent-activity"
-                      element={<MobileRecentActivityPage />}
-                    />
-                    <Route
-                      path="initiate-transfer"
-                      element={<MobileInitiateTransferPage />}
-                    />
-                    <Route
-                      path="confirm-transfer/:transferId"
-                      element={<MobileConfirmTransferPage />}
                     />
                   </Route>
                 </Route>

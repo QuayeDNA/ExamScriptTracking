@@ -1,19 +1,27 @@
 import { Router } from "express";
 import {
-  startSession,
+  createSession,
   endSession,
   deleteSession,
-  recordAttendanceByQR,
-  recordAttendanceByIndex,
-  recordAttendanceByBiometric,
+  recordAttendance,
+  recordBulkAttendance,
+  validateLink,
+  selfMarkAttendance,
+  generateLink,
+  getActiveLinks,
+  revokeLink,
   getActiveSessions,
   getSession,
-  getSessionLiveStats,
   getAttendanceHistory,
-  generateAttendanceLink,
-  validateAttendanceLink,
-  getActiveLinks,
-  getAttendanceStats,
+  exportSession,
+  addAssistant,
+  removeAssistant,
+  bulkConfirmAttendance,
+  updateAttendanceStatus,
+  deleteAttendance,
+  searchStudents,
+  saveTemplate,
+  createFromTemplate,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -26,12 +34,16 @@ const router = Router();
 // ============================================================================
 
 /**
- * Validate attendance link and enforce security settings
- * POST /api/class-attendance/links/validate
- * Access: Public (no authentication)
- * Body: { token, studentLocation?: { lat, lng } }
+ * Validate attendance link
+ * GET /api/attendance/links/:token/validate
  */
-router.post("/links/validate", validateAttendanceLink);
+router.get("/links/:token/validate", validateLink);
+
+/**
+ * Self-mark attendance using link
+ * POST /api/attendance/self-mark
+ */
+router.post("/self-mark", selfMarkAttendance);
 
 // All other routes require authentication
 router.use(authenticate);
@@ -41,32 +53,28 @@ router.use(authenticate);
 // ============================================================================
 
 /**
- * Start a new attendance recording session
- * POST /api/class-attendance/sessions/start
- * Access: LECTURER, ADMIN, CLASS_REP
+ * Create a new attendance session
+ * POST /api/attendance/sessions
  */
 router.post(
-  "/sessions/start",
+  "/sessions",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  startSession
+  createSession
 );
 
 /**
- * End an attendance recording session
- * POST /api/class-attendance/sessions/end
- * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ * Create session from template
+ * POST /api/attendance/sessions/from-template
  */
 router.post(
-  "/sessions/end",
+  "/sessions/from-template",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  endSession
+  createFromTemplate
 );
 
 /**
- * Get all active sessions
- * GET /api/class-attendance/sessions/active
- * Access: LECTURER, ADMIN, CLASS_REP
- * Returns: Active sessions for current user (or all if admin)
+ * Get active sessions
+ * GET /api/attendance/sessions/active
  */
 router.get(
   "/sessions/active",
@@ -75,9 +83,8 @@ router.get(
 );
 
 /**
- * Get specific session details
- * GET /api/class-attendance/sessions/:id
- * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ * Get session details
+ * GET /api/attendance/sessions/:id
  */
 router.get(
   "/sessions/:id",
@@ -86,9 +93,18 @@ router.get(
 );
 
 /**
- * Delete an attendance session
- * DELETE /api/class-attendance/sessions/:id
- * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ * End session
+ * POST /api/attendance/sessions/:id/end
+ */
+router.post(
+  "/sessions/:id/end",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  endSession
+);
+
+/**
+ * Delete session
+ * DELETE /api/attendance/sessions/:id
  */
 router.delete(
   "/sessions/:id",
@@ -97,25 +113,37 @@ router.delete(
 );
 
 /**
- * Get active attendance links for a session
- * GET /api/class-attendance/sessions/:recordId/links
- * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ * Export session to CSV
+ * GET /api/attendance/sessions/:id/export
  */
 router.get(
-  "/sessions/:recordId/links",
+  "/sessions/:id/export",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  getActiveLinks
+  exportSession
+);
+
+// ============================================================================
+// ASSISTANT MANAGEMENT
+// ============================================================================
+
+/**
+ * Add assistant to session
+ * POST /api/attendance/sessions/:id/assistants
+ */
+router.post(
+  "/sessions/:id/assistants",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  addAssistant
 );
 
 /**
- * Get live statistics for a specific session
- * GET /api/class-attendance/sessions/:id/live-stats
- * Access: LECTURER, ADMIN, CLASS_REP (must be session owner or admin)
+ * Remove assistant from session
+ * DELETE /api/attendance/sessions/:id/assistants/:userId
  */
-router.get(
-  "/sessions/:id/live-stats",
+router.delete(
+  "/sessions/:id/assistants/:userId",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  getSessionLiveStats
+  removeAssistant
 );
 
 // ============================================================================
@@ -123,50 +151,96 @@ router.get(
 // ============================================================================
 
 /**
- * Record attendance by scanning student QR code
- * POST /api/class-attendance/record/qr
- * Access: LECTURER, ADMIN, CLASS_REP
- * Body: { recordId, qrCode, status?, deviceId? }
+ * Record attendance (unified endpoint for all methods)
+ * POST /api/attendance/sessions/:id/record
  */
 router.post(
-  "/record/qr",
+  "/sessions/:id/record",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  recordAttendanceByQR
+  recordAttendance
 );
 
 /**
- * Record attendance by manually entering index number
- * POST /api/class-attendance/record/index
- * Access: LECTURER, ADMIN, CLASS_REP
- * Body: { recordId, indexNumber, status? }
+ * Bulk record attendance
+ * POST /api/attendance/sessions/:id/record/bulk
  */
 router.post(
-  "/record/index",
+  "/sessions/:id/record/bulk",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  recordAttendanceByIndex
+  recordBulkAttendance
 );
 
 /**
- * Record attendance using biometric verification
- * POST /api/class-attendance/record/biometric
- * Access: LECTURER, ADMIN, CLASS_REP
- * Body: { recordId, biometricHash, deviceId, biometricConfidence, status? }
+ * Bulk confirm/reject attendance
+ * POST /api/attendance/sessions/:id/confirm-bulk
  */
 router.post(
-  "/record/biometric",
+  "/sessions/:id/confirm-bulk",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
-  recordAttendanceByBiometric
+  bulkConfirmAttendance
+);
+
+/**
+ * Update attendance status
+ * PATCH /api/attendance/:attendanceId
+ */
+router.patch(
+  "/:attendanceId",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  updateAttendanceStatus
+);
+
+/**
+ * Delete attendance record
+ * DELETE /api/attendance/:attendanceId
+ */
+router.delete(
+  "/:attendanceId",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  deleteAttendance
 );
 
 // ============================================================================
-// QUERIES & HISTORY
+// LINK MANAGEMENT
+// ============================================================================
+
+/**
+ * Generate attendance link
+ * POST /api/attendance/sessions/:id/links
+ */
+router.post(
+  "/sessions/:id/links",
+  authorize(Role.ADMIN, Role.LECTURER),
+  generateLink
+);
+
+/**
+ * Get active links for session
+ * GET /api/attendance/sessions/:id/links
+ */
+router.get(
+  "/sessions/:id/links",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  getActiveLinks
+);
+
+/**
+ * Revoke attendance link
+ * DELETE /api/attendance/links/:token
+ */
+router.delete(
+  "/links/:token",
+  authorize(Role.ADMIN, Role.LECTURER),
+  revokeLink
+);
+
+// ============================================================================
+// QUERIES & ANALYTICS
 // ============================================================================
 
 /**
  * Get attendance history
- * GET /api/class-attendance/history
- * Access: LECTURER, ADMIN, CLASS_REP
- * Query params: courseCode?, startDate?, endDate?, status?, limit?, offset?
+ * GET /api/attendance/history
  */
 router.get(
   "/history",
@@ -174,36 +248,24 @@ router.get(
   getAttendanceHistory
 );
 
+/**
+ * Search students
+ * GET /api/attendance/students/search
+ */
+router.get("/students/search", searchStudents);
+
 // ============================================================================
-// SELF-SERVICE LINKS
+// SESSION TEMPLATES
 // ============================================================================
 
 /**
- * Generate self-service attendance link for students
- * POST /api/class-attendance/links/generate
- * Access: LECTURER, ADMIN
- * Body: { recordId, expiresInMinutes?, maxUses?, geolocation? }
+ * Save session as template
+ * POST /api/attendance/templates
  */
 router.post(
-  "/links/generate",
-  authorize(Role.ADMIN, Role.LECTURER),
-  generateAttendanceLink
-);
-
-// ============================================================================
-// ANALYTICS & STATISTICS
-// ============================================================================
-
-/**
- * Get attendance statistics
- * GET /api/class-attendance/analytics/stats
- * Access: LECTURER, ADMIN
- * Query params: courseCode?, startDate?, endDate?
- */
-router.get(
-  "/analytics/stats",
-  authorize(Role.ADMIN, Role.LECTURER),
-  getAttendanceStats
+  "/templates",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  saveTemplate
 );
 
 export default router;
