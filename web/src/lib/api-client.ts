@@ -6,6 +6,13 @@ import axios, {
 } from "axios";
 import type { ApiError } from "@/types";
 
+// Extend AxiosRequestConfig to include skipAuth option
+declare module "axios" {
+  interface AxiosRequestConfig {
+    skipAuth?: boolean;
+  }
+}
+
 // Use empty string if VITE_API_URL is not set (relies on Vite proxy)
 // Only fallback to localhost if explicitly needed (dev without proxy)
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -29,6 +36,11 @@ class ApiClient {
     // Request interceptor to add auth token
     this.client.interceptors.request.use(
       (config) => {
+        // Skip auth if explicitly requested
+        if (config.skipAuth) {
+          return config;
+        }
+
         const token = localStorage.getItem("token");
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -46,7 +58,7 @@ class ApiClient {
           _retry?: boolean;
         };
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.skipAuth) {
           if (this.isRefreshing) {
             // Queue this request until token is refreshed
             return new Promise((resolve, reject) => {

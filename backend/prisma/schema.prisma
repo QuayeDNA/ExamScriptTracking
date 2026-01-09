@@ -194,8 +194,8 @@ model StudentAttendance {
   confirmer             User?               @relation("ConfirmedBy", fields: [confirmedBy], references: [id], onDelete: SetNull)
   
   // Recording details
-  recordedBy            String
-  recorder              User                @relation("RecordedBy", fields: [recordedBy], references: [id], onDelete: Cascade)
+  recordedBy            String?
+  recorder              User?               @relation("RecordedBy", fields: [recordedBy], references: [id], onDelete: SetNull)
   
   // Optional metadata
   deviceId              String?

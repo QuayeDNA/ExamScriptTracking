@@ -10,7 +10,7 @@
  * 6. Device fingerprint prevents duplicate submissions
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { classAttendanceApi } from '@/api/classAttendance';
-import { getDeviceFingerprint, hasDeviceMarkedAttendance, markDeviceAttendance } from '@/lib/deviceFingerprint';
+import { hasDeviceMarkedAttendance, markDeviceAttendance } from '@/lib/deviceFingerprint';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -54,7 +54,6 @@ export default function MarkAttendancePage() {
   const [tokenInput, setTokenInput] = useState(token || '');
   const [indexNumber, setIndexNumber] = useState('');
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [studentId, setStudentId] = useState<string | null>(null);
   const [studentName, setStudentName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
@@ -62,13 +61,6 @@ export default function MarkAttendancePage() {
   const [marking, setMarking] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-
-  // Validate link on mount if token is provided
-  useEffect(() => {
-    if (token) {
-      handleValidateLink(token);
-    }
-  }, [token]);
 
   // Request location if needed
   useEffect(() => {
@@ -108,7 +100,7 @@ export default function MarkAttendancePage() {
     }
   };
 
-  const handleValidateLink = async (linkToken: string) => {
+  const handleValidateLink = useCallback(async (linkToken: string) => {
     if (!linkToken || linkToken.length !== 5) {
       setError('Please enter a valid 5-digit attendance code');
       return;
@@ -118,14 +110,29 @@ export default function MarkAttendancePage() {
     setError(null);
 
     try {
-      const response = await classAttendanceApi.validateAttendanceLink(
-        linkToken,
-        location?.lat,
-        location?.lng
-      );
+      // Use fetch directly to avoid any authentication issues
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const baseURL = API_URL ? `${API_URL}/api` : "/api";
+      const params = new URLSearchParams();
+      if (location?.lat) params.append('lat', location.lat.toString());
+      if (location?.lng) params.append('lng', location.lng.toString());
+      const query = params.toString() ? `?${params.toString()}` : '';
+      
+      const response = await fetch(`${baseURL}/class-attendance/links/${linkToken}/validate${query}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (response.success && response.data) {
-        const session = response.data;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (data.success && data.data) {
+        const session = data.data;
         
         // Check if device has already marked attendance
         if (hasDeviceMarkedAttendance(session.id)) {
@@ -137,16 +144,24 @@ export default function MarkAttendancePage() {
         setSessionInfo(session);
         setStep('enter-index');
       } else {
-        throw new Error('Invalid link response');
+        throw new Error(data.error || 'Invalid link response');
       }
-    } catch (err: any) {
-      const errorMessage = err?.error || err?.message || 'Invalid or expired attendance link';
+    } catch (err: unknown) {
+      console.error('Validation error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Invalid or expired attendance link';
       setError(errorMessage);
       setStep('error');
     } finally {
       setValidating(false);
     }
-  };
+  }, [location]);
+
+  // Validate link on mount if token is provided
+  useEffect(() => {
+    if (token) {
+      handleValidateLink(token);
+    }
+  }, [token, handleValidateLink]);
 
   const handleLookupStudent = async () => {
     if (!indexNumber.trim()) {
@@ -159,14 +174,13 @@ export default function MarkAttendancePage() {
 
     try {
       const student = await classAttendanceApi.lookupStudentByIndex(indexNumber.trim());
-      setStudentId(student.id);
       setStudentName(`${student.firstName} ${student.lastName}`);
       setStep('marking');
       
       // Automatically mark attendance after lookup
       await handleMarkAttendance(student.id);
-    } catch (err: any) {
-      const errorMessage = err?.error || err?.message || 'Student not found';
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Student not found';
       setError(errorMessage);
     } finally {
       setLookingUp(false);
@@ -183,13 +197,29 @@ export default function MarkAttendancePage() {
     setError(null);
 
     try {
-      const response = await classAttendanceApi.selfMarkAttendance({
-        linkToken: tokenInput,
-        studentId: id,
-        location: location || undefined,
+      // Use fetch directly to avoid any authentication issues
+      const API_URL = import.meta.env.VITE_API_URL ?? "";
+      const baseURL = API_URL ? `${API_URL}/api` : "/api";
+      
+      const response = await fetch(`${baseURL}/class-attendance/self-mark`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          linkToken: tokenInput,
+          studentId: id,
+          location: location || undefined,
+        }),
       });
 
-      if (response.success) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (data.success) {
         // Mark device as having submitted
         markDeviceAttendance(sessionInfo.id);
         
@@ -198,10 +228,11 @@ export default function MarkAttendancePage() {
           description: 'Your attendance has been recorded. Awaiting lecturer confirmation.',
         });
       } else {
-        throw new Error(response.message || 'Failed to mark attendance');
+        throw new Error(data.message || 'Failed to mark attendance');
       }
-    } catch (err: any) {
-      const errorMessage = err?.error || err?.message || 'Failed to mark attendance';
+    } catch (err: unknown) {
+      console.error('Mark attendance error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to mark attendance';
       setError(errorMessage);
       setStep('error');
       toast.error('Failed to mark attendance', {
@@ -216,7 +247,6 @@ export default function MarkAttendancePage() {
     setStep('validate');
     setError(null);
     setIndexNumber('');
-    setStudentId(null);
     setStudentName(null);
     setTokenInput('');
   };
@@ -237,7 +267,7 @@ export default function MarkAttendancePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 py-8 px-4">
+    <div className="min-h-screen bg-linear-to-br from-background via-background to-muted/20 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">

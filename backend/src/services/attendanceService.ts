@@ -852,7 +852,7 @@ export class AttendanceService {
       studentId,
       method: VerificationMethod.LINK_SELF_MARK,
       status: AttendanceStatus.PRESENT,
-      recordedBy: studentId, // Self-recorded
+      recordedBy: null, // Self-recorded, no user involved
       linkTokenUsed: linkToken,
       metadata: { location },
     });

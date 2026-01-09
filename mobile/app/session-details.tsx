@@ -15,14 +15,13 @@ import {
   Image,
   Alert,
   Share,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
 import { classAttendanceApi } from "@/api/classAttendance";
-import type { AttendanceSession, StudentAttendance, AttendanceLink, AttendanceStatus } from "@/types";
+import { AttendanceSession, StudentAttendance, AttendanceLink, AttendanceStatus, SessionStatus } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
 import { getFileUrl } from "@/lib/api-client";
 import { toast } from "@/utils/toast";
@@ -50,7 +49,19 @@ export default function SessionDetailsScreen() {
   const [bulkConfirming, setBulkConfirming] = useState(false);
   const [showUpdateStatusDialog, setShowUpdateStatusDialog] = useState(false);
   const [attendanceToUpdate, setAttendanceToUpdate] = useState<StudentAttendance | null>(null);
-  const [newStatus, setNewStatus] = useState<AttendanceStatus>("PRESENT");
+  const [newStatus, setNewStatus] = useState<AttendanceStatus>(AttendanceStatus.PRESENT);
+
+  const loadActiveLinks = useCallback(async (sessionId: string) => {
+    try {
+      setLoadingLinks(true);
+      const links = await classAttendanceApi.getActiveLinks(sessionId);
+      setActiveLinks(links);
+    } catch (error: any) {
+      console.error("Failed to load active links:", error);
+    } finally {
+      setLoadingLinks(false);
+    }
+  }, []);
 
   const loadSessionDetails = useCallback(async () => {
     if (!sessionId) return;
@@ -72,7 +83,7 @@ export default function SessionDetailsScreen() {
         setSession(sessionData);
         
         // Load active links if session is active
-        if (sessionData.status === "IN_PROGRESS") {
+        if (sessionData.status === SessionStatus.IN_PROGRESS) {
           loadActiveLinks(sessionData.id);
         }
       } else {
@@ -86,7 +97,7 @@ export default function SessionDetailsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [sessionId]);
+  }, [sessionId, loadActiveLinks]);
 
   useEffect(() => {
     loadSessionDetails();
@@ -127,18 +138,6 @@ export default function SessionDetailsScreen() {
     loadSessionDetails();
   };
 
-  const loadActiveLinks = useCallback(async (sessionId: string) => {
-    try {
-      setLoadingLinks(true);
-      const links = await classAttendanceApi.getActiveLinks(sessionId);
-      setActiveLinks(links);
-    } catch (error: any) {
-      console.error("Failed to load active links:", error);
-    } finally {
-      setLoadingLinks(false);
-    }
-  }, []);
-
   const handleExportSession = async () => {
     if (!session) return;
 
@@ -156,7 +155,7 @@ export default function SessionDetailsScreen() {
           title: `Attendance Export - ${session.courseCode}`,
         });
         toast.success("Attendance data exported successfully");
-      } catch (shareError) {
+      } catch {
         // If sharing fails, show the content in an alert (fallback)
         Alert.alert(
           "Export Complete",
@@ -436,7 +435,7 @@ export default function SessionDetailsScreen() {
               </Text>
               {session.creator && (
                 <Text style={[styles.lecturer, { color: colors.foregroundMuted }]}>
-                  {session.creator.firstName} {session.creator.lastName}
+                  {session.creator.name}
                 </Text>
               )}
               {!session.creator && session.lecturerName && (
@@ -455,13 +454,13 @@ export default function SessionDetailsScreen() {
             </View>
             <View style={[
               styles.statusBadge,
-              { backgroundColor: session.status === "IN_PROGRESS" ? `${colors.success}20` : `${colors.foregroundMuted}20` }
+              { backgroundColor: session.status === SessionStatus.IN_PROGRESS ? `${colors.success}20` : `${colors.foregroundMuted}20` }
             ]}>
               <Text style={[
                 styles.statusText,
-                { color: session.status === "IN_PROGRESS" ? colors.success : colors.foregroundMuted }
+                { color: session.status === SessionStatus.IN_PROGRESS ? colors.success : colors.foregroundMuted }
               ]}>
-                {session.status === "IN_PROGRESS" ? "RECORDING" : session.status}
+                {session.status === SessionStatus.IN_PROGRESS ? "RECORDING" : session.status}
               </Text>
             </View>
           </View>
@@ -473,7 +472,7 @@ export default function SessionDetailsScreen() {
                 Started {formatTime(session.startTime)}
               </Text>
             </View>
-            {session.status === "IN_PROGRESS" && (
+            {session.status === SessionStatus.IN_PROGRESS && (
               <View style={styles.metaItem}>
                 <Ionicons name="hourglass-outline" size={16} color={colors.foregroundMuted} />
                 <Text style={[styles.metaText, { color: colors.foregroundMuted }]}>
@@ -493,7 +492,7 @@ export default function SessionDetailsScreen() {
         </View>
 
         {/* Action Buttons */}
-        {session.status === "IN_PROGRESS" && (
+        {(session.status === SessionStatus.IN_PROGRESS || session.status === SessionStatus.PAUSED) && (
           <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.primary }]}
@@ -506,7 +505,7 @@ export default function SessionDetailsScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.accent }]}
+              style={[styles.actionButton, { backgroundColor: colors.surface }]}
               onPress={() => setShowLinkDrawer(true)}
             >
               <Ionicons name="link-outline" size={20} color="#fff" />
@@ -514,24 +513,24 @@ export default function SessionDetailsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, { 
-                backgroundColor: session.status === 'PAUSED' ? colors.success : colors.warning,
+                backgroundColor: session!.status === SessionStatus.PAUSED ? colors.success : colors.warning,
                 opacity: 0.9 
               }]}
               onPress={handlePauseResumeSession}
             >
               <Ionicons 
-                name={session.status === 'PAUSED' ? "play-circle-outline" : "pause-circle-outline"} 
+                name={session!.status === SessionStatus.PAUSED ? "play-circle-outline" : "pause-circle-outline"} 
                 size={20} 
                 color="#fff" 
               />
               <Text style={styles.actionButtonText}>
-                {session.status === 'PAUSED' ? 'Resume' : 'Pause'}
+                {session!.status === SessionStatus.PAUSED ? 'Resume' : 'Pause'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.error, opacity: 0.9 }]}
               onPress={async () => {
-                if (!session || session.status !== "IN_PROGRESS") {
+                if (!session || session.status !== SessionStatus.IN_PROGRESS) {
                   toast.error("Cannot end: Only IN PROGRESS sessions can be ended");
                   return;
                 }
@@ -1041,7 +1040,7 @@ export default function SessionDetailsScreen() {
               >
                 <View style={styles.assistantInfo}>
                   <Text style={[styles.assistantName, { color: colors.foreground }]}>
-                    {assistant.user?.firstName} {assistant.user?.lastName}
+                    {assistant.user?.name}
                   </Text>
                   <Text style={[styles.assistantRole, { color: colors.foregroundMuted }]}>
                     {assistant.role} • {assistant.recordedCount} recorded

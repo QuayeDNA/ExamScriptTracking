@@ -32,7 +32,9 @@ export const classAttendanceApi = {
     if (lng !== undefined) params.append('lng', lng.toString());
 
     const query = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.get<ValidateLinkResponse>(`/attendance/links/${token}/validate${query}`);
+    return apiClient.get<ValidateLinkResponse>(`/attendance/links/${token}/validate${query}`, {
+      skipAuth: true
+    });
   },
 
   /**
@@ -41,7 +43,9 @@ export const classAttendanceApi = {
   selfMarkAttendance: async (
     data: SelfMarkAttendanceRequest
   ): Promise<SelfMarkAttendanceResponse> => {
-    return apiClient.post<SelfMarkAttendanceResponse>('/attendance/self-mark', data);
+    return apiClient.post<SelfMarkAttendanceResponse>('/attendance/self-mark', data, {
+      skipAuth: true
+    });
   },
 
   /**
@@ -51,7 +55,8 @@ export const classAttendanceApi = {
   lookupStudentByIndex: async (indexNumber: string): Promise<{ id: string; indexNumber: string; firstName: string; lastName: string }> => {
     // Use the existing student QR endpoint which is public
     const student = await apiClient.get<{ id: string; indexNumber: string; firstName: string; lastName: string }>(
-      `/students/qr?indexNumber=${encodeURIComponent(indexNumber)}`
+      `/students/qr?indexNumber=${encodeURIComponent(indexNumber)}`,
+      { skipAuth: true }
     );
     return student;
   },
