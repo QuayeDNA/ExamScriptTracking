@@ -1,543 +1,208 @@
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from '@/lib/api-client';
+import type {
+  AttendanceSession,
+  StudentAttendance,
+  AttendanceLink,
+  BulkConfirmResponse,
+  BulkRecordRequest,
+  BulkRecordResponse,
+  CreateSessionRequest,
+  CreateSessionResponse,
+  GenerateLinkRequest,
+  RecordAttendanceRequest,
+  RecordAttendanceResponse,
+  BulkConfirmRequest,
+  UpdateStatusRequest,
+  Student
+} from '@/types';
 
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
-
-export type RecordingStatus = "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
-export type ClassAttendanceStatus = "PRESENT" | "LATE" | "EXCUSED";
-export type AttendanceMethod =
-  | "QR_CODE"
-  | "MANUAL_INDEX"
-  | "BIOMETRIC_FINGERPRINT"
-  | "BIOMETRIC_FACE";
-
-export interface AttendanceSession {
-  id: string;
-  deviceId: string;
-  deviceName?: string;
-  sessionToken: string;
-  isActive: boolean;
-  lastActivity: string;
-  createdAt: string;
-  attendanceRecords: ClassAttendanceRecord[];
+// Session Management
+export async function createSession(data: CreateSessionRequest): Promise<CreateSessionResponse> {
+  const response = await apiClient.post<CreateSessionResponse>('/class-attendance/sessions', data);
+  return response;
 }
 
-export interface ClassAttendanceRecord {
-  id: string;
-  sessionId: string;
-  userId?: string;
-  lecturerName?: string;
-  courseName?: string;
+export async function getActiveSessions(): Promise<AttendanceSession[]> {
+  const response = await apiClient.get<{ data?: AttendanceSession[] }>('/class-attendance/sessions/active');
+  return response.data || [];
+}
+
+export async function getSessionDetails(sessionId: string): Promise<any> {
+  const response = await apiClient.get<{ data?: any }>(`/class-attendance/sessions/${sessionId}`);
+  return response.data;
+}
+
+export async function endSession(sessionId: string): Promise<{ message: string }> {
+  const response = await apiClient.post<{ message?: string }>(`/class-attendance/sessions/${sessionId}/end`);
+  return { message: response.message || 'Session ended successfully' };
+}
+
+export async function deleteSession(sessionId: string): Promise<{ message: string }> {
+  const response = await apiClient.delete<{ message?: string }>(`/class-attendance/sessions/${sessionId}`);
+  return { message: response.message || 'Session deleted successfully' };
+}
+
+// Recording Attendance
+export async function recordAttendance(
+  sessionId: string,
+  data: RecordAttendanceRequest
+): Promise<RecordAttendanceResponse> {
+  const response = await apiClient.post<RecordAttendanceResponse>(
+    `/class-attendance/sessions/${sessionId}/record`,
+    data
+  );
+  return response;
+}
+
+export async function recordBulkAttendance(
+  sessionId: string,
+  data: BulkRecordRequest
+): Promise<BulkRecordResponse> {
+  const response = await apiClient.post<BulkRecordResponse>(
+    `/class-attendance/sessions/${sessionId}/record/bulk`,
+    data
+  );
+  return response;
+}
+
+// Student Search
+export async function searchStudents(query: string): Promise<Student[]> {
+  const response = await apiClient.get<{ data?: { students?: Student[] } }>('/class-attendance/students/search', {
+    params: { q: query, limit: 10 }
+  });
+  return response.data?.students || [];
+}
+
+// Link Generation
+export async function generateAttendanceLink(
+  sessionId: string,
+  data: GenerateLinkRequest
+): Promise<AttendanceLink> {
+  const response = await apiClient.post<{ data?: AttendanceLink }>(
+    `/class-attendance/sessions/${sessionId}/links`,
+    data
+  );
+  return response.data!;
+}
+
+export async function getActiveLinks(sessionId: string): Promise<AttendanceLink[]> {
+  const response = await apiClient.get<{ data?: AttendanceLink[] }>(`/class-attendance/sessions/${sessionId}/links`);
+  return response.data || [];
+}
+
+export async function revokeLink(token: string): Promise<{ message: string }> {
+  const response = await apiClient.delete<{ message?: string }>(`/class-attendance/links/${token}`);
+  return { message: response.message || 'Link revoked successfully' };
+}
+
+// Assistant Management
+export async function addAssistant(
+  sessionId: string,
+  assistantId: string
+): Promise<{ message: string }> {
+  const response = await apiClient.post<{ message?: string }>(
+    `/class-attendance/sessions/${sessionId}/assistants`,
+    { assistantId }
+  );
+  return { message: response.message || 'Assistant added successfully' };
+}
+
+export async function removeAssistant(
+  sessionId: string,
+  assistantId: string
+): Promise<{ message: string }> {
+  const response = await apiClient.delete<{ message?: string }>(
+    `/class-attendance/sessions/${sessionId}/assistants/${assistantId}`
+  );
+  return { message: response.message || 'Assistant removed successfully' };
+}
+
+// Bulk Operations
+export async function bulkConfirmAttendance(
+  sessionId: string,
+  data: BulkConfirmRequest
+): Promise<BulkConfirmResponse> {
+  const response = await apiClient.post<BulkConfirmResponse>(
+    `/class-attendance/sessions/${sessionId}/confirm-bulk`, 
+    data
+  );
+  return response;
+}
+
+// Update/Delete Individual Records
+export async function updateAttendanceStatus(
+  attendanceId: string,
+  data: UpdateStatusRequest
+): Promise<StudentAttendance> {
+  const response = await apiClient.patch<{ data?: StudentAttendance }>(
+    `/class-attendance/${attendanceId}`,
+    data
+  );
+  return response.data!;
+}
+
+export async function deleteAttendance(attendanceId: string): Promise<{ message: string }> {
+  const response = await apiClient.delete<{ message?: string }>(`/class-attendance/${attendanceId}`);
+  return { message: response.message || 'Attendance record deleted successfully' };
+}
+
+// Templates
+export async function saveSessionTemplate(
+  data: { name: string; courseCode: string; courseName: string; venue?: string; expectedStudentCount?: number }
+): Promise<{ templateId: string; message: string }> {
+  const response = await apiClient.post<{ data?: { templateId?: string }; message?: string }>(
+    '/class-attendance/templates', 
+    data
+  );
+  return { 
+    templateId: response.data?.templateId || '', 
+    message: response.message || 'Template saved successfully' 
+  };
+}
+
+export async function createFromTemplate(templateId: string): Promise<CreateSessionResponse> {
+  const response = await apiClient.post<CreateSessionResponse>(
+    '/class-attendance/sessions/from-template',
+    { templateId }
+  );
+  return response;
+}
+
+// History & Export
+export async function getAttendanceHistory(params?: {
+  page?: number;
+  limit?: number;
   courseCode?: string;
-  venue?: string;
-  startTime: string;
-  endTime?: string;
-  status: RecordingStatus;
-  totalStudents: number;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-  user?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    role: string;
-  };
-  students: ClassAttendance[];
-}
-
-export interface ClassAttendance {
-  id: string;
-  recordId: string;
-  studentId: string;
-  scanTime: string;
-  status: ClassAttendanceStatus;
-  lecturerConfirmed: boolean;
-  confirmedAt?: string;
-  verificationMethod?: AttendanceMethod;
-  deviceId?: string;
-  linkTokenUsed?: string;
-  biometricConfidence?: number;
-  student: {
-    id: string;
-    indexNumber: string;
-    firstName: string;
-    lastName: string;
-    program: string;
-    level: number;
-  };
-}
-
-export interface AttendanceLink {
-  id: string;
-  recordId?: string;
-  linkToken: string;
-  createdBy: string;
-  studentId?: string;
-  enrollmentToken?: string;
-  linkType: "ATTENDANCE" | "BIOMETRIC_ENROLLMENT";
-  geolocation?: {
-    lat: number;
-    lng: number;
-    radius: number;
-  };
-  networkIdentifier?: string;
-  expiresAt: string;
-  maxUses?: number;
-  usesCount: number;
-  isActive: boolean;
-  deactivatedAt?: string;
-  createdAt: string;
-}
-
-export interface AttendanceStats {
-  totalRecords: number;
-  totalStudents: number;
-  averageAttendanceRate: number;
-  byStatus: Record<ClassAttendanceStatus, number>;
-  byCourse: Array<{
-    courseCode: string;
-    courseName: string;
-    sessions: number;
-    totalStudents: number;
-    attendanceRate: number;
-  }>;
-}
-
-export interface StudentAttendanceHistory {
-  studentId: string;
-  student: {
-    indexNumber: string;
-    firstName: string;
-    lastName: string;
-    program: string;
-  };
-  records: Array<{
-    id: string;
-    courseCode: string;
-    courseName: string;
-    scanTime: string;
-    status: ClassAttendanceStatus;
-    verificationMethod?: AttendanceMethod;
-  }>;
-  totalAttended: number;
-  totalSessions: number;
-  attendanceRate: number;
-}
-
-// ============================================================================
-// API REQUEST/RESPONSE TYPES
-// ============================================================================
-
-export interface StartSessionRequest {
-  deviceId: string;
-  deviceName?: string;
-  courseCode: string;
-  courseName?: string;
-  lecturerName?: string;  venue?: string;  notes?: string;
-  totalRegisteredStudents?: number;
-}
-
-export interface StartSessionResponse {
-  message: string;
-  record: ClassAttendanceRecord;
-  session: {
-    id: string;
-    deviceId: string;
-    sessionToken: string;
-  };
-}
-
-export interface EndSessionRequest {
-  recordId: string;
-}
-
-export interface EndSessionResponse {
-  message: string;
-  record: ClassAttendanceRecord;
-  summary: {
-    totalRecorded: number;
-    presentCount: number;
-    lateCount: number;
-    excusedCount: number;
-    duration: string;
-  };
-}
-
-export interface RecordAttendanceByQRRequest {
-  recordId: string;
-  qrCode: string;
-  deviceId: string;
-  status?: ClassAttendanceStatus;
-}
-
-export interface RecordAttendanceByIndexRequest {
-  recordId: string;
-  indexNumber: string;
-  verificationMethod: AttendanceMethod;
-  status?: ClassAttendanceStatus;
-}
-
-export interface RecordAttendanceByBiometricRequest {
-  recordId: string;
-  studentId: string;
-  biometricData: string;
-  biometricConfidence: number;
-  biometricType: "BIOMETRIC_FINGERPRINT" | "BIOMETRIC_FACE";
-}
-
-export interface RecordAttendanceResponse {
-  message: string;
-  attendance: ClassAttendance;
-  student: {
-    id: string;
-    indexNumber: string;
-    firstName: string;
-    lastName: string;
-  };
-  biometric?: {
-    confidence: number;
-    method: string;
-  };
-}
-
-export interface GenerateLinkRequest {
-  recordId?: string;
-  expiresInMinutes?: number;
-  maxUses?: number;
-  geolocation?: {
-    lat: number;
-    lng: number;
-    radius: number;
-  };
-  requiresAuth?: boolean;
-}
-
-export interface GenerateLinkResponse {
-  message: string;
-  link: {
-    id: string;
-    token: string;
-    url: string;
-    expiresAt: string;
-    maxUses?: number;
-  };
-}
-
-export interface EnrollBiometricRequest {
-  studentId: string;
-  biometricData: string;
-  biometricType: "BIOMETRIC_FINGERPRINT" | "BIOMETRIC_FACE";
-  deviceId: string;
-}
-
-export interface EnrollBiometricResponse {
-  message: string;
-  student: {
-    id: string;
-    indexNumber: string;
-    hasBiometric: boolean;
-  };
-}
-
-export interface SessionLiveStats {
-  sessionId: string;
-  courseCode: string;
-  courseName?: string;
-  status: RecordingStatus;
-  startTime: string;
-  endTime?: string;
-  durationMinutes: number;
-  statistics: {
-    totalRecorded: number;
-    presentCount: number;
-    lateCount: number;
-    excusedCount: number;
-    totalRegisteredStudents: number;
-    attendanceRate: number | null;
-  };
-  methodBreakdown: {
-    biometric: number;
-    biometricPercent: number;
-    qrCode: number;
-    qrPercent: number;
-    manual: number;
-    manualPercent: number;
-  };
-  peakAttendance: {
-    hour: string;
-    count: number;
-    attendanceByHour: Record<string, number>;
-  };
-  recentAttendance: Array<{
-    studentId: string;
-    studentName: string;
-    indexNumber?: string;
-    scanTime: string;
-    verificationMethod?: AttendanceMethod;
-    status: ClassAttendanceStatus;
-  }>;
-}
-
-// ============================================================================
-// API CLIENT
-// ============================================================================
-
-export const classAttendanceApi = {
-  // ============================================================================
-  // SESSION MANAGEMENT
-  // ============================================================================
-
-  /**
-   * Start a new attendance recording session
-   */
-  startSession: async (
-    data: StartSessionRequest
-  ): Promise<StartSessionResponse> => {
-    return apiClient.post<StartSessionResponse>(
-      "/class-attendance/sessions/start",
-      data
-    );
-  },
-
-  /**
-   * End an active attendance session
-   */
-  endSession: async (data: EndSessionRequest): Promise<EndSessionResponse> => {
-    return apiClient.post<EndSessionResponse>(
-      "/class-attendance/sessions/end",
-      data
-    );
-  },
-
-  /**
-   * Delete an attendance session and all related data
-   */
-  deleteSession: async (sessionId: string): Promise<{
-    message: string;
-    deletedRecord: {
-      id: string;
-      courseCode: string;
-      courseName?: string;
-      studentsCount: number;
-    };
-  }> => {
-    return apiClient.delete(`/class-attendance/sessions/${sessionId}`);
-  },
-
-  /**
-   * Get all active attendance sessions
-   */
-  getActiveSessions: async (): Promise<{ sessions: ClassAttendanceRecord[] }> => {
-    return apiClient.get<{ sessions: ClassAttendanceRecord[] }>(
-      "/class-attendance/sessions/active"
-    );
-  },
-
-  /**
-   * Get details of a specific attendance session
-   */
-  getSession: async (
-    recordId: string
-  ): Promise<{ record: ClassAttendanceRecord }> => {
-    return apiClient.get<{ record: ClassAttendanceRecord }>(
-      `/class-attendance/sessions/${recordId}`
-    );
-  },
-
-  /**
-   * Get live statistics for a specific attendance session
-   */
-  getSessionLiveStats: async (
-    recordId: string
-  ): Promise<SessionLiveStats> => {
-    return apiClient.get<SessionLiveStats>(
-      `/class-attendance/sessions/${recordId}/live-stats`
-    );
-  },
-
-  // ============================================================================
-  // ATTENDANCE RECORDING
-  // ============================================================================
-
-  /**
-   * Record attendance via QR code scan
-   */
-  recordAttendanceByQR: async (
-    data: RecordAttendanceByQRRequest
-  ): Promise<RecordAttendanceResponse> => {
-    return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/qr",
-      data
-    );
-  },
-
-  /**
-   * Record attendance via manual index number entry
-   */
-  recordAttendanceByIndex: async (
-    data: RecordAttendanceByIndexRequest
-  ): Promise<RecordAttendanceResponse> => {
-    return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/index",
-      data
-    );
-  },
-
-  /**
-   * Record attendance via biometric verification
-   */
-  recordAttendanceByBiometric: async (
-    data: RecordAttendanceByBiometricRequest
-  ): Promise<RecordAttendanceResponse> => {
-    return apiClient.post<RecordAttendanceResponse>(
-      "/class-attendance/record/biometric",
-      data
-    );
-  },
-
-  // ============================================================================
-  // ATTENDANCE QUERIES
-  // ============================================================================
-
-  /**
-   * Get attendance history with filters
-   */
-  getAttendanceHistory: async (params?: {
-    courseCode?: string;
-    startDate?: string;
-    endDate?: string;
-    status?: RecordingStatus;
-    limit?: number;
-    offset?: number;
-  }): Promise<{
-    records: ClassAttendanceRecord[];
-    total: number;
-    limit: number;
-    offset: number;
-  }> => {
-    const queryString = new URLSearchParams(
-      params as Record<string, string>
-    ).toString();
-    return apiClient.get<{
-      records: ClassAttendanceRecord[];
+  startDate?: string;
+  endDate?: string;
+}): Promise<{
+  sessions: AttendanceSession[];
+  total: number;
+  page: number;
+  totalPages: number;
+}> {
+  const response = await apiClient.get<{
+    data?: {
+      sessions: AttendanceSession[];
       total: number;
-      limit: number;
-      offset: number;
-    }>(`/class-attendance/history${queryString ? `?${queryString}` : ""}`);
-  },
+      page: number;
+      totalPages: number;
+    }
+  }>('/class-attendance/history', { params });
+  
+  return response.data || {
+    sessions: [],
+    total: 0,
+    page: 1,
+    totalPages: 0
+  };
+}
 
-  /**
-   * Get student's attendance history
-   */
-  getStudentHistory: async (
-    studentId: string
-  ): Promise<StudentAttendanceHistory> => {
-    return apiClient.get<StudentAttendanceHistory>(
-      `/class-attendance/students/${studentId}/history`
-    );
-  },
-
-  // ============================================================================
-  // SELF-SERVICE LINKS
-  // ============================================================================
-
-  /**
-   * Generate a self-service attendance link
-   */
-  generateAttendanceLink: async (
-    data: GenerateLinkRequest
-  ): Promise<GenerateLinkResponse> => {
-    return apiClient.post<GenerateLinkResponse>(
-      "/class-attendance/links/generate",
-      data
-    );
-  },
-
-  /**
-   * Get active attendance links for a session
-   */
-  getActiveLinks: async (
-    recordId: string
-  ): Promise<{ links: Array<{ id: string; token: string; url: string; expiresAt: string; maxUses?: number; usageCount: number; geolocation: any; createdAt: string; }> }> => {
-    return apiClient.get<{ links: Array<{ id: string; token: string; url: string; expiresAt: string; maxUses?: number; usageCount: number; geolocation: any; createdAt: string; }> }>(
-      `/class-attendance/sessions/${recordId}/links`
-    );
-  },
-
-  /**
-   * Deactivate an attendance link
-   */
-  deactivateLink: async (
-    linkId: string
-  ): Promise<{ message: string; link: AttendanceLink }> => {
-    return apiClient.patch<{ message: string; link: AttendanceLink }>(
-      `/class-attendance/links/${linkId}/deactivate`,
-      {}
-    );
-  },
-
-  // ============================================================================
-  // BIOMETRIC ENROLLMENT
-  // ============================================================================
-
-  /**
-   * Enroll student biometric data
-   */
-  enrollBiometric: async (
-    data: EnrollBiometricRequest
-  ): Promise<EnrollBiometricResponse> => {
-    return apiClient.post<EnrollBiometricResponse>(
-      "/class-attendance/biometric/enroll",
-      data
-    );
-  },
-
-  // ============================================================================
-  // STATISTICS & ANALYTICS
-  // ============================================================================
-
-  /**
-   * Get attendance statistics
-   */
-  getAttendanceStats: async (params?: {
-    startDate?: string;
-    endDate?: string;
-    courseCode?: string;
-  }): Promise<AttendanceStats> => {
-    const queryString = new URLSearchParams(
-      params as Record<string, string>
-    ).toString();
-    return apiClient.get<AttendanceStats>(
-      `/class-attendance/stats${queryString ? `?${queryString}` : ""}`
-    );
-  },
-
-  /**
-   * Get lecturer's attendance statistics
-   */
-  getLecturerStats: async (params?: {
-    startDate?: string;
-    endDate?: string;
-  }): Promise<{
-    totalSessions: number;
-    totalStudentsRecorded: number;
-    averageAttendanceRate: number;
-    byCourse: Array<{
-      courseCode: string;
-      courseName: string;
-      sessions: number;
-      totalStudents: number;
-      attendanceRate: number;
-    }>;
-  }> => {
-    const queryString = new URLSearchParams(
-      params as Record<string, string>
-    ).toString();
-    return apiClient.get(
-      `/class-attendance/analytics/stats${queryString ? `?${queryString}` : ""}`
-    );
-  },
-};
+export async function exportSession(sessionId: string): Promise<Blob> {
+  // For blob responses, we need to bypass the apiClient's response transformation
+  const response = await apiClient.rawClient.get(
+    `/class-attendance/sessions/${sessionId}/export`,
+    { responseType: 'blob' }
+  );
+  return response.data;
+}

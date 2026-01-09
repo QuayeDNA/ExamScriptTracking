@@ -130,6 +130,10 @@ class ApiClient {
   setOnAuthInvalid(callback: () => void) {
     this.onAuthInvalid = callback;
   }
+   // Raw axios client for special cases like blob responses
+  get rawClient() {
+    return this.client;
+  }
 }
 
 export const apiClient = new ApiClient();

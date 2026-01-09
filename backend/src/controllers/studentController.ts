@@ -1081,13 +1081,15 @@ export const exportStudentsPDF = async (
       return;
     }
 
-    // Prepare export data
+    // Prepare export data - filter out students without profile pictures
     const exportData = {
-      students: students.map((student) => ({
-        ...student,
-        profilePicture: getFileUrl(student.profilePicture),
-        createdAt: student.createdAt.toISOString(),
-      })),
+      students: students
+        .filter(student => student.profilePicture !== null)
+        .map((student) => ({
+          ...student,
+          profilePicture: student.profilePicture!, // We know it's not null after filtering
+          createdAt: student.createdAt.toISOString(),
+        })),
       title: "Student Directory",
       subtitle: `Total Students: ${students.length}`,
       program: program as string,
@@ -1266,7 +1268,7 @@ export const enrollStudentBiometric = async (req: Request, res: Response) => {
 
       res.json({
         success: true,
-        webauthn: false, // Legacy enrollment
+        webauthn: false,
         student: {
           id: updatedStudent.id,
           indexNumber: updatedStudent.indexNumber,
@@ -1281,7 +1283,7 @@ export const enrollStudentBiometric = async (req: Request, res: Response) => {
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: error.errors[0].message });
+      res.status(400).json({ error: error.issues[0].message });
       return;
     }
     console.error("Enroll student biometric error:", error);

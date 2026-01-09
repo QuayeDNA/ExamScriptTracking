@@ -80,7 +80,7 @@ export class LinkService {
       },
     });
 
-    const baseUrl = process.env.APP_URL || 'http://localhost:5173';
+    const baseUrl = process.env.APP_URL || 'https://localhost:5173';
 
     return {
       id: link.id,

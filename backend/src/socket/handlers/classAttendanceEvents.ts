@@ -4,22 +4,22 @@
  */
 
 import { io } from "../../server";
-import { ClassAttendanceRecord, ClassAttendance, User, Student } from "@prisma/client";
+import { AttendanceSession, StudentAttendance, User, Student } from "@prisma/client";
 
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
 
-type AttendanceWithRelations = ClassAttendance & {
+type AttendanceWithRelations = StudentAttendance & {
   student: Student;
-  record: ClassAttendanceRecord & {
-    user: User | null;
+  session: AttendanceSession & {
+    creator: User | null;
   };
 };
 
-type RecordWithRelations = ClassAttendanceRecord & {
-  user: User | null;
-  students: (ClassAttendance & {
+type RecordWithRelations = AttendanceSession & {
+  creator: User | null;
+  attendance: (StudentAttendance & {
     student: Student;
   })[];
 };
@@ -41,10 +41,10 @@ export const emitSessionStarted = (record: RecordWithRelations) => {
       courseName: record.courseName,
       lecturerName: record.lecturerName,
       startTime: record.startTime,
-      createdBy: record.user ? {
-        id: record.user.id,
-        name: `${record.user.firstName} ${record.user.lastName}`,
-        role: record.user.role,
+      createdBy: record.creator ? {
+        id: record.creator.id,
+        name: `${record.creator.firstName} ${record.creator.lastName}`,
+        role: record.creator.role,
       } : null,
     },
     timestamp: new Date().toISOString(),
@@ -75,11 +75,11 @@ export const emitSessionEnded = (record: RecordWithRelations) => {
       courseCode: record.courseCode,
       courseName: record.courseName,
       endTime: record.endTime,
-      totalStudents: record.totalStudents,
+      totalStudents: record.expectedStudentCount,
       duration,
       summary: {
-        totalRecorded: record.students.length,
-        methods: record.students.reduce((acc, s) => {
+        totalRecorded: record.attendance.length,
+        methods: record.attendance.reduce((acc: Record<string, number>, s: StudentAttendance & { student: Student }) => {
           const method = s.verificationMethod || 'UNKNOWN';
           acc[method] = (acc[method] || 0) + 1;
           return acc;
@@ -95,7 +95,7 @@ export const emitSessionEnded = (record: RecordWithRelations) => {
   // Emit to specific room for this session
   io.to(`attendance:session:${record.id}`).emit("attendance:update", payload);
 
-  console.log(`📡 Socket: Session ended - ${record.courseCode} (${record.totalStudents} students)`);
+  console.log(`📡 Socket: Session ended - ${record.courseCode} (${record.expectedStudentCount} students)`);
 };
 
 /**
@@ -107,29 +107,29 @@ export const emitAttendanceRecorded = (attendance: AttendanceWithRelations) => {
     type: "ATTENDANCE_RECORDED",
     data: {
       id: attendance.id,
-      recordId: attendance.recordId,
+      sessionId: attendance.sessionId,
       student: {
         id: attendance.student.id,
         indexNumber: attendance.student.indexNumber,
         firstName: attendance.student.firstName,
         lastName: attendance.student.lastName,
       },
-      scanTime: attendance.scanTime,
+      markedAt: attendance.markedAt,
       status: attendance.status,
       verificationMethod: attendance.verificationMethod,
-      lecturerConfirmed: attendance.lecturerConfirmed,
+      requiresConfirmation: attendance.requiresConfirmation,
       biometricConfidence: attendance.biometricConfidence,
     },
     session: {
-      id: attendance.record.id,
-      courseCode: attendance.record.courseCode,
-      courseName: attendance.record.courseName,
+      id: attendance.session.id,
+      courseCode: attendance.session.courseCode,
+      courseName: attendance.session.courseName,
     },
     timestamp: new Date().toISOString(),
   };
 
   // Emit to session-specific room
-  io.to(`attendance:session:${attendance.recordId}`).emit("attendance:recorded", payload);
+  io.to(`attendance:session:${attendance.session.id}`).emit("attendance:recorded", payload);
 
   // Also emit to general attendance channel
   io.emit("attendance:studentRecorded", payload);
@@ -148,12 +148,12 @@ export const emitLiveAttendanceUpdate = (record: RecordWithRelations) => {
       id: record.id,
       courseCode: record.courseCode,
       courseName: record.courseName,
-      totalStudents: record.totalStudents,
-      currentCount: record.students.length,
-      recentStudents: record.students.slice(0, 5).map(s => ({
+      totalStudents: record.expectedStudentCount,
+      currentCount: record.attendance.length,
+      recentStudents: record.attendance.slice(0, 5).map((s: StudentAttendance & { student: Student }) => ({
         indexNumber: s.student.indexNumber,
         name: `${s.student.firstName} ${s.student.lastName}`,
-        scanTime: s.scanTime,
+        scanTime: s.markedAt,
         method: s.verificationMethod,
         status: s.status,
       })),
@@ -164,7 +164,7 @@ export const emitLiveAttendanceUpdate = (record: RecordWithRelations) => {
   // Emit to session-specific room
   io.to(`attendance:session:${record.id}`).emit("attendance:liveUpdate", payload);
 
-  console.log(`📡 Socket: Live update - ${record.courseCode} (${record.totalStudents} students)`);
+  console.log(`📡 Socket: Live update - ${record.courseCode} (${record.expectedStudentCount} students)`);
 };
 
 /**
