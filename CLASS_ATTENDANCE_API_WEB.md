@@ -2,7 +2,7 @@
 
 **Target Platform:** Web Frontend (React + TypeScript)  
 **Use Cases:** Admin Dashboard + Student Self-Service  
-**Base URL:** `/api/class-attendance`
+**Base URL:** `/api/attendance`
 
 ---
 
@@ -47,15 +47,16 @@ The web platform serves two primary user types:
 ```
 
 ### Public Endpoints (No Auth Required)
-- `GET /links/:linkId/validate` - Validate attendance link
-- `POST /links/:linkId/mark` - Self-mark attendance via link
+- `GET /api/attendance/links/:token/validate` - Validate attendance link
+- `POST /api/attendance/self-mark` - Self-mark attendance via link
 
 ### Student Endpoints (Auth Required)
-- `GET /sessions/my-attendance` - View own attendance history
+- `GET /api/attendance/history` - View session history (for authenticated users)
 
-### Admin Endpoints (Role: ADMIN)
-- `GET /sessions` - View all sessions
-- `GET /sessions/export` - Export attendance data
+### Admin Endpoints (Role: ADMIN, LECTURER, CLASS_REP)
+- `GET /api/attendance/sessions/active` - View active sessions
+- `GET /api/attendance/sessions/:id` - Get session details
+- `GET /api/attendance/sessions/:id/export` - Export attendance data
 - All session management endpoints
 
 ---
@@ -94,10 +95,101 @@ export enum LinkType {
 
 // Session Models
 export interface AttendanceSession {
-  sessionId: string;
+  id: string;
   courseCode: string;
   courseName: string;
-  lecturerId: string;
+  venue?: string;
+  lecturerName?: string;
+  notes?: string;
+  createdBy: string;
+  startTime: string;
+  endTime?: string;
+  status: SessionStatus;
+  expectedStudentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentAttendance {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  verificationMethod: VerificationMethod;
+  status: AttendanceStatus;
+  markedAt: string;
+  requiresConfirmation: boolean;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  recordedBy: string;
+  deviceId?: string;
+  biometricConfidence?: number;
+  linkTokenUsed?: string;
+  location?: {
+    lat: number;
+    lng: number;
+  };
+}
+
+export interface AttendanceLink {
+  id: string;
+  linkToken: string;
+  linkType: LinkType;
+  sessionId?: string;
+  studentId?: string;
+  createdBy: string;
+  expiresAt: string;
+  maxUses?: number;
+  usesCount: number;
+  requiresLocation: boolean;
+  geofence?: {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+  };
+  isActive: boolean;
+  deactivatedAt?: string;
+  createdAt: string;
+}
+
+export interface Student {
+  id: string;
+  indexNumber: string;
+  firstName: string;
+  lastName: string;
+  program: string;
+  level: number;
+  department?: string;
+  option?: string;
+  qrCode: string;
+  profilePicture?: string;
+  biometricEnrolled: boolean;
+  biometricProvider?: string;
+  biometricEnrolledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  department?: string;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export enum Role {
+  ADMIN = 'ADMIN',
+  INVIGILATOR = 'INVIGILATOR',
+  DEPARTMENT_HEAD = 'DEPARTMENT_HEAD',
+  FACULTY_OFFICER = 'FACULTY_OFFICER',
+  LECTURER = 'LECTURER',
+  CLASS_REP = 'CLASS_REP'
+}
   lecturerName: string | null;
   academicYear: string;
   semester: string;
@@ -184,48 +276,51 @@ export interface User {
 
 ### 1. Validate Attendance Link
 
-**Endpoint:** `GET /links/:linkId/validate`  
+**Endpoint:** `GET /api/attendance/links/:token/validate`  
 **Auth:** Not required  
 **Description:** Validate if attendance link is active and accessible
 
 #### Request
 ```typescript
-GET /api/class-attendance/links/lnk_abc123xyz/validate
+GET /api/attendance/links/lnk_abc123xyz/validate?lat=5.6037&lng=-0.1870
 ```
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| lat | number | No | Latitude for geofencing validation |
+| lng | number | No | Longitude for geofencing validation |
 
 #### Success Response (200)
 ```json
 {
-  "valid": true,
-  "session": {
-    "sessionId": "ses_xyz789",
+  "success": true,
+  "data": {
+    "id": "ses_xyz789",
     "courseCode": "CS101",
     "courseName": "Introduction to Computer Science",
     "lecturerName": "Dr. John Smith",
-    "venue": "Room A204",
-    "startTime": "2026-01-08T08:00:00Z"
-  },
-  "requiresLocation": true,
-  "geofence": {
-    "latitude": 5.6037,
-    "longitude": -0.1870,
-    "radius": 100
-  },
-  "expiresAt": "2026-01-08T10:00:00Z"
+    "startTime": "2026-01-08T08:00:00Z",
+    "venue": "Room A204"
+  }
 }
 ```
 
-#### Error Response (404)
+#### Error Response (400)
 ```json
 {
-  "message": "Link not found or has been revoked"
+  "success": false,
+  "error": "Invalid or expired attendance link",
+  "errorCode": "LINK_NOT_FOUND"
 }
 ```
 
-#### Error Response (410)
+#### Error Response (400)
 ```json
 {
-  "message": "Link has expired"
+  "success": false,
+  "error": "This attendance session has ended",
+  "errorCode": "SESSION_ENDED"
 }
 ```
 
@@ -233,38 +328,134 @@ GET /api/class-attendance/links/lnk_abc123xyz/validate
 
 ### 2. Self-Mark Attendance
 
-**Endpoint:** `POST /links/:linkId/mark`  
+**Endpoint:** `POST /api/attendance/self-mark`  
 **Auth:** Not required  
 **Description:** Student marks their own attendance using shared link
 
 #### Request
 ```typescript
-POST /api/class-attendance/links/lnk_abc123xyz/mark
+POST /api/attendance/self-mark
 
 {
-  "indexNumber": "20210001",
+  "linkToken": "lnk_abc123xyz",
+  "studentId": "stu_123456",
   "location": {
-    "latitude": 5.6037,
-    "longitude": -0.1870
+    "lat": 5.6037,
+    "lng": -0.1870
   }
 }
 ```
 
 #### Request Schema
 ```typescript
-interface SelfMarkRequest {
-  indexNumber: string;        // Student's index number
-  location?: {                // Required if link.requiresLocation is true
-    latitude: number;
-    longitude: number;
+interface SelfMarkAttendanceRequest {
+  linkToken: string;
+  studentId: string;
+  location?: {
+    lat: number;
+    lng: number;
   };
 }
 ```
+
+#### Success Response (201)
+```json
+{
+  "success": true,
+  "message": "Attendance marked successfully",
+  "data": {
+    "id": "att_123456",
+    "sessionId": "ses_xyz789",
+    "studentId": "stu_123456",
+    "verificationMethod": "LINK_SELF_MARK",
+    "status": "PRESENT",
+    "markedAt": "2026-01-08T08:15:00Z",
+    "requiresConfirmation": true
+  }
+}
+```
+
+#### Error Responses
+
+**Student Not Found (400)**
+```json
+{
+  "success": false,
+  "error": "Student not found"
+}
+```
+
+**Already Marked (400)**
+```json
+{
+  "success": false,
+  "error": "Attendance already marked for this session"
+}
+```
+
+**Outside Geofence (400)**
+```json
+{
+  "success": false,
+  "error": "Location validation failed"
+}
+```
+
+---
+
+### 3. View Session History
+
+**Endpoint:** `GET /api/attendance/history`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** View attendance session history with filtering and pagination
+
+#### Request
+```typescript
+GET /api/attendance/history?page=1&limit=20&startDate=2026-01-01&endDate=2026-01-31&courseCode=CS101&status=COMPLETED
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Query Parameters
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| page | number | No | 1 | Page number |
+| limit | number | No | 20 | Records per page |
+| startDate | string | No | - | ISO date (from) |
+| endDate | string | No | - | ISO date (to) |
+| courseCode | string | No | - | Filter by course |
+| status | SessionStatus | No | - | Filter by session status |
 
 #### Success Response (200)
 ```json
 {
   "success": true,
+  "data": [
+    {
+      "id": "ses_xyz789",
+      "courseCode": "CS101",
+      "courseName": "Introduction to Computer Science",
+      "venue": "Room A204",
+      "lecturerName": "Dr. John Smith",
+      "status": "COMPLETED",
+      "startTime": "2026-01-08T08:00:00Z",
+      "endTime": "2026-01-08T09:30:00Z",
+      "expectedStudentCount": 50,
+      "attendanceCount": 45,
+      "createdAt": "2026-01-08T07:45:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "totalPages": 8
+  }
+}
+```
   "message": "Attendance marked successfully. Awaiting lecturer confirmation.",
   "attendance": {
     "attendanceId": "att_abc123",
@@ -280,7 +471,6 @@ interface SelfMarkRequest {
       "indexNumber": "20210001"
     }
   }
-}
 ```
 
 #### Error Responses
@@ -323,7 +513,7 @@ interface SelfMarkRequest {
 
 #### Request
 ```typescript
-GET /api/class-attendance/sessions/my-attendance?page=1&limit=20
+GET /api/attendance/history?page=1&limit=20
 
 Headers:
 {
@@ -381,15 +571,15 @@ Headers:
 
 ## Admin Dashboard Endpoints
 
-### 1. Get All Sessions (Admin View)
+### 1. Get Active Sessions
 
-**Endpoint:** `GET /sessions`  
-**Auth:** Required (ADMIN, LECTURER)  
-**Description:** Retrieve all attendance sessions with filtering and pagination
+**Endpoint:** `GET /api/attendance/sessions/active`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** Retrieve all active attendance sessions
 
 #### Request
 ```typescript
-GET /api/class-attendance/sessions?status=IN_PROGRESS&page=1&limit=20
+GET /api/attendance/sessions/active
 
 Headers:
 {
@@ -397,66 +587,369 @@ Headers:
 }
 ```
 
-#### Query Parameters
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| status | SessionStatus | No | - | Filter by status |
-| courseCode | string | No | - | Filter by course |
-| lecturerId | string | No | - | Filter by lecturer |
-| startDate | string | No | - | ISO date (from) |
-| endDate | string | No | - | ISO date (to) |
-| page | number | No | 1 | Page number |
-| limit | number | No | 20 | Records per page |
+#### Success Response (200)
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ses_xyz789",
+      "courseCode": "CS101",
+      "courseName": "Introduction to Computer Science",
+      "venue": "Room A204",
+      "lecturerName": "Dr. John Smith",
+      "status": "IN_PROGRESS",
+      "startTime": "2026-01-08T08:00:00Z",
+      "expectedStudentCount": 50,
+      "createdAt": "2026-01-08T07:45:00Z",
+      "attendanceCount": 42,
+      "creator": {
+        "id": "usr_123",
+        "firstName": "John",
+        "lastName": "Smith",
+        "role": "LECTURER"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 2. Get Session Details with Statistics
+
+**Endpoint:** `GET /api/attendance/sessions/:id`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** Get detailed information about a specific session with real-time stats
+
+#### Request
+```typescript
+GET /api/attendance/sessions/ses_xyz789
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
 
 #### Success Response (200)
 ```json
 {
-  "sessions": [
-    {
-      "sessionId": "ses_xyz789",
+  "success": true,
+  "data": {
+    "session": {
+      "id": "ses_xyz789",
       "courseCode": "CS101",
       "courseName": "Introduction to Computer Science",
-      "lecturerName": "Dr. John Smith",
       "venue": "Room A204",
+      "lecturerName": "Dr. John Smith",
       "status": "IN_PROGRESS",
       "startTime": "2026-01-08T08:00:00Z",
-      "endTime": null,
-      "expectedStudents": 50,
-      "stats": {
-        "totalRecorded": 42,
+      "expectedStudentCount": 50,
+      "createdAt": "2026-01-08T07:45:00Z"
+    },
+    "stats": {
+      "totalRecorded": 42,
+      "byStatus": {
+        "PRESENT": 40,
+        "LATE": 2,
+        "ABSENT": 0
+      },
+      "byMethod": {
+        "QR_SCAN": 35,
+        "LINK_SELF_MARK": 7
+      },
+      "confirmationStats": {
         "confirmed": 35,
-        "pending": 7,
-        "present": 40,
-        "late": 2,
-        "absent": 0
+        "pending": 7
       }
-    }
-  ],
-  "pagination": {
-    "currentPage": 1,
-    "totalPages": 10,
-    "totalRecords": 200,
-    "hasNextPage": true,
-    "hasPrevPage": false
+    },
+    "recentAttendance": [
+      {
+        "id": "att_123456",
+        "student": {
+          "id": "stu_789",
+          "indexNumber": "20210001",
+          "firstName": "Jane",
+          "lastName": "Doe"
+        },
+        "status": "PRESENT",
+        "verificationMethod": "QR_SCAN",
+        "markedAt": "2026-01-08T08:15:00Z",
+        "requiresConfirmation": false
+      }
+    ],
+    "links": [
+      {
+        "id": "lnk_abc123",
+        "linkToken": "lnk_abc123xyz",
+        "expiresAt": "2026-01-08T10:00:00Z",
+        "maxUses": null,
+        "usesCount": 7,
+        "isActive": true,
+        "requiresLocation": true,
+        "geofence": {
+          "lat": 5.6037,
+          "lng": -0.1870,
+          "radiusMeters": 100
+        }
+      }
+    ]
   }
 }
 ```
 
 ---
 
-### 2. Get Session Details with Full Statistics
+### 3. Export Session to CSV
 
-**Endpoint:** `GET /sessions/:sessionId`  
+**Endpoint:** `GET /api/attendance/sessions/:id/export`  
 **Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
-**Description:** Get detailed information about a specific session
+**Description:** Export attendance data as CSV file
 
 #### Request
 ```typescript
-GET /api/class-attendance/sessions/ses_xyz789
+GET /api/attendance/sessions/ses_xyz789/export
 
 Headers:
 {
   "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Success Response (200)
+```
+Content-Type: text/csv
+Content-Disposition: attachment; filename="attendance-ses_xyz789.csv"
+
+Session ID,Course Code,Course Name,Student Index,Student Name,Status,Verification Method,Marked At,Confirmed,Location
+ses_xyz789,CS101,Introduction to Computer Science,20210001,Jane Doe,PRESENT,QR_SCAN,2026-01-08T08:15:00Z,true,"5.6037,-0.1870"
+ses_xyz789,CS101,Introduction to Computer Science,20210002,John Smith,PRESENT,LINK_SELF_MARK,2026-01-08T08:20:00Z,false,"5.6038,-0.1871"
+```
+
+---
+
+### 4. Create New Session
+
+**Endpoint:** `POST /api/attendance/sessions`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** Create a new attendance session
+
+#### Request
+```typescript
+POST /api/attendance/sessions
+
+{
+  "courseCode": "CS101",
+  "courseName": "Introduction to Computer Science",
+  "venue": "Room A204",
+  "notes": "Mid-term lecture",
+  "expectedStudentCount": 50
+}
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Request Schema
+```typescript
+interface CreateSessionRequest {
+  courseCode: string;
+  courseName: string;
+  venue?: string;
+  notes?: string;
+  expectedStudentCount?: number;
+}
+```
+
+#### Success Response (201)
+```json
+{
+  "success": true,
+  "message": "Session created successfully",
+  "data": {
+    "id": "ses_xyz789",
+    "courseCode": "CS101",
+    "courseName": "Introduction to Computer Science",
+    "venue": "Room A204",
+    "status": "IN_PROGRESS",
+    "startTime": "2026-01-08T08:00:00Z",
+    "expectedStudentCount": 50,
+    "createdAt": "2026-01-08T07:45:00Z"
+  }
+}
+```
+
+---
+
+### 5. End Session
+
+**Endpoint:** `POST /api/attendance/sessions/:id/end`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** End an active attendance session
+
+#### Request
+```typescript
+POST /api/attendance/sessions/ses_xyz789/end
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Success Response (200)
+```json
+{
+  "success": true,
+  "message": "Session ended successfully",
+  "data": {
+    "id": "ses_xyz789",
+    "status": "COMPLETED",
+    "endTime": "2026-01-08T09:30:00Z",
+    "finalStats": {
+      "totalRecorded": 45,
+      "byStatus": {
+        "PRESENT": 42,
+        "LATE": 3
+      }
+    }
+  }
+}
+```
+
+---
+
+### 6. Generate Attendance Link
+
+**Endpoint:** `POST /api/attendance/sessions/:id/links`  
+**Auth:** Required (ADMIN, LECTURER)  
+**Description:** Generate a new attendance link for self-service marking
+
+#### Request
+```typescript
+POST /api/attendance/sessions/ses_xyz789/links
+
+{
+  "expiresInMinutes": 30,
+  "maxUses": 100,
+  "requiresLocation": true,
+  "geofence": {
+    "lat": 5.6037,
+    "lng": -0.1870,
+    "radiusMeters": 100
+  }
+}
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Request Schema
+```typescript
+interface GenerateLinkRequest {
+  expiresInMinutes?: number; // 5-120, default 30
+  maxUses?: number;
+  requiresLocation?: boolean;
+  geofence?: {
+    lat: number;
+    lng: number;
+    radiusMeters: number; // 10-5000
+  };
+}
+```
+
+#### Success Response (201)
+```json
+{
+  "success": true,
+  "message": "Link generated successfully",
+  "data": {
+    "id": "lnk_abc123",
+    "token": "lnk_abc123xyz",
+    "url": "https://app.example.com/attend/lnk_abc123xyz",
+    "qrCodeData": "{\"type\":\"ATTENDANCE_LINK\",\"token\":\"lnk_abc123xyz\",\"sessionId\":\"ses_xyz789\"}",
+    "expiresAt": "2026-01-08T08:30:00Z",
+    "maxUses": 100,
+    "requiresLocation": true,
+    "geofence": {
+      "lat": 5.6037,
+      "lng": -0.1870,
+      "radiusMeters": 100
+    }
+  }
+}
+```
+
+---
+
+### 7. Get Active Links
+
+**Endpoint:** `GET /api/attendance/sessions/:id/links`  
+**Auth:** Required (ADMIN, LECTURER, CLASS_REP)  
+**Description:** Get all active links for a session
+
+#### Request
+```typescript
+GET /api/attendance/sessions/ses_xyz789/links
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Success Response (200)
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "lnk_abc123",
+      "linkToken": "lnk_abc123xyz",
+      "url": "https://app.example.com/attend/lnk_abc123xyz",
+      "expiresAt": "2026-01-08T08:30:00Z",
+      "maxUses": 100,
+      "usageCount": 45,
+      "requiresLocation": true,
+      "geofence": {
+        "lat": 5.6037,
+        "lng": -0.1870,
+        "radiusMeters": 100
+      },
+      "createdAt": "2026-01-08T08:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 8. Revoke Link
+
+**Endpoint:** `DELETE /api/attendance/links/:token`  
+**Auth:** Required (ADMIN, LECTURER)  
+**Description:** Deactivate an attendance link
+
+#### Request
+```typescript
+DELETE /api/attendance/links/lnk_abc123xyz
+
+Headers:
+{
+  "Authorization": "Bearer <admin_jwt_token>"
+}
+```
+
+#### Success Response (200)
+```json
+{
+  "success": true,
+  "message": "Link revoked successfully"
 }
 ```
 
@@ -545,7 +1038,7 @@ Headers:
 
 #### Request
 ```typescript
-GET /api/class-attendance/sessions/export?startDate=2026-01-01&endDate=2026-01-31&courseCode=CS101
+GET /api/attendance/sessions/export?startDate=2026-01-01&endDate=2026-01-31&courseCode=CS101
 
 Headers:
 {
@@ -580,7 +1073,7 @@ ses_xyz789,CS101,Introduction to Computer Science,20210001,Jane Doe,PRESENT,QR_S
 
 #### Request
 ```typescript
-GET /api/class-attendance/sessions/analytics?startDate=2026-01-01&endDate=2026-01-31
+GET /api/attendance/sessions/analytics?startDate=2026-01-01&endDate=2026-01-31
 
 Headers:
 {
@@ -665,47 +1158,213 @@ const socket: Socket = io('http://localhost:5000', {
 
 ### Events to Listen For
 
-#### 1. Attendance Recorded
-**Event:** `attendance:recorded`
+#### 1. Session Started
+**Event:** `attendance:sessionStarted`
 
 ```typescript
-socket.on('attendance:recorded', (data) => {
-  console.log('New attendance recorded:', data);
-  // Update UI with new attendance record
+socket.on('attendance:sessionStarted', (payload) => {
+  console.log('New session started:', payload);
+  // Update session list
 });
 
 // Payload
 {
-  "sessionId": "ses_xyz789",
-  "attendance": {
-    "attendanceId": "att_001",
-    "studentId": "std_001",
-    "status": "PRESENT",
-    "verificationMethod": "LINK_SELF_MARK",
-    "markedAt": "2026-01-08T08:15:00Z",
-    "confirmed": false,
-    "student": {
-      "indexNumber": "20210001",
-      "firstName": "Jane",
-      "lastName": "Doe"
+  "type": "SESSION_STARTED",
+  "data": {
+    "id": "ses_xyz789",
+    "courseCode": "CS101",
+    "courseName": "Introduction to Computer Science",
+    "lecturerName": "Dr. John Smith",
+    "startTime": "2026-01-08T08:00:00Z",
+    "createdBy": {
+      "id": "usr_123",
+      "name": "John Smith",
+      "role": "LECTURER"
     }
-  }
+  },
+  "timestamp": "2026-01-08T08:00:00Z"
 }
 ```
 
-#### 2. Live Session Update
+#### 2. Session Ended
+**Event:** `attendance:sessionEnded`
+
+```typescript
+socket.on('attendance:sessionEnded', (payload) => {
+  console.log('Session ended:', payload);
+  // Update session status
+});
+
+// Payload
+{
+  "type": "SESSION_ENDED",
+  "data": {
+    "id": "ses_xyz789",
+    "courseCode": "CS101",
+    "courseName": "Introduction to Computer Science",
+    "endTime": "2026-01-08T09:30:00Z",
+    "totalStudents": 50,
+    "duration": 90,
+    "summary": {
+      "totalRecorded": 45,
+      "methods": {
+        "QR_SCAN": 35,
+        "LINK_SELF_MARK": 10
+      }
+    }
+  },
+  "timestamp": "2026-01-08T09:30:00Z"
+}
+```
+
+#### 3. Attendance Recorded
+**Event:** `attendance:recorded`
+
+```typescript
+socket.on('attendance:recorded', (payload) => {
+  console.log('New attendance recorded:', payload);
+  // Update attendance list
+});
+
+// Payload
+{
+  "type": "ATTENDANCE_RECORDED",
+  "data": {
+    "id": "att_123456",
+    "sessionId": "ses_xyz789",
+    "student": {
+      "id": "stu_789",
+      "indexNumber": "20210001",
+      "firstName": "Jane",
+      "lastName": "Doe"
+    },
+    "markedAt": "2026-01-08T08:15:00Z",
+    "status": "PRESENT",
+    "verificationMethod": "QR_SCAN",
+    "requiresConfirmation": false,
+    "biometricConfidence": null
+  },
+  "session": {
+    "id": "ses_xyz789",
+    "courseCode": "CS101",
+    "courseName": "Introduction to Computer Science"
+  },
+  "timestamp": "2026-01-08T08:15:00Z"
+}
+```
+
+#### 4. Live Attendance Update
 **Event:** `attendance:liveUpdate`
 
 ```typescript
-socket.on('attendance:liveUpdate', (data) => {
-  console.log('Session stats updated:', data);
+socket.on('attendance:liveUpdate', (payload) => {
+  console.log('Session stats updated:', payload);
   // Update live counter
 });
 
 // Payload
 {
-  "sessionId": "ses_xyz789",
-  "stats": {
+  "type": "LIVE_UPDATE",
+  "data": {
+    "id": "ses_xyz789",
+    "courseCode": "CS101",
+    "courseName": "Introduction to Computer Science",
+    "totalStudents": 50,
+    "currentCount": 42,
+    "recentStudents": [
+      {
+        "indexNumber": "20210001",
+        "name": "Jane Doe",
+        "scanTime": "2026-01-08T08:15:00Z",
+        "method": "QR_SCAN",
+        "status": "PRESENT"
+      }
+    ]
+  },
+  "timestamp": "2026-01-08T08:15:00Z"
+}
+```
+
+#### 5. Link Generated
+**Event:** `attendance:linkGenerated`
+
+```typescript
+socket.on('attendance:linkGenerated', (payload) => {
+  console.log('New link generated:', payload);
+  // Update links list
+});
+
+// Payload
+{
+  "type": "LINK_GENERATED",
+  "data": {
+    "recordId": "ses_xyz789",
+    "token": "lnk_abc123xyz",
+    "url": "https://app.example.com/attend/lnk_abc123xyz",
+    "expiresAt": "2026-01-08T08:30:00Z",
+    "maxUses": 100
+  },
+  "timestamp": "2026-01-08T08:00:00Z"
+}
+```
+
+#### 6. Biometric Enrolled
+**Event:** `attendance:biometricEnrolled`
+
+```typescript
+socket.on('attendance:biometricEnrolled', (payload) => {
+  console.log('Biometric enrollment completed:', payload);
+  // Update student biometric status
+});
+
+// Payload
+{
+  "type": "BIOMETRIC_ENROLLED",
+  "data": {
+    "studentId": "stu_789",
+    "indexNumber": "20210001",
+    "provider": "FINGERPRINT",
+    "enrolledAt": "2026-01-08T08:00:00Z"
+  },
+  "timestamp": "2026-01-08T08:00:00Z"
+}
+```
+
+#### 7. Attendance Error
+**Event:** `attendance:error`
+
+```typescript
+socket.on('attendance:error', (payload) => {
+  console.log('Attendance error:', payload);
+  // Show error notification
+});
+
+// Payload
+{
+  "type": "ERROR",
+  "data": {
+    "recordId": "ses_xyz789",
+    "error": "Student already marked present",
+    "studentIndexNumber": "20210001"
+  },
+  "timestamp": "2026-01-08T08:15:00Z"
+}
+```
+
+### Joining Session Rooms
+
+```typescript
+// Join a specific session room for targeted updates
+socket.emit('attendance:joinSession', 'ses_xyz789');
+
+// Listen for join confirmation
+socket.on('attendance:joined', (data) => {
+  console.log('Joined session:', data.sessionId);
+});
+
+// Leave session room
+socket.emit('attendance:leaveSession', 'ses_xyz789');
+```
     "totalRecorded": 43,
     "confirmed": 35,
     "pending": 8
@@ -736,11 +1395,13 @@ socket.on('session:statusChanged', (data) => {
 
 ### Standard Error Response Format
 
+All API endpoints return errors in a consistent format:
+
 ```typescript
 interface ErrorResponse {
-  message: string;
-  code?: string;
-  details?: any;
+  success: false;
+  error: string;
+  errorCode?: string;
 }
 ```
 
@@ -749,47 +1410,103 @@ interface ErrorResponse {
 | Status | Description | Common Scenarios |
 |--------|-------------|------------------|
 | 200 | Success | Operation completed successfully |
-| 400 | Bad Request | Invalid input, validation failed |
+| 201 | Created | Resource created successfully |
+| 400 | Bad Request | Invalid input, validation failed, link validation failed |
 | 401 | Unauthorized | Missing or invalid authentication token |
 | 403 | Forbidden | Insufficient permissions, outside geofence |
 | 404 | Not Found | Resource not found |
 | 409 | Conflict | Duplicate record (attendance already marked) |
-| 410 | Gone | Link expired |
 | 500 | Server Error | Unexpected server error |
 
 ### Example Error Handling
 
 ```typescript
-async function markAttendance(linkId: string, data: SelfMarkRequest) {
+async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+      'Content-Type': 'application/json',
+      ...options?.headers
+    },
+    ...options
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const error = data as ErrorResponse;
+
+    switch (response.status) {
+      case 400:
+        if (error.errorCode === 'LINK_NOT_FOUND') {
+          throw new Error('Invalid or expired attendance link');
+        }
+        if (error.errorCode === 'SESSION_ENDED') {
+          throw new Error('This attendance session has ended');
+        }
+        throw new Error(error.error || 'Bad request');
+      case 401:
+        // Redirect to login
+        window.location.href = '/login';
+        throw new Error('Authentication required');
+      case 403:
+        throw new Error('Insufficient permissions');
+      case 404:
+        throw new Error('Resource not found');
+      case 409:
+        throw new Error('Attendance already marked for this session');
+      default:
+        throw new Error(error.error || 'An unexpected error occurred');
+    }
+  }
+
+  return data;
+}
+
+// Usage example
+async function validateLink(token: string) {
   try {
-    const response = await fetch(`/api/class-attendance/links/${linkId}/mark`, {
+    const response = await apiRequest<{
+      success: true;
+      data: {
+        id: string;
+        courseCode: string;
+        courseName: string;
+        lecturerName?: string;
+        startTime: string;
+        venue?: string;
+      }
+    }>(`/api/attendance/links/${token}/validate`);
+
+    return response.data;
+  } catch (error) {
+    console.error('Link validation failed:', error);
+    throw error;
+  }
+}
+
+async function selfMarkAttendance(data: {
+  linkToken: string;
+  studentId: string;
+  location?: { lat: number; lng: number };
+}) {
+  try {
+    const response = await apiRequest<{
+      success: true;
+      message: string;
+      data: AttendanceRecord
+    }>('/api/attendance/self-mark', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data)
     });
 
-    if (!response.ok) {
-      const error: ErrorResponse = await response.json();
-      
-      switch (response.status) {
-        case 404:
-          throw new Error('Student not found. Please check your index number.');
-        case 409:
-          throw new Error('You have already marked attendance for this session.');
-        case 403:
-          throw new Error(error.message); // "You are not within the required location"
-        case 410:
-          throw new Error('This attendance link has expired.');
-        default:
-          throw new Error(error.message || 'Failed to mark attendance');
-      }
-    }
-
-    return await response.json();
+    return response.data;
   } catch (error) {
-    console.error('Attendance marking failed:', error);
+    console.error('Self-mark attendance failed:', error);
+    throw error;
+  }
+}
+```
     throw error;
   }
 }
@@ -802,31 +1519,36 @@ async function markAttendance(linkId: string, data: SelfMarkRequest) {
 ### Student Self-Service Page
 
 ```typescript
-// pages/attendance/mark/[linkId].tsx
+// pages/attendance/mark/[token].tsx
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'next/router';
 
 interface LinkValidation {
-  valid: boolean;
-  session: {
+  success: true;
+  data: {
+    id: string;
     courseCode: string;
     courseName: string;
-    lecturerName: string;
-    venue: string;
+    lecturerName?: string;
+    startTime: string;
+    venue?: string;
   };
-  requiresLocation: boolean;
-  geofence?: {
-    latitude: number;
-    longitude: number;
-    radius: number;
+}
+
+interface SelfMarkRequest {
+  linkToken: string;
+  studentId: string;
+  location?: {
+    lat: number;
+    lng: number;
   };
 }
 
 export default function MarkAttendancePage() {
-  const { linkId } = useParams();
+  const { token } = useParams();
   const [validation, setValidation] = useState<LinkValidation | null>(null);
-  const [indexNumber, setIndexNumber] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -834,17 +1556,18 @@ export default function MarkAttendancePage() {
 
   useEffect(() => {
     validateLink();
-  }, [linkId]);
+  }, [token]);
 
   async function validateLink() {
     try {
-      const response = await fetch(`/api/class-attendance/links/${linkId}/validate`);
-      
+      const response = await fetch(`/api/attendance/links/${token}/validate`);
+
       if (!response.ok) {
-        throw new Error('Invalid or expired link');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Invalid or expired link');
       }
 
-      const data = await response.json();
+      const data: LinkValidation = await response.json();
       setValidation(data);
     } catch (err) {
       setError(err.message);
@@ -853,35 +1576,271 @@ export default function MarkAttendancePage() {
     }
   }
 
+  async function getCurrentLocation(): Promise<{ lat: number; lng: number } | undefined> {
+    if (!navigator.geolocation) return undefined;
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        () => resolve(undefined),
+        { timeout: 10000 }
+      );
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError('');
 
     try {
-      let location;
-      
-      if (validation?.requiresLocation) {
-        location = await getCurrentLocation();
-      }
+      const location = await getCurrentLocation();
 
-      const response = await fetch(`/api/class-attendance/links/${linkId}/mark`, {
+      const requestData: SelfMarkRequest = {
+        linkToken: token,
+        studentId,
+        location
+      };
+
+      const response = await fetch('/api/attendance/self-mark', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          indexNumber,
-          location
-        })
+        body: JSON.stringify(requestData)
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message);
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to mark attendance');
       }
 
+      const result = await response.json();
       setSuccess(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="error">Error: {error}</div>;
+  }
+
+  if (success) {
+    return (
+      <div className="success">
+        <h2>Attendance Marked Successfully!</h2>
+        <p>Thank you for marking your attendance.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mark-attendance">
+      <h1>Mark Attendance</h1>
+
+      {validation && (
+        <div className="session-info">
+          <h2>{validation.data.courseName}</h2>
+          <p><strong>Course:</strong> {validation.data.courseCode}</p>
+          <p><strong>Lecturer:</strong> {validation.data.lecturerName || 'N/A'}</p>
+          <p><strong>Venue:</strong> {validation.data.venue || 'N/A'}</p>
+          <p><strong>Start Time:</strong> {new Date(validation.data.startTime).toLocaleString()}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="studentId">Student ID:</label>
+          <input
+            type="text"
+            id="studentId"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            required
+            placeholder="Enter your student ID"
+          />
+        </div>
+
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Marking Attendance...' : 'Mark Attendance'}
+        </button>
+      </form>
+    </div>
+  );
+}
+```
+
+### Admin Dashboard - Session Management
+
+```typescript
+// components/SessionManager.tsx
+
+import { useState, useEffect } from 'react';
+
+interface AttendanceSession {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  venue?: string;
+  lecturerName?: string;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  startTime: string;
+  endTime?: string;
+  expectedStudentCount: number;
+  createdAt: string;
+}
+
+export default function SessionManager() {
+  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadActiveSessions();
+  }, []);
+
+  async function loadActiveSessions() {
+    try {
+      const response = await fetch('/api/attendance/sessions/active', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to load sessions');
+
+      const data = await response.json();
+      setSessions(data.data);
+    } catch (error) {
+      console.error('Failed to load sessions:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createSession(sessionData: {
+    courseCode: string;
+    courseName: string;
+    venue?: string;
+    expectedStudentCount?: number;
+  }) {
+    try {
+      const response = await fetch('/api/attendance/sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(sessionData)
+      });
+
+      if (!response.ok) throw new Error('Failed to create session');
+
+      const result = await response.json();
+      setSessions(prev => [result.data, ...prev]);
+    } catch (error) {
+      console.error('Failed to create session:', error);
+      throw error;
+    }
+  }
+
+  async function endSession(sessionId: string) {
+    try {
+      const response = await fetch(`/api/attendance/sessions/${sessionId}/end`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to end session');
+
+      // Update local state
+      setSessions(prev => prev.map(session =>
+        session.id === sessionId
+          ? { ...session, status: 'COMPLETED' as const, endTime: new Date().toISOString() }
+          : session
+      ));
+    } catch (error) {
+      console.error('Failed to end session:', error);
+      throw error;
+    }
+  }
+
+  async function exportSession(sessionId: string) {
+    try {
+      const response = await fetch(`/api/attendance/sessions/${sessionId}/export`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to export session');
+
+      // Trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance-${sessionId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to export session:', error);
+      throw error;
+    }
+  }
+
+  if (loading) {
+    return <div>Loading sessions...</div>;
+  }
+
+  return (
+    <div className="session-manager">
+      <h2>Active Sessions</h2>
+
+      <div className="sessions-list">
+        {sessions.map(session => (
+          <div key={session.id} className="session-card">
+            <div className="session-info">
+              <h3>{session.courseName}</h3>
+              <p><strong>Code:</strong> {session.courseCode}</p>
+              <p><strong>Venue:</strong> {session.venue || 'N/A'}</p>
+              <p><strong>Status:</strong> {session.status}</p>
+              <p><strong>Expected:</strong> {session.expectedStudentCount}</p>
+            </div>
+
+            <div className="session-actions">
+              {session.status === 'IN_PROGRESS' && (
+                <button onClick={() => endSession(session.id)}>
+                  End Session
+                </button>
+              )}
+
+              <button onClick={() => exportSession(session.id)}>
+                Export CSV
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1012,7 +1971,7 @@ export default function ActiveSessionsPage() {
   }, []);
 
   async function fetchActiveSessions() {
-    const response = await fetch('/api/class-attendance/sessions?status=IN_PROGRESS', {
+    const response = await fetch('/api/attendance/sessions?status=IN_PROGRESS', {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
       }
@@ -1117,4 +2076,4 @@ export default function ActiveSessionsPage() {
 
 **Document Version:** 1.0  
 **Last Updated:** January 8, 2026  
-**Backend API Base:** `/api/class-attendance`
+**Backend API Base:** `/api/attendance`
