@@ -483,3 +483,338 @@ export interface AnalyticsExportRequest extends DateRangeFilter {
   format: "pdf" | "excel";
   reportType: "overview" | "handlers" | "discrepancies" | "exams";
 }
+
+// Class Attendance Types
+export const ClassSessionStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED'
+} as const;
+
+export type ClassSessionStatus = (typeof ClassSessionStatus)[keyof typeof ClassSessionStatus];
+
+export const ClassAttendanceStatus = {
+  PRESENT: 'PRESENT',
+  LATE: 'LATE',
+  EXCUSED: 'EXCUSED',
+  ABSENT: 'ABSENT'
+} as const;
+
+export type ClassAttendanceStatus = (typeof ClassAttendanceStatus)[keyof typeof ClassAttendanceStatus];
+
+export const VerificationMethod = {
+  QR_SCAN: 'QR_SCAN',
+  MANUAL_ENTRY: 'MANUAL_ENTRY',
+  BIOMETRIC_FINGERPRINT: 'BIOMETRIC_FINGERPRINT',
+  BIOMETRIC_FACE: 'BIOMETRIC_FACE',
+  LINK_SELF_MARK: 'LINK_SELF_MARK'
+} as const;
+
+export type VerificationMethod = (typeof VerificationMethod)[keyof typeof VerificationMethod];
+
+export const LinkType = {
+  ATTENDANCE: 'ATTENDANCE',
+  BIOMETRIC_ENROLLMENT: 'BIOMETRIC_ENROLLMENT'
+} as const;
+
+export type LinkType = (typeof LinkType)[keyof typeof LinkType];
+
+export interface ClassAttendanceSession {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  venue?: string;
+  lecturerName?: string;
+  notes?: string;
+  createdBy: string;
+  startTime: string;
+  endTime?: string;
+  status: ClassSessionStatus;
+  expectedStudentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentClassAttendance {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  verificationMethod: VerificationMethod;
+  status: ClassAttendanceStatus;
+  markedAt: string;
+  requiresConfirmation: boolean;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  recordedBy: string;
+  deviceId?: string;
+  biometricConfidence?: number;
+  linkTokenUsed?: string;
+  location?: {
+    lat: number;
+    lng: number;
+  };
+}
+
+export interface AttendanceLink {
+  id: string;
+  linkToken: string;
+  linkType: LinkType;
+  sessionId?: string;
+  studentId?: string;
+  createdBy: string;
+  expiresAt: string;
+  maxUses?: number;
+  usesCount: number;
+  requiresLocation: boolean;
+  geofence?: {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+  };
+  isActive: boolean;
+  deactivatedAt?: string;
+  createdAt: string;
+}
+
+export interface ClassStudent {
+  id: string;
+  indexNumber: string;
+  firstName: string;
+  lastName: string;
+  program: string;
+  level: number;
+  department?: string;
+  option?: string;
+  qrCode: string;
+  profilePicture?: string;
+  biometricEnrolled: boolean;
+  biometricProvider?: string;
+  biometricEnrolledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  department?: string;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// API Request/Response Types
+export interface SelfMarkAttendanceRequest {
+  linkToken: string;
+  studentId: string;
+  location?: {
+    lat: number;
+    lng: number;
+  };
+}
+
+export interface ValidateLinkResponse {
+  success: boolean;
+  data: {
+    id: string;
+    courseCode: string;
+    courseName: string;
+    lecturerName?: string;
+    venue?: string;
+    startTime: string;
+    endTime?: string;
+    status: ClassSessionStatus;
+    expectedStudentCount: number;
+  };
+}
+
+export interface SelfMarkAttendanceResponse {
+  success: boolean;
+  message: string;
+  data: StudentClassAttendance;
+}
+
+export interface AttendanceHistoryResponse {
+  success: boolean;
+  data: {
+    records: StudentClassAttendance[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  };
+}
+
+export interface ActiveSessionsResponse {
+  success: boolean;
+  data: ClassAttendanceSession[];
+}
+
+export interface SessionDetailsResponse {
+  success: boolean;
+  data: {
+    session: ClassAttendanceSession;
+    attendance: StudentClassAttendance[];
+    stats: {
+      totalExpected: number;
+      totalPresent: number;
+      totalLate: number;
+      totalExcused: number;
+      totalAbsent: number;
+      attendanceRate: number;
+    };
+  };
+}
+
+export interface CreateSessionRequest {
+  courseCode: string;
+  courseName: string;
+  venue?: string;
+  lecturerName?: string;
+  notes?: string;
+  startTime: string;
+  endTime?: string;
+  expectedStudentCount?: number;
+}
+
+export interface CreateSessionResponse {
+  success: boolean;
+  message: string;
+  data: ClassAttendanceSession;
+}
+
+export interface GenerateLinkRequest {
+  expiresInMinutes?: number;
+  maxUses?: number;
+  requiresLocation?: boolean;
+  geofence?: {
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+  };
+}
+
+export interface GenerateLinkResponse {
+  success: boolean;
+  message: string;
+  data: AttendanceLink;
+}
+
+export interface ActiveLinksResponse {
+  success: boolean;
+  data: AttendanceLink[];
+}
+
+export interface AttendanceAnalyticsResponse {
+  success: boolean;
+  data: {
+    period: {
+      startDate: string;
+      endDate: string;
+    };
+    summary: {
+      totalSessions: number;
+      totalAttendance: number;
+      averageAttendanceRate: number;
+      totalStudents: number;
+    };
+    trends: {
+      daily: Record<string, number>;
+      courseBreakdown: Record<string, {
+        sessions: number;
+        attendance: number;
+        rate: number;
+      }>;
+    };
+  };
+}
+
+// WebSocket Event Types
+export interface WebSocketEvent {
+  type: string;
+  sessionId?: string;
+  data?: unknown;
+  timestamp: string;
+}
+
+export interface SessionStartedEvent extends WebSocketEvent {
+  type: 'SESSION_STARTED';
+  data: ClassAttendanceSession;
+}
+
+export interface SessionEndedEvent extends WebSocketEvent {
+  type: 'SESSION_ENDED';
+  data: {
+    sessionId: string;
+    endTime: string;
+  };
+}
+
+export interface AttendanceRecordedEvent extends WebSocketEvent {
+  type: 'ATTENDANCE_RECORDED';
+  data: StudentClassAttendance;
+}
+
+export interface LiveUpdateEvent extends WebSocketEvent {
+  type: 'LIVE_UPDATE';
+  data: {
+    sessionId: string;
+    totalRecorded: number;
+    totalExpected: number;
+    attendanceRate: number;
+  };
+}
+
+export interface LinkGeneratedEvent extends WebSocketEvent {
+  type: 'LINK_GENERATED';
+  data: AttendanceLink;
+}
+
+export interface BiometricEnrolledEvent extends WebSocketEvent {
+  type: 'BIOMETRIC_ENROLLED';
+  data: {
+    studentId: string;
+    provider: string;
+  };
+}
+
+export interface AttendanceErrorEvent extends WebSocketEvent {
+  type: 'ERROR';
+  data: {
+    error: string;
+    sessionId?: string;
+  };
+}
+
+// Query Parameters
+export interface AttendanceHistoryFilters {
+  page?: number;
+  limit?: number;
+  courseCode?: string;
+  status?: ClassAttendanceStatus;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface SessionFilters {
+  page?: number;
+  limit?: number;
+  startDate?: string;
+  endDate?: string;
+  courseCode?: string;
+  status?: ClassSessionStatus;
+}
+
+export interface AnalyticsFilters {
+  startDate: string;
+  endDate: string;
+  courseCode?: string;
+  lecturerId?: string;
+  groupBy?: 'day' | 'week' | 'month' | 'course';
+}
