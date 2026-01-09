@@ -12,7 +12,6 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
-  ScrollView,
   Image,
   FlatList,
 } from "react-native";
@@ -23,23 +22,24 @@ import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CameraView, Camera } from "expo-camera";
-import * as LocalAuthentication from "expo-local-authentication";
 import { classAttendanceApi } from "@/api/classAttendance";
 import { useSocket } from "@/hooks/useSocket";
-import type { ClassAttendanceRecord, RecordAttendanceResponse } from "@/types";
 import * as Device from "expo-device";
 import { toast } from "@/utils/toast";
-import { searchStudents, type Student } from "@/api/students";
+import { type Student } from "@/api/students";
 import { getFileUrl } from "@/lib/api-client";
 import { Dialog } from "@/components/ui/dialog";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RecentRecordingsDrawer, { type RecentRecordingsDrawerRef, type RecentRecording } from "@/components/RecentRecordingsDrawer";
+import { useAuthStore } from "@/store/auth";
+import type { AttendanceSession, StudentAttendance, VerificationMethod } from "../../types";
 
 type RecordingMethod = "QR" | "MANUAL" | "BIOMETRIC";
 
 export default function AttendanceRecorder() {
   const colors = useThemeColors();
   const socket = useSocket();
+  const { user } = useAuthStore();
   const params = useLocalSearchParams();
   const sessionId = params.sessionId as string;
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -47,177 +47,187 @@ export default function AttendanceRecorder() {
   const [recording, setRecording] = useState(false);
   const [method, setMethod] = useState<RecordingMethod>("QR");
   const [indexNumber, setIndexNumber] = useState("");
-  const [activeSession, setActiveSession] = useState<ClassAttendanceRecord | null>(null);
+  const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [lastRecorded, setLastRecorded] = useState<RecordAttendanceResponse | null>(null);
-  const [hasBiometric, setHasBiometric] = useState(false);
+  const [lastRecorded, setLastRecorded] = useState<{ attendance: StudentAttendance; student: { id: string; indexNumber: string; firstName: string; lastName: string } } | null>(null);
   const [searchResults, setSearchResults] = useState<Student[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmingStudent, setConfirmingStudent] = useState<Student | null>(null);
   const [recentRecordings, setRecentRecordings] = useState<RecentRecording[]>([]);
+  const [isAssistant, setIsAssistant] = useState(false);
+  const [assistantRole, setAssistantRole] = useState<string | null>(null);
   const drawerRef = useRef<RecentRecordingsDrawerRef>(null);
 
-  
+  // Check if current user is creator or assistant
+  const checkUserPermissions = useCallback((session: AttendanceSession) => {
+    if (!user) {
+      setIsAssistant(false);
+      setAssistantRole(null);
+      return;
+    }
+
+    // Check if user is the creator
+    if (session.createdBy === user.id) {
+      setIsAssistant(false);
+      setAssistantRole(null);
+      return;
+    }
+
+    // Check if user is an assistant
+    const assistant = session.assistants?.find(a => a.userId === user.id);
+    if (assistant) {
+      setIsAssistant(true);
+      setAssistantRole(assistant.role);
+      // Only ASSISTANT role can record, OBSERVER cannot
+      if (assistant.role !== 'ASSISTANT') {
+        toast.error("You don't have permission to record attendance. Observer role can only view");
+      }
+    } else {
+      setIsAssistant(false);
+      setAssistantRole(null);
+    }
+  }, [user]);
+
+  const loadActiveSession = useCallback(async () => {
+    try {
+      setLoading(true);
+      let session: AttendanceSession | null = null;
+
+      if (sessionId) {
+        // Load specific session
+        const response = await classAttendanceApi.getSessionDetails(sessionId);
+        session = response;
+      } else {
+        // Load first active session
+        const sessions = await classAttendanceApi.getActiveSessions();
+        if (Array.isArray(sessions) && sessions.length > 0) {
+          session = sessions[0];
+        }
+      }
+
+      if (session) {
+        setActiveSession(session);
+        checkUserPermissions(session);
+      } else {
+        setActiveSession(null);
+        setIsAssistant(false);
+        setAssistantRole(null);
+      }
+    } catch (error: any) {
+      console.error("Failed to load active session:", error);
+      toast.error(error?.error || "Failed to load session");
+      setActiveSession(null);
+      setIsAssistant(false);
+      setAssistantRole(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, checkUserPermissions]);
 
   const setupSocketListeners = useCallback(() => {
     const unsubscribers: (() => void)[] = [];
 
     // Listen for attendance recorded events to update the session
     unsubscribers.push(socket.on("attendance:recorded", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
+      const typedData = data as { data: StudentAttendance };
       console.log("Real-time attendance update:", typedData);
-      if (activeSession && typedData.record.id === activeSession.id) {
-        setActiveSession(typedData.record);
+      if (activeSession && typedData.data.sessionId === activeSession.id) {
+        // Reload session to get updated attendance count
+        loadActiveSession();
       }
     }));
 
     // Listen for session ended events
-    unsubscribers.push(socket.on("session:ended", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
+    unsubscribers.push(socket.on("attendance:sessionEnded", (data: unknown) => {
+      const typedData = data as { data: AttendanceSession };
       console.log("Session ended:", typedData);
-      if (activeSession && typedData.record.id === activeSession.id) {
+      if (typedData.data.id === sessionId || (activeSession && typedData.data.id === activeSession.id)) {
         toast.info("Session ended by lecturer");
         setActiveSession(null);
         setLoading(false);
       }
     }));
 
-    // Listen for live updates
-    unsubscribers.push(socket.on("attendance:live_update", (data: unknown) => {
-      const typedData = data as { recordId: string; stats: any };
-      console.log("Live stats update:", typedData);
-      if (activeSession && typedData.recordId === activeSession.id) {
-        setActiveSession((prev) =>
-          prev ? { ...prev, totalStudents: typedData.stats.totalRecorded } : prev
-        );
-      }
-    }));
-
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
     };
-  }, [socket, activeSession]);
+  }, [socket, activeSession, sessionId, loadActiveSession]);
 
-  useEffect(() => {
-    requestCameraPermission();
-    checkBiometricSupport();
-    loadActiveSession();
-  }, [loadActiveSession]);
-
-  useEffect(() => {
-    if (!socket || !activeSession) return;
-
-    const cleanup = setupSocketListeners();
-    return cleanup;
-  }, [socket, activeSession, setupSocketListeners]);
-  
   const requestCameraPermission = async () => {
     const { status } = await Camera.requestCameraPermissionsAsync();
     setHasPermission(status === "granted");
   };
 
-  const checkBiometricSupport = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    setHasBiometric(compatible && enrolled);
-  };
-
-  // Search students with debouncing (wait for at least 6 characters for full index)
   useEffect(() => {
-    const searchTimer = setTimeout(async () => {
-      if (indexNumber.trim().length >= 6) {
-        setSearching(true);
-        try {
-          const response = await searchStudents(indexNumber.trim(), 10);
-          setSearchResults(response.students);
-        } catch (error) {
-          console.error("Search failed:", error);
-          setSearchResults([]);
-        } finally {
-          setSearching(false);
-        }
-      } else {
-        setSearchResults([]);
-      }
-    }, 500);
+    if (!socket || !activeSession) {
+      return;
+    }
 
-    return () => clearTimeout(searchTimer);
-  }, [indexNumber]);
+    const cleanup = setupSocketListeners();
+    return cleanup;
+  }, [socket, activeSession, setupSocketListeners]);
 
-  // Load recent recordings from AsyncStorage
   useEffect(() => {
-    if (activeSession?.id) {
-      AsyncStorage.getItem(`attendance_recent_${activeSession.id}`)
-        .then(data => {
-          if (data) {
-            setRecentRecordings(JSON.parse(data));
-          }
-        })
-        .catch(err => console.error('Failed to load recent recordings:', err));
-    }
-  }, [activeSession?.id]);
-
-  const loadActiveSession = useCallback(async () => {
-    try {
-      setLoading(true);
-      if (sessionId) {
-        // Load specific session
-        const response = await classAttendanceApi.getSession(sessionId);
-        // Handle both wrapped and unwrapped responses
-        setActiveSession(response.record || response);
-      } else {
-        // Load first active session
-        const response = await classAttendanceApi.getActiveSessions();
-        if (response.sessions && response.sessions.length > 0) {
-          setActiveSession(response.sessions[0]);
-        }
-      }
-    } catch (error: any) {
-      console.error("Failed to load active session:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionId]);
+    requestCameraPermission();
+    loadActiveSession();
+  }, [loadActiveSession]);
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || !activeSession) return;
+
+    // Check permissions
+    if (isAssistant && assistantRole !== 'ASSISTANT') {
+      toast.error("You don't have permission to record attendance");
+      return;
+    }
 
     setScanned(true);
     setRecording(true);
 
     try {
       const deviceId = Device.osBuildId || Device.osInternalBuildId || `device-${Date.now()}`;
-      const response = await classAttendanceApi.recordAttendanceByQR({
-        recordId: activeSession.id,
-        qrCode: data,
-        deviceId,
+      const response = await classAttendanceApi.recordAttendance(activeSession.id, {
+        identifier: data,
+        method: "QR_SCAN" as VerificationMethod,
+        metadata: {
+          deviceId,
+        },
       });
 
-      setLastRecorded(response);
+      setLastRecorded({
+        attendance: response.data.attendance,
+        student: {
+          id: response.data.student.id,
+          indexNumber: response.data.student.indexNumber,
+          firstName: response.data.student.name.split(' ')[0] || '',
+          lastName: response.data.student.name.split(' ').slice(1).join(' ') || '',
+        }
+      });
       setShowSuccess(true);
-      toast.success(
-        `✓ ${response.student.firstName} ${response.student.lastName}`,
-        `Attendance recorded via QR`
-      );
+      const studentName = response.data.student.name || `${response.data.student.indexNumber}`;
+      toast.success(`✓ ${studentName} - Attendance recorded via QR`);
 
       // Add to recent recordings
+      // Parse name if it's a full name string
+      const nameParts = studentName.split(' ');
       const newRecording: RecentRecording = {
-        id: response.attendance.id,
-        studentId: response.student.id,
-        firstName: response.student.firstName,
-        lastName: response.student.lastName,
-        indexNumber: response.student.indexNumber,
-        profilePicture: response.student.profilePicture,
+        id: response.data.attendance.id,
+        studentId: response.data.student.id,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        indexNumber: response.data.student.indexNumber,
+        profilePicture: undefined, // Will be loaded from student data if needed
         timestamp: new Date().toISOString(),
-        method: response.attendance.verificationMethod,
-        status: response.attendance.status,
+        method: response.data.attendance.verificationMethod,
+        status: response.data.attendance.status,
       };
       const updated = [newRecording, ...recentRecordings];
       setRecentRecordings(updated);
       await AsyncStorage.setItem(`attendance_recent_${activeSession.id}`, JSON.stringify(updated));
+
+      // Reload session to update counts
+      loadActiveSession();
 
       setTimeout(() => {
         setShowSuccess(false);
@@ -226,7 +236,7 @@ export default function AttendanceRecorder() {
     } catch (error: any) {
       console.error("QR scan error:", error);
       // Handle duplicate attendance
-      if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
+      if (error.status === 409 || error.code === 'ALREADY_RECORDED' || error.error?.includes('already')) {
         toast.info("Student already marked attendance");
       } else {
         // Show user-friendly error message
@@ -247,48 +257,65 @@ export default function AttendanceRecorder() {
   const handleConfirmAttendance = async () => {
     if (!confirmingStudent || !activeSession) return;
 
+    // Check permissions
+    if (isAssistant && assistantRole !== 'ASSISTANT') {
+      toast.error("You don't have permission to record attendance");
+      setShowConfirmDialog(false);
+      return;
+    }
+
     setShowConfirmDialog(false);
     setRecording(true);
     try {
-      const response = await classAttendanceApi.recordAttendanceByIndex({
-        recordId: activeSession.id,
-        indexNumber: confirmingStudent.indexNumber.toUpperCase(),
-        verificationMethod: "MANUAL_INDEX",
+      const response = await classAttendanceApi.recordAttendance(activeSession.id, {
+        identifier: confirmingStudent.indexNumber.toUpperCase(),
+        method: "MANUAL_ENTRY" as VerificationMethod,
       });
 
-      setLastRecorded(response);
+      setLastRecorded({
+        attendance: response.data.attendance,
+        student: {
+          id: response.data.student.id,
+          indexNumber: response.data.student.indexNumber,
+          firstName: response.data.student.name.split(' ')[0] || '',
+          lastName: response.data.student.name.split(' ').slice(1).join(' ') || '',
+        }
+      });
       setShowSuccess(true);
-      toast.success(
-        `✓ ${response.student.firstName} ${response.student.lastName}`,
-        `Attendance recorded manually`
-      );
+      const studentName = response.data.student.name || `${response.data.student.indexNumber}`;
+      toast.success(`✓ ${studentName} - Attendance recorded manually`);
 
       // Add to recent recordings
+      // Parse name if it's a full name string
+      const nameParts = studentName.split(' ');
       const newRecording: RecentRecording = {
-        id: response.attendance.id,
-        studentId: response.student.id,
-        firstName: response.student.firstName,
-        lastName: response.student.lastName,
-        indexNumber: response.student.indexNumber,
-        profilePicture: response.student.profilePicture,
+        id: response.data.attendance.id,
+        studentId: response.data.student.id,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        indexNumber: response.data.student.indexNumber,
+        profilePicture: undefined, // Will be loaded from student data if needed
         timestamp: new Date().toISOString(),
-        method: response.attendance.verificationMethod,
-        status: response.attendance.status,
+        method: response.data.attendance.verificationMethod,
+        status: response.data.attendance.status,
       };
       const updated = [newRecording, ...recentRecordings];
       setRecentRecordings(updated);
       await AsyncStorage.setItem(`attendance_recent_${activeSession.id}`, JSON.stringify(updated));
 
       setIndexNumber("");
-      setSelectedStudent(null);
       setConfirmingStudent(null);
       setSearchResults([]);
+      
+      // Reload session to update counts
+      loadActiveSession();
+
       setTimeout(() => {
         setShowSuccess(false);
       }, 2000);
     } catch (error: any) {
       console.error("Manual entry error:", error);
-      if (error.status === 409 || error.code === 'ALREADY_RECORDED') {
+      if (error.status === 409 || error.code === 'ALREADY_RECORDED' || error.error?.includes('already')) {
         toast.info("Student already marked attendance");
       } else {
         const errorMessage = error.error || error.message || "Failed to record attendance";
@@ -299,34 +326,6 @@ export default function AttendanceRecorder() {
     }
   };
 
-  const handleBiometricAuth = async () => {
-    if (!activeSession) {
-      toast.error("No Active Session", "Please start a session first");
-      return;
-    }
-
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Verify attendance with biometric",
-        fallbackLabel: "Use PIN",
-      });
-
-      if (result.success) {
-        setRecording(true);
-        // Note: In a real implementation, you would need to:
-        // 1. Get the student's ID associated with this device/biometric
-        // 2. Get the actual biometric data (this varies by platform)
-        // For now, this is a placeholder showing the flow
-        toast.info(
-          "Biometric Verified",
-          "In production, this would record attendance with biometric data"
-        );
-        setRecording(false);
-      }
-    } catch {
-      toast.error("Authentication Failed", "Biometric authentication failed");
-    }
-  };
 
   const renderMethodSelector = () => (
     <View style={styles.methodSelector}>
@@ -373,44 +372,6 @@ export default function AttendanceRecorder() {
           ]}
         >
           Manual
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.methodButton,
-          { borderColor: method === "BIOMETRIC" ? colors.primary : colors.border },
-          method === "BIOMETRIC" && { backgroundColor: `${colors.primary}10` },
-          !hasBiometric && { opacity: 0.4 },
-        ]}
-        onPress={() => hasBiometric && setMethod("BIOMETRIC")}
-        disabled={!hasBiometric}
-      >
-        <Ionicons
-          name="finger-print-outline"
-          size={24}
-          color={
-            method === "BIOMETRIC"
-              ? colors.primary
-              : !hasBiometric
-              ? colors.foregroundMuted
-              : colors.foregroundMuted
-          }
-        />
-        <Text
-          style={[
-            styles.methodText,
-            {
-              color:
-                method === "BIOMETRIC"
-                  ? colors.primary
-                  : !hasBiometric
-                  ? colors.foregroundMuted
-                  : colors.foregroundMuted,
-            },
-          ]}
-        >
-          Biometric
         </Text>
       </TouchableOpacity>
     </View>
@@ -466,7 +427,7 @@ export default function AttendanceRecorder() {
             Record Attendance
           </Text>
           <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-            {activeSession.courseCode} - {activeSession.courseName || "Course"}
+            {activeSession?.courseCode || "Loading..."} - {activeSession?.courseName || "Course"}
           </Text>
         </View>
         <TouchableOpacity
@@ -482,8 +443,14 @@ export default function AttendanceRecorder() {
         <View style={styles.sessionBannerLeft}>
           <Ionicons name="checkmark-circle" size={20} color={colors.success} />
           <Text style={[styles.sessionBannerText, { color: colors.success }]}>
-            Session Active • {activeSession.students?.length || 0} recorded
+            Session Active • {activeSession?.attendance?.length || 0} recorded
           </Text>
+          {isAssistant && (
+            <View style={[styles.assistantBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="person-outline" size={12} color="#fff" />
+              <Text style={styles.assistantBadgeText}>Assistant</Text>
+            </View>
+          )}
         </View>
         <TouchableOpacity onPress={() => drawerRef.current?.toggle()} style={styles.eyeButton}>
           <Ionicons name="eye-outline" size={24} color={colors.success} />
@@ -562,7 +529,6 @@ export default function AttendanceRecorder() {
                       onPress={() => {
                         setIndexNumber("");
                         setSearchResults([]);
-                        setSelectedStudent(null);
                       }}
                     >
                       <Ionicons name="close-circle" size={20} color={colors.foregroundMuted} />
@@ -573,9 +539,6 @@ export default function AttendanceRecorder() {
                   <Text style={[styles.searchHint, { color: colors.foregroundMuted }]}>
                     Type at least 6 characters to search...
                   </Text>
-                )}
-                {searching && (
-                  <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
                 )}
               </View>
 
@@ -628,7 +591,7 @@ export default function AttendanceRecorder() {
               )}
 
               {/* No Results */}
-              {indexNumber.trim().length >= 6 && !searching && searchResults.length === 0 && (
+              {indexNumber.trim().length >= 6 && searchResults.length === 0 && (
                 <View style={styles.noResults}>
                   <Ionicons name="search" size={48} color={colors.foregroundMuted} />
                   <Text style={[styles.noResultsText, { color: colors.foregroundMuted }]}>
@@ -640,28 +603,6 @@ export default function AttendanceRecorder() {
           </View>
         )}
 
-        {method === "BIOMETRIC" && (
-          <Card elevation="sm" style={styles.biometricCard}>
-            <View style={styles.biometricContainer}>
-              <Ionicons name="finger-print" size={80} color={colors.primary} />
-              <Text style={[styles.biometricTitle, { color: colors.foreground }]}>
-                Biometric Verification
-              </Text>
-              <Text style={[styles.biometricSubtext, { color: colors.foregroundMuted }]}>
-                Use your fingerprint or face ID to mark attendance
-              </Text>
-              <Button
-                variant="default"
-                onPress={handleBiometricAuth}
-                disabled={recording}
-                style={styles.biometricButton}
-              >
-                <Ionicons name="finger-print-outline" size={20} color="#fff" />
-                {recording ? "Verifying..." : "Verify Identity"}
-              </Button>
-            </View>
-          </Card>
-        )}
       </View>
 
       {/* Success Modal */}
@@ -675,10 +616,10 @@ export default function AttendanceRecorder() {
             {lastRecorded && (
               <View style={styles.successInfo}>
                 <Text style={[styles.successName, { color: colors.foreground }]}>
-                  {lastRecorded.student.firstName} {lastRecorded.student.lastName}
+                  {lastRecorded?.student?.firstName} {lastRecorded?.student?.lastName}
                 </Text>
                 <Text style={[styles.successIndex, { color: colors.foregroundMuted }]}>
-                  {lastRecorded.student.indexNumber}
+                  {lastRecorded?.student?.indexNumber}
                 </Text>
               </View>
             )}
@@ -687,32 +628,31 @@ export default function AttendanceRecorder() {
       </Modal>
 
       {/* Confirmation Dialog */}
-      {confirmingStudent && (
-        <Dialog
-          visible={showConfirmDialog}
-          onClose={() => {
+      <Dialog
+        visible={showConfirmDialog}
+        onClose={() => {
+          setShowConfirmDialog(false);
+          setConfirmingStudent(null);
+        }}
+        title="Confirm Attendance"
+        variant="default"
+        primaryAction={{
+          label: recording ? "Recording..." : "Mark Present",
+          onPress: handleConfirmAttendance,
+        }}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
             setShowConfirmDialog(false);
             setConfirmingStudent(null);
-          }}
-          title="Confirm Attendance"
-          variant="default"
-          primaryAction={{
-            label: recording ? "Recording..." : "Mark Present",
-            onPress: handleConfirmAttendance,
-          }}
-          secondaryAction={{
-            label: "Cancel",
-            onPress: () => {
-              setShowConfirmDialog(false);
-              setConfirmingStudent(null);
-            },
-          }}
-          icon="person"
-        >
+          },
+        }}
+        icon="person"
+        message={
           <View style={styles.confirmDialogContent}>
-            {confirmingStudent.profilePicture ? (
+            {confirmingStudent?.profilePicture ? (
               <Image
-                source={{ uri: getFileUrl(confirmingStudent.profilePicture) }}
+                source={{ uri: getFileUrl(confirmingStudent.profilePicture!) }}
                 style={styles.confirmStudentPhoto}
               />
             ) : (
@@ -721,20 +661,20 @@ export default function AttendanceRecorder() {
               </View>
             )}
             <Text style={[styles.confirmStudentName, { color: colors.foreground }]}>
-              {confirmingStudent.firstName} {confirmingStudent.lastName}
+              {confirmingStudent?.firstName} {confirmingStudent?.lastName}
             </Text>
             <Text style={[styles.confirmStudentIndex, { color: colors.primary }]}>
-              {confirmingStudent.indexNumber}
+              {confirmingStudent?.indexNumber}
             </Text>
             <Text style={[styles.confirmStudentProgram, { color: colors.foregroundMuted }]}>
-              {confirmingStudent.program}
+              {confirmingStudent?.program}
             </Text>
             <Text style={[styles.confirmStudentLevel, { color: colors.foregroundMuted }]}>
-              Level {confirmingStudent.level || "N/A"}
+              Level {confirmingStudent?.level || "N/A"}
             </Text>
           </View>
-        </Dialog>
-      )}
+        }
+      />
 
       {/* Recent Recordings Drawer */}
       <RecentRecordingsDrawer ref={drawerRef} recordings={recentRecordings} />
@@ -964,27 +904,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  biometricCard: {
-    marginBottom: 16,
-  },
-  biometricContainer: {
-    alignItems: "center",
-    paddingVertical: 32,
-    gap: 16,
-  },
-  biometricTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  biometricSubtext: {
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 24,
-  },
-  biometricButton: {
-    marginTop: 16,
+  assistantBadge: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  assistantBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
   },
   recentCard: {
     marginTop: 16,

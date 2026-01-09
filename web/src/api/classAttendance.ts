@@ -45,6 +45,18 @@ export const classAttendanceApi = {
   },
 
   /**
+   * Lookup student by index number (for self-mark flow)
+   * This is a public endpoint that returns minimal student info
+   */
+  lookupStudentByIndex: async (indexNumber: string): Promise<{ id: string; indexNumber: string; firstName: string; lastName: string }> => {
+    // Use the existing student QR endpoint which is public
+    const student = await apiClient.get<{ id: string; indexNumber: string; firstName: string; lastName: string }>(
+      `/students/qr?indexNumber=${encodeURIComponent(indexNumber)}`
+    );
+    return student;
+  },
+
+  /**
    * Get attendance history for authenticated user
    */
   getAttendanceHistory: async (

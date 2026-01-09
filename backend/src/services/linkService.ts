@@ -36,6 +36,39 @@ interface LinkValidation {
  */
 export class LinkService {
   /**
+   * Generate a unique 5-digit code for attendance links
+   */
+  private async generate5DigitCode(): Promise<string> {
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      // Generate random 5-digit code (10000-99999)
+      const code = Math.floor(10000 + Math.random() * 90000).toString();
+      
+      // Check if code is already in use by an active link
+      const existing = await prisma.attendanceLink.findFirst({
+        where: {
+          linkToken: code,
+          isActive: true,
+          expiresAt: {
+            gt: new Date()
+          }
+        }
+      });
+
+      if (!existing) {
+        return code;
+      }
+
+      attempts++;
+    }
+
+    // Fallback to longer code if collision persists
+    throw new Error("Failed to generate unique 5-digit code. Please try again.");
+  }
+
+  /**
    * Generate a new attendance link
    */
   async generateLink(params: GenerateLinkParams) {
@@ -54,15 +87,12 @@ export class LinkService {
       throw new Error("Unauthorized to create link for this session");
     }
 
-    if (session.status !== SessionStatus.IN_PROGRESS) {
+    if (session.status !== SessionStatus.IN_PROGRESS && session.status !== SessionStatus.PAUSED) {
       throw new Error("Cannot generate link for inactive session");
     }
 
-    // Deactivate existing active links (single active link strategy)
-    await this.deactivateSessionLinks(sessionId);
-
-    // Generate new link
-    const linkToken = crypto.randomBytes(16).toString('hex');
+    // Generate unique 5-digit code
+    const linkToken = await this.generate5DigitCode();
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
 
@@ -105,6 +135,15 @@ export class LinkService {
     token: string,
     studentLocation?: { lat: number; lng: number }
   ): Promise<LinkValidation> {
+    // Validate token format (5-digit code)
+    if (!/^\d{5}$/.test(token)) {
+      return {
+        valid: false,
+        error: "Invalid link code format. Please enter a 5-digit code.",
+        errorCode: "INVALID_FORMAT",
+      };
+    }
+
     // Find the link
     const link = await prisma.attendanceLink.findUnique({
       where: { linkToken: token },

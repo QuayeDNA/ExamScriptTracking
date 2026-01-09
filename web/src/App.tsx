@@ -38,6 +38,7 @@ import { useSocket } from "@/hooks/useSocket";
 import DesignSystemDemo from "@/pages/DesignSystemDemo";
 import { MobileDetectionWrapper } from "@/components/MobileDetectionWrapper";
 import StudentQRLookup from "@/pages/StudentQRLookup";
+import MarkAttendancePage from "@/pages/attend/MarkAttendancePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -71,6 +72,8 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/student-qr" element={<StudentQRLookup />} />
+              <Route path="/attend/:token" element={<MarkAttendancePage />} />
+              <Route path="/attend" element={<MarkAttendancePage />} />
               <Route
                 path="/design-system-demo"
                 element={<DesignSystemDemo />}

@@ -14,8 +14,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
-  Switch,
-  Clipboard as RNClipboard,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,13 +25,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { classAttendanceApi } from "@/api/classAttendance";
 import { useSocket } from "@/hooks/useSocket";
+import CreateSessionDrawer from "@/components/CreateSessionDrawer";
+import TemplateSelector from "@/components/TemplateSelector";
+import GenerateLinkDrawer from "@/components/GenerateLinkDrawer";
 import type {
-  ClassAttendanceRecord,
-  StartSessionRequest,
-  RecordingStatus,
+  AttendanceSession,
 } from "@/types";
-import * as Device from "expo-device";
-import * as Location from "expo-location";
 import { toast } from "@/utils/toast";
 
 const styles = StyleSheet.create({
@@ -77,6 +75,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   addButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  templateButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -513,61 +518,55 @@ export default function AttendanceSessions() {
   const colors = useThemeColors();
   const socket = useSocket();
   const router = useRouter();
-  const [activeSession, setActiveSession] = useState<ClassAttendanceRecord | null>(null);
-  const [completedSessions, setCompletedSessions] = useState<ClassAttendanceRecord[]>([]);
+  const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
+  const [completedSessions, setCompletedSessions] = useState<
+    AttendanceSession[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showStartForm, setShowStartForm] = useState(false);
-  const [formData, setFormData] = useState<Partial<StartSessionRequest>>({
-    courseCode: "",
-    courseName: "",
-    lecturerName: "",
-    venue: "",
-    notes: "",
-    totalRegisteredStudents: undefined,
-  });
-  const [submitting, setSubmitting] = useState(false);
+  const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [selectedSessionForLink, setSelectedSessionForLink] = useState<ClassAttendanceRecord | null>(null);
-  const [linkExpiration, setLinkExpiration] = useState("60"); // minutes
-  const [generatingLink, setGeneratingLink] = useState(false);
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [existingLink, setExistingLink] = useState<any>(null);
-  const [fetchingExistingLink, setFetchingExistingLink] = useState(false);
+  const [selectedSessionForLink, setSelectedSessionForLink] =
+    useState<AttendanceSession | null>(null);
   const [showEndDialog, setShowEndDialog] = useState(false);
-  const [sessionToEnd, setSessionToEnd] = useState<ClassAttendanceRecord | null>(null);
+  const [sessionToEnd, setSessionToEnd] = useState<AttendanceSession | null>(
+    null
+  );
   const [endingSession, setEndingSession] = useState(false);
-  
+
   // Delete session states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<ClassAttendanceRecord | null>(null);
+  const [sessionToDelete, setSessionToDelete] =
+    useState<AttendanceSession | null>(null);
   const [deletingSession, setDeletingSession] = useState(false);
-  
-  // Security settings for link generation
-  const [securitySettings, setSecuritySettings] = useState({
-    enableGeofencing: true,
-    radius: 50, // meters
-    enforceTimeWindow: true,
-    oneSubmissionOnly: true,
-  });
-  const [capturingLocation, setCapturingLocation] = useState(false);
+
+  // Save template states
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
+  const [sessionToSaveAsTemplate, setSessionToSaveAsTemplate] =
+    useState<AttendanceSession | null>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const loadActiveSessions = useCallback(async () => {
     try {
       setLoading(true);
       const [activeResponse, historyResponse] = await Promise.all([
         classAttendanceApi.getActiveSessions(),
-        classAttendanceApi.getAttendanceHistory({ limit: 10 })
+        classAttendanceApi.getAttendanceHistory({ limit: 10 }),
       ]);
-      
-      // Set active session (only first one)
-      setActiveSession(activeResponse.sessions?.[0] || null);
-      
-      // Set completed sessions from history
-      setCompletedSessions(historyResponse.records || []);
+
+      // Set active sessions - ensure it's always an array
+      setActiveSessions(Array.isArray(activeResponse) ? activeResponse : []);
+
+      // Set completed sessions from history - ensure it's always an array
+      setCompletedSessions(Array.isArray(historyResponse?.sessions) ? historyResponse.sessions : []);
     } catch (error: any) {
       console.error("Failed to load sessions:", error);
       toast.error(error?.error || "Failed to load sessions");
+      // Set empty arrays on error to prevent crashes
+      setActiveSessions([]);
+      setCompletedSessions([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -581,34 +580,50 @@ export default function AttendanceSessions() {
     const unsubscribers: (() => void)[] = [];
 
     // Listen for session started events
-    unsubscribers.push(socket.on("session:started", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
-      console.log("Session started:", typedData);
-      setActiveSession(typedData.record);
-    }));
+    unsubscribers.push(
+      socket.on("attendance:sessionStarted", (data: unknown) => {
+        const typedData = data as { data: AttendanceSession };
+        console.log("Session started:", typedData);
+        setActiveSessions((prev) => [typedData.data, ...prev]);
+      })
+    );
 
     // Listen for session ended events
-    unsubscribers.push(socket.on("session:ended", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
-      console.log("Session ended:", typedData);
-      setActiveSession(null);
-      // Add to completed sessions
-      setCompletedSessions((prev) => [typedData.record, ...prev]);
-    }));
+    unsubscribers.push(
+      socket.on("attendance:sessionEnded", (data: unknown) => {
+        const typedData = data as { data: AttendanceSession };
+        console.log("Session ended:", typedData);
+        setActiveSessions((prev) =>
+          prev.filter((s) => s.id !== typedData.data.id)
+        );
+        // Add to completed sessions
+        setCompletedSessions((prev) => [typedData.data, ...prev]);
+      })
+    );
 
     // Listen for attendance recorded events
-    unsubscribers.push(socket.on("attendance:recorded", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
-      console.log("Attendance recorded:", typedData);
-      if (activeSession?.id === typedData.record.id) {
-        setActiveSession(typedData.record);
-      }
-    }));
+    unsubscribers.push(
+      socket.on("attendance:recorded", (data: unknown) => {
+        const typedData = data as { data: any };
+        console.log("Attendance recorded:", typedData);
+        // Update the session in active sessions if it exists
+        setActiveSessions((prev) =>
+          prev.map((session) =>
+            session.id === typedData.data.sessionId
+              ? {
+                  ...session,
+                  attendance: [...(session.attendance || []), typedData.data],
+                }
+              : session
+          )
+        );
+      })
+    );
 
     return () => {
-      unsubscribers.forEach(unsubscribe => unsubscribe());
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const handleRefresh = () => {
@@ -616,114 +631,45 @@ export default function AttendanceSessions() {
     loadActiveSessions();
   };
 
-  const handleStartSession = async () => {
-    if (!formData.courseCode?.trim()) {
-      toast.error("Course code is required");
-      return;
-    }
 
-    try {
-      setSubmitting(true);
-      const deviceId = Device.osBuildId || Device.osInternalBuildId || `device-${Date.now()}`;
-      const deviceName = `${Device.brand} ${Device.modelName}`;
 
-      await classAttendanceApi.startSession({
-        deviceId,
-        deviceName,
-        courseCode: formData.courseCode.trim(),
-        courseName: formData.courseName?.trim(),
-        lecturerName: formData.lecturerName?.trim(),
-        notes: formData.notes?.trim(),
-        totalRegisteredStudents: formData.totalRegisteredStudents,
-      });
-
-      toast.success("Attendance session started successfully");
-      setShowStartForm(false);
-      setFormData({
-        courseCode: "",
-        courseName: "",
-        lecturerName: "",
-        notes: "",
-        totalRegisteredStudents: undefined,
-      });
-      loadActiveSessions();
-    } catch (error: any) {
-      console.error("Failed to start session:", error);
-      toast.error(error?.error || "Failed to start session");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGenerateLink = async () => {
-    if (!selectedSessionForLink) return;
-    
-    try {
-      setGeneratingLink(true);
-      
-      // Capture location if geofencing is enabled
-      let geolocation;
-      if (securitySettings.enableGeofencing) {
-        setCapturingLocation(true);
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        
-        if (status !== 'granted') {
-          toast.error('Location permission is required for geofencing');
-          setCapturingLocation(false);
-          setGeneratingLink(false);
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        
-        geolocation = {
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-          radius: securitySettings.radius,
-        };
-        setCapturingLocation(false);
-      }
-      
-      const response = await classAttendanceApi.generateAttendanceLink({
-        recordId: selectedSessionForLink.id,
-        expiresInMinutes: parseInt(linkExpiration),
-        maxUses: 100,
-        geolocation,
-      });
-
-      setGeneratedLink(response.link.url);
-      toast.success('Attendance link generated successfully');
-    } catch (error: any) {
-      console.error("Failed to generate link:", error);
-      toast.error(error?.error || "Failed to generate attendance link");
-    } finally {
-      setGeneratingLink(false);
-      setCapturingLocation(false);
-    }
-  };
-
-  const fetchExistingLink = async (recordId: string) => {
-    try {
-      setFetchingExistingLink(true);
-      const response = await classAttendanceApi.getActiveLinks(recordId);
-      if (response.links && response.links.length > 0) {
-        setExistingLink(response.links[0]); // Get the most recent active link
-      } else {
-        setExistingLink(null);
-      }
-    } catch (error: any) {
-      console.error("Failed to fetch existing link:", error);
-      setExistingLink(null);
-    } finally {
-      setFetchingExistingLink(false);
-    }
-  };
-
-  const handleEndSession = (session: ClassAttendanceRecord) => {
+  const handleEndSession = (session: AttendanceSession) => {
     setSessionToEnd(session);
     setShowEndDialog(true);
+  };
+
+  const handlePauseResumeSession = async (session: AttendanceSession) => {
+    const isPaused = session.status === 'PAUSED';
+    const action = isPaused ? 'resume' : 'pause';
+    
+    Alert.alert(
+      isPaused ? 'Resume Session' : 'Pause Session',
+      `Are you sure you want to ${action} this session?\n\nCourse: ${session.courseCode}`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: isPaused ? 'Resume' : 'Pause',
+          onPress: async () => {
+            try {
+              if (isPaused) {
+                await classAttendanceApi.resumeSession(session.id);
+                toast.success('Session resumed successfully');
+              } else {
+                await classAttendanceApi.pauseSession(session.id);
+                toast.success('Session paused successfully');
+              }
+              loadActiveSessions();
+            } catch (error: any) {
+              console.error(`Failed to ${action} session:`, error);
+              toast.error(error?.error || `Failed to ${action} session`);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const confirmEndSession = async () => {
@@ -731,12 +677,10 @@ export default function AttendanceSessions() {
 
     try {
       setEndingSession(true);
-      const response = await classAttendanceApi.endSession({ recordId: sessionToEnd.id });
-      
-      toast.success(
-        `Session ended. Total: ${response.summary.totalRecorded}, Present: ${response.summary.presentCount}`
-      );
-      
+      await classAttendanceApi.endSession(sessionToEnd.id);
+
+      toast.success(`Session ended successfully`);
+
       setShowEndDialog(false);
       setSessionToEnd(null);
       loadActiveSessions();
@@ -748,9 +692,45 @@ export default function AttendanceSessions() {
     }
   };
 
-  const handleDeleteSession = (session: ClassAttendanceRecord) => {
+  const handleDeleteSession = (session: AttendanceSession) => {
     setSessionToDelete(session);
     setShowDeleteDialog(true);
+  };
+
+  const handleSaveAsTemplate = async (session: AttendanceSession) => {
+    setSessionToSaveAsTemplate(session);
+    setTemplateName(`${session.courseCode} Template`);
+    setShowSaveTemplateDialog(true);
+  };
+
+  const confirmSaveTemplate = async () => {
+    if (!sessionToSaveAsTemplate) return;
+
+    if (!templateName?.trim()) {
+      toast.error("Template name is required");
+      return;
+    }
+
+    try {
+      setSavingTemplate(true);
+      await classAttendanceApi.saveSessionTemplate({
+        name: templateName.trim(),
+        courseCode: sessionToSaveAsTemplate.courseCode,
+        courseName: sessionToSaveAsTemplate.courseName,
+        venue: sessionToSaveAsTemplate.venue,
+        expectedStudentCount: sessionToSaveAsTemplate.expectedStudentCount,
+      });
+
+      toast.success(`Template "${templateName}" saved successfully`);
+      setShowSaveTemplateDialog(false);
+      setSessionToSaveAsTemplate(null);
+      setTemplateName("");
+    } catch (error: any) {
+      console.error("Failed to save template:", error);
+      toast.error(error?.error || "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   const confirmDeleteSession = async () => {
@@ -759,11 +739,9 @@ export default function AttendanceSessions() {
     try {
       setDeletingSession(true);
       await classAttendanceApi.deleteSession(sessionToDelete.id);
-      
-      toast.success(
-        `Session deleted: ${sessionToDelete.courseCode}`
-      );
-      
+
+      toast.success(`Session deleted: ${sessionToDelete.courseCode}`);
+
       setShowDeleteDialog(false);
       setSessionToDelete(null);
       loadActiveSessions();
@@ -785,59 +763,128 @@ export default function AttendanceSessions() {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
-  const renderSessionCard = (session: ClassAttendanceRecord, isActive: boolean) => {
-    const attendanceCount = session.students?.length || 0;
-    const totalRegistered = session.totalStudents;
-    const attendanceRate = totalRegistered > 0 ? (attendanceCount / totalRegistered) : 0;
-    const attendanceColor = attendanceRate >= 0.8 ? colors.success :
-                           attendanceRate >= 0.6 ? colors.warning : colors.error;
+  const renderSessionCard = (session: AttendanceSession, isActive: boolean) => {
+    const attendanceCount = session.attendance?.length || 0;
+    const totalExpected = session.expectedStudentCount || 0;
+    const attendanceRate =
+      totalExpected > 0 ? attendanceCount / totalExpected : 0;
+    const attendanceColor =
+      attendanceRate >= 0.8
+        ? colors.success
+        : attendanceRate >= 0.6
+          ? colors.warning
+          : colors.error;
 
     return (
-      <Card key={session.id} elevation="sm" style={{ padding: isActive ? 16 : 12 }}>
+      <Card
+        key={session.id}
+        elevation="sm"
+        style={{ padding: isActive ? 16 : 12 }}
+      >
         {isActive ? (
           // Active session - full detailed card
           <>
             <View style={{ marginBottom: 16 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: 12,
+                }}
+              >
                 <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={{ fontSize: 22, fontWeight: 'bold', color: colors.foreground, marginBottom: 4 }}>
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: "bold",
+                      color: colors.foreground,
+                      marginBottom: 4,
+                    }}
+                  >
                     {session.courseCode}
                   </Text>
                   {session.courseName && (
-                    <Text style={{ fontSize: 15, color: colors.foregroundMuted }}>
+                    <Text
+                      style={{ fontSize: 15, color: colors.foregroundMuted }}
+                    >
                       {session.courseName}
                     </Text>
                   )}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: `${colors.success}20` }]}>
-                  <Ionicons name="radio-button-on" size={14} color={colors.success} />
-                  <Text style={[styles.statusText, { color: colors.success }]}>
-                    Recording
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { 
+                      backgroundColor: session.status === 'PAUSED' 
+                        ? `${colors.warning}20` 
+                        : `${colors.success}20` 
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={session.status === 'PAUSED' 
+                      ? "pause-circle" 
+                      : "radio-button-on"}
+                    size={14}
+                    color={session.status === 'PAUSED' 
+                      ? colors.warning 
+                      : colors.success}
+                  />
+                  <Text style={[
+                    styles.statusText, 
+                    { 
+                      color: session.status === 'PAUSED' 
+                        ? colors.warning 
+                        : colors.success 
+                    }
+                  ]}>
+                    {session.status === 'PAUSED' ? 'PAUSED' : session.status}
                   </Text>
                 </View>
               </View>
 
               {/* Attendance Summary */}
-              <View style={{ 
-                flexDirection: 'row', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                backgroundColor: colors.muted,
-                padding: 12,
-                borderRadius: 12,
-                marginBottom: 12
-              }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  backgroundColor: colors.muted,
+                  padding: 12,
+                  borderRadius: 12,
+                  marginBottom: 12,
+                }}
+              >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, color: colors.foregroundMuted, marginBottom: 4 }}>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: colors.foregroundMuted,
+                      marginBottom: 4,
+                    }}
+                  >
                     Attendance
                   </Text>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.foreground }}>
-                    {attendanceCount} / {totalRegistered || 'N/A'} students
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "bold",
+                      color: colors.foreground,
+                    }}
+                  >
+                    {attendanceCount} / {totalExpected || "N/A"} students
                   </Text>
                 </View>
-                {totalRegistered > 0 && (
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 28, fontWeight: 'bold', color: attendanceColor }}>
+                {totalExpected > 0 && (
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text
+                      style={{
+                        fontSize: 28,
+                        fontWeight: "bold",
+                        color: attendanceColor,
+                      }}
+                    >
                       {Math.round(attendanceRate * 100)}%
                     </Text>
                   </View>
@@ -846,24 +893,34 @@ export default function AttendanceSessions() {
 
               {/* Session Info */}
               <View style={{ gap: 8 }}>
-                {session.lecturerName && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="person-outline" size={16} color={colors.foregroundMuted} />
-                    <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
-                      {session.lecturerName}
-                    </Text>
-                  </View>
-                )}
                 {session.venue && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="location-outline" size={16} color={colors.foregroundMuted} />
-                    <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name="location-outline"
+                      size={16}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={{ fontSize: 14, color: colors.foregroundMuted }}
+                    >
                       {session.venue}
                     </Text>
                   </View>
                 )}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color={colors.foregroundMuted}
+                  />
                   <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
                     Duration: {formatDuration(session.startTime)}
                   </Text>
@@ -874,9 +931,23 @@ export default function AttendanceSessions() {
         ) : (
           // Completed session - compact card
           <View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
               <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.foreground, marginBottom: 2 }}>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "bold",
+                    color: colors.foreground,
+                    marginBottom: 2,
+                  }}
+                >
                   {session.courseCode}
                 </Text>
                 {session.courseName && (
@@ -885,21 +956,42 @@ export default function AttendanceSessions() {
                   </Text>
                 )}
               </View>
-              {totalRegistered > 0 && (
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: attendanceColor }}>
+              {totalExpected > 0 && (
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    color: attendanceColor,
+                  }}
+                >
                   {Math.round(attendanceRate * 100)}%
                 </Text>
               )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Ionicons name="people-outline" size={14} color={colors.foregroundMuted} />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={14}
+                  color={colors.foregroundMuted}
+                />
                 <Text style={{ fontSize: 12, color: colors.foregroundMuted }}>
-                  {attendanceCount}/{totalRegistered || 0}
+                  {attendanceCount}/{totalExpected || 0}
                 </Text>
               </View>
               <Text style={{ fontSize: 12, color: colors.foregroundMuted }}>
-                {new Date(session.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {new Date(session.startTime).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
               </Text>
             </View>
           </View>
@@ -910,160 +1002,246 @@ export default function AttendanceSessions() {
           // Active session actions
           <View style={{ gap: 8 }}>
             {/* First Row: Record and Details */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
               <TouchableOpacity
-                style={{ 
-                  flex: 1, 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  backgroundColor: colors.primary, 
-                  padding: 12, 
-                  borderRadius: 12 
+                  backgroundColor: colors.primary,
+                  padding: 12,
+                  borderRadius: 12,
                 }}
                 onPress={() => {
                   router.push({
                     pathname: "/scanner",
-                    params: { sessionId: session.id }
+                    params: { sessionId: session.id },
                   });
                 }}
               >
                 <Ionicons name="scan-outline" size={20} color="#fff" />
-                <Text style={{ fontSize: 15, fontWeight: '600', color: "#fff" }}>
+                <Text
+                  style={{ fontSize: 15, fontWeight: "600", color: "#fff" }}
+                >
                   Record
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ 
-                  flex: 1, 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  backgroundColor: colors.muted, 
-                  padding: 12, 
-                  borderRadius: 12 
+                  backgroundColor: colors.muted,
+                  padding: 12,
+                  borderRadius: 12,
                 }}
                 onPress={() => {
                   router.push({
                     pathname: "/session-details" as any,
-                    params: { sessionId: session.id }
+                    params: { sessionId: session.id },
                   });
                 }}
               >
-                <Ionicons name="eye-outline" size={20} color={colors.foreground} />
-                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.foreground }}>
+                <Ionicons
+                  name="eye-outline"
+                  size={20}
+                  color={colors.foreground}
+                />
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: colors.foreground,
+                  }}
+                >
                   Details
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* Second Row: Link and Pause/Resume */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
               <TouchableOpacity
-                style={{ 
-                  flex: 1, 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
                   backgroundColor: `${colors.primary}20`,
                   borderWidth: 1,
                   borderColor: colors.primary,
-                  padding: 12, 
-                  borderRadius: 12 
+                  padding: 12,
+                  borderRadius: 12,
                 }}
                 onPress={() => {
                   setSelectedSessionForLink(session);
-                  setGeneratedLink(null);
-                  setExistingLink(null);
                   setShowLinkModal(true);
-                  fetchExistingLink(session.id);
                 }}
               >
-                <Ionicons name="link-outline" size={20} color={colors.primary} />
-                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.primary }}>
+                <Ionicons
+                  name="link-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: colors.primary,
+                  }}
+                >
                   Link
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ 
-                  flex: 1, 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
                   gap: 6,
-                  backgroundColor: `${colors.warning}20`,
+                  backgroundColor: session.status === 'PAUSED' 
+                    ? `${colors.success}20` 
+                    : `${colors.warning}20`,
                   borderWidth: 1,
-                  borderColor: colors.warning,
-                  padding: 12, 
-                  borderRadius: 12 
+                  borderColor: session.status === 'PAUSED' 
+                    ? colors.success 
+                    : colors.warning,
+                  padding: 12,
+                  borderRadius: 12,
                 }}
-                onPress={() => {
-                  toast.info('Pause/Resume feature coming soon');
-                }}
+                onPress={() => handlePauseResumeSession(session)}
               >
-                <Ionicons name="pause-circle-outline" size={20} color={colors.warning} />
-                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.warning }}>
-                  Pause
+                <Ionicons
+                  name={session.status === 'PAUSED' 
+                    ? "play-circle-outline" 
+                    : "pause-circle-outline"}
+                  size={20}
+                  color={session.status === 'PAUSED' 
+                    ? colors.success 
+                    : colors.warning}
+                />
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: session.status === 'PAUSED' 
+                      ? colors.success 
+                      : colors.warning,
+                  }}
+                >
+                  {session.status === 'PAUSED' ? 'Resume' : 'Pause'}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Third Row: End Session (full width at bottom) */}
-            <TouchableOpacity
-              style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: 8,
-                backgroundColor: `${colors.error}15`,
-                borderWidth: 1,
-                borderColor: colors.error,
-                padding: 12, 
-                borderRadius: 12 
-              }}
-              onPress={() => handleEndSession(session)}
-            >
-              <Ionicons name="stop-circle-outline" size={20} color={colors.error} />
-              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.error }}>
-                End Session
-              </Text>
-            </TouchableOpacity>
+            {/* Third Row: Save Template and End Session */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  backgroundColor: `${colors.primary}20`,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                  padding: 12,
+                  borderRadius: 12,
+                }}
+                onPress={() => handleSaveAsTemplate(session)}
+              >
+                <Ionicons
+                  name="bookmark-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "600",
+                    color: colors.primary,
+                  }}
+                >
+                  Save Template
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  backgroundColor: `${colors.error}15`,
+                  borderWidth: 1,
+                  borderColor: colors.error,
+                  padding: 12,
+                  borderRadius: 12,
+                }}
+                onPress={() => handleEndSession(session)}
+              >
+                <Ionicons
+                  name="stop-circle-outline"
+                  size={20}
+                  color={colors.error}
+                />
+                <Text
+                  style={{ fontSize: 15, fontWeight: "600", color: colors.error }}
+                >
+                  End Session
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           // Completed session actions - view and delete
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
             <TouchableOpacity
-              style={{ 
+              style={{
                 flex: 1,
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                justifyContent: 'center',
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
                 gap: 8,
-                backgroundColor: colors.muted, 
-                padding: 10, 
+                backgroundColor: colors.muted,
+                padding: 10,
                 borderRadius: 10,
               }}
               onPress={() => {
                 router.push({
                   pathname: "/session-details" as any,
-                  params: { sessionId: session.id }
+                  params: { sessionId: session.id },
                 });
               }}
             >
-              <Ionicons name="eye-outline" size={18} color={colors.foreground} />
-              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>
+              <Ionicons
+                name="eye-outline"
+                size={18}
+                color={colors.foreground}
+              />
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "600",
+                  color: colors.foreground,
+                }}
+              >
                 View
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ 
+              style={{
                 width: 44,
                 height: 44,
-                alignItems: 'center', 
-                justifyContent: 'center',
+                alignItems: "center",
+                justifyContent: "center",
                 backgroundColor: `${colors.error}15`,
                 borderWidth: 1,
                 borderColor: colors.error,
@@ -1081,7 +1259,9 @@ export default function AttendanceSessions() {
 
   if (loading && !refreshing) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -1090,36 +1270,59 @@ export default function AttendanceSessions() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: colors.foreground }]}>
             Sessions
           </Text>
           <View style={styles.subtitleRow}>
-            {activeSession ? (
+            {activeSessions.length > 0 ? (
               <>
-                <View style={[styles.activeIndicator, { backgroundColor: colors.success }]}>
+                <View
+                  style={[
+                    styles.activeIndicator,
+                    { backgroundColor: colors.success },
+                  ]}
+                >
                   <Ionicons name="radio-button-on" size={12} color="#fff" />
-                  <Text style={styles.activeIndicatorText}>Recording</Text>
+                  <Text style={styles.activeIndicatorText}>
+                    {activeSessions.length} Recording
+                  </Text>
                 </View>
-                <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-                  {activeSession.courseCode}
+                <Text
+                  style={[styles.subtitle, { color: colors.foregroundMuted }]}
+                >
+                  {activeSessions.length === 1
+                    ? activeSessions[0].courseCode
+                    : `${activeSessions.length} sessions`}
                 </Text>
               </>
             ) : (
-              <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-                No active session
+              <Text
+                style={[styles.subtitle, { color: colors.foregroundMuted }]}
+              >
+                No active sessions
               </Text>
             )}
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => setShowStartForm(true)}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.templateButton, { backgroundColor: colors.primary }]}
+            onPress={() => setShowTemplateSelector(true)}
+          >
+            <Ionicons name="bookmarks" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={() => setShowCreateDrawer(true)}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -1133,52 +1336,107 @@ export default function AttendanceSessions() {
           />
         }
       >
-        {/* Global Empty State - Show only if no active session AND no completed sessions */}
-        {!activeSession && completedSessions.length === 0 ? (
+        {/* Global Empty State - Show only if no active sessions AND no completed sessions */}
+        {activeSessions.length === 0 && completedSessions.length === 0 ? (
           <Card elevation="sm">
             <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={80} color={colors.foregroundMuted} />
+              <Ionicons
+                name="calendar-outline"
+                size={80}
+                color={colors.foregroundMuted}
+              />
               <Text style={[styles.emptyText, { color: colors.foreground }]}>
                 No sessions yet
               </Text>
-              <Text style={[styles.emptySubtext, { color: colors.foregroundMuted, marginBottom: 16 }]}>
+              <Text
+                style={[
+                  styles.emptySubtext,
+                  { color: colors.foregroundMuted, marginBottom: 16 },
+                ]}
+              >
                 Start recording attendance to see your sessions here
               </Text>
               <Button
                 variant="default"
-                onPress={() => setShowStartForm(true)}
+                onPress={() => setShowCreateDrawer(true)}
                 style={{ paddingHorizontal: 24 }}
               >
-                <Ionicons name="add-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Ionicons
+                  name="add-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginRight: 8 }}
+                />
                 Start New Session
               </Button>
             </View>
           </Card>
         ) : (
           <View style={{ gap: 24 }}>
-            {/* Active Session Section */}
+            {/* Active Sessions Section */}
             <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Ionicons name="radio-button-on" size={20} color={activeSession ? colors.success : colors.foregroundMuted} />
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.foreground }}>
-                  Active Session
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 12,
+                }}
+              >
+                <Ionicons
+                  name="radio-button-on"
+                  size={20}
+                  color={
+                    activeSessions.length > 0
+                      ? colors.success
+                      : colors.foregroundMuted
+                  }
+                />
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    color: colors.foreground,
+                  }}
+                >
+                  Active Sessions ({activeSessions.length})
                 </Text>
               </View>
-              {activeSession ? (
-                renderSessionCard(activeSession, true)
+              {activeSessions.length > 0 ? (
+                <View style={{ gap: 12 }}>
+                  {activeSessions.map((session) =>
+                    renderSessionCard(session, true)
+                  )}
+                </View>
               ) : (
                 <Card elevation="sm">
-                  <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-                    <Ionicons name="pause-circle-outline" size={48} color={colors.foregroundMuted} />
-                    <Text style={{ fontSize: 15, color: colors.foregroundMuted, marginTop: 8, marginBottom: 12 }}>
-                      No active session
+                  <View style={{ alignItems: "center", paddingVertical: 32 }}>
+                    <Ionicons
+                      name="pause-circle-outline"
+                      size={48}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        color: colors.foregroundMuted,
+                        marginTop: 8,
+                        marginBottom: 12,
+                      }}
+                    >
+                      No active sessions
                     </Text>
                     <Button
                       variant="default"
-                      onPress={() => setShowStartForm(true)}
+                      onPress={() => setShowCreateDrawer(true)}
                       style={{ paddingHorizontal: 20 }}
                     >
-                      <Ionicons name="add-circle-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                      <Ionicons
+                        name="add-circle-outline"
+                        size={18}
+                        color="#fff"
+                        style={{ marginRight: 6 }}
+                      />
                       Start Session
                     </Button>
                   </View>
@@ -1189,39 +1447,96 @@ export default function AttendanceSessions() {
             {/* Completed Sessions History */}
             {completedSessions.length > 0 && (
               <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="time-outline" size={20} color={colors.foregroundMuted} />
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.foreground }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name="time-outline"
+                      size={20}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "bold",
+                        color: colors.foreground,
+                      }}
+                    >
                       Session History
                     </Text>
                   </View>
                   <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
-                    {completedSessions.length} session{completedSessions.length !== 1 ? 's' : ''}
+                    {completedSessions.length} session
+                    {completedSessions.length !== 1 ? "s" : ""}
                   </Text>
                 </View>
                 <View style={{ gap: 12 }}>
-                  {completedSessions.map((session) => renderSessionCard(session, false))}
+                  {completedSessions.map((session) =>
+                    renderSessionCard(session, false)
+                  )}
                 </View>
               </View>
             )}
 
             {/* Empty History State - Show only if active session exists but no history */}
-            {activeSession && completedSessions.length === 0 && (
+            {activeSessions.length > 0 && completedSessions.length === 0 && (
               <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <Ionicons name="time-outline" size={20} color={colors.foregroundMuted} />
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.foreground }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={20}
+                    color={colors.foregroundMuted}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "bold",
+                      color: colors.foreground,
+                    }}
+                  >
                     Session History
                   </Text>
                 </View>
                 <Card elevation="sm">
                   <View style={[styles.emptyState, { paddingVertical: 40 }]}>
-                    <Ionicons name="archive-outline" size={48} color={colors.foregroundMuted} />
-                    <Text style={[styles.emptyText, { color: colors.foregroundMuted, fontSize: 16 }]}>
+                    <Ionicons
+                      name="archive-outline"
+                      size={48}
+                      color={colors.foregroundMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.emptyText,
+                        { color: colors.foregroundMuted, fontSize: 16 },
+                      ]}
+                    >
                       No completed sessions yet
                     </Text>
-                    <Text style={[styles.emptySubtext, { color: colors.foregroundMuted }]}>
+                    <Text
+                      style={[
+                        styles.emptySubtext,
+                        { color: colors.foregroundMuted },
+                      ]}
+                    >
                       Completed sessions will appear here
                     </Text>
                   </View>
@@ -1232,430 +1547,18 @@ export default function AttendanceSessions() {
         )}
       </ScrollView>
 
-      {showStartForm && (
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                Start Attendance Session
-              </Text>
-              <TouchableOpacity onPress={() => setShowStartForm(false)}>
-                <Ionicons name="close" size={24} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.form}>
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>
-                  Course Code <Text style={{ color: colors.error }}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-                  placeholder="e.g., CS101"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.courseCode}
-                  onChangeText={(text) => setFormData({ ...formData, courseCode: text })}
-                  autoCapitalize="characters"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>Course Name</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-                  placeholder="e.g., Data Structures"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.courseName}
-                  onChangeText={(text) => setFormData({ ...formData, courseName: text })}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>Lecturer Name</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-                  placeholder="e.g., Dr. Smith"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.lecturerName}
-                  onChangeText={(text) => setFormData({ ...formData, lecturerName: text })}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>Venue</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-                  placeholder="e.g., Room A101, Lecture Hall 3"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.venue}
-                  onChangeText={(text) => setFormData({ ...formData, venue: text })}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>
-                  Total Students (Optional)
-                </Text>
-                <Text style={[styles.hint, { color: colors.foregroundMuted }]}>
-                  Set a limit on expected attendance. Leave empty for unlimited.
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-                  placeholder="e.g., 45"
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.totalRegisteredStudents?.toString() || ""}
-                  onChangeText={(text) =>
-                    setFormData({
-                      ...formData,
-                      totalRegisteredStudents: text ? parseInt(text) : undefined,
-                    })
-                  }
-                  keyboardType="number-pad"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.foreground }]}>Notes</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    { backgroundColor: colors.muted, color: colors.foreground },
-                  ]}
-                  placeholder="Optional notes..."
-                  placeholderTextColor={colors.foregroundMuted}
-                  value={formData.notes}
-                  onChangeText={(text) => setFormData({ ...formData, notes: text })}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <Button
-                variant="outline"
-                onPress={() => setShowStartForm(false)}
-                style={styles.modalButton}
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onPress={handleStartSession}
-                style={styles.modalButton}
-                disabled={submitting}
-              >
-                {submitting ? "Starting..." : "Start Session"}
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Generate Link Modal */}
-      <Modal
+      {/* Generate Link Drawer */}
+      <GenerateLinkDrawer
         visible={showLinkModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowLinkModal(false)}
-      >
-        <View style={[styles.modalOverlay, { backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "flex-end" }]}>
-          <View style={[styles.linkModalContent, { backgroundColor: colors.card }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                Generate Attendance Link
-              </Text>
-              <TouchableOpacity onPress={() => setShowLinkModal(false)}>
-                <Ionicons name="close" size={24} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView 
-              style={styles.linkModalBody}
-              showsVerticalScrollIndicator={true}
-              contentContainerStyle={{ paddingBottom: 20 }}
-            >
-              {selectedSessionForLink && (
-                <View style={[styles.linkSessionInfo, { backgroundColor: colors.muted }]}>
-                  <Text style={[styles.linkSessionCode, { color: colors.primary }]}>
-                    {selectedSessionForLink.courseCode}
-                  </Text>
-                  <Text style={[styles.linkSessionName, { color: colors.foreground }]}>
-                    {selectedSessionForLink.courseName}
-                  </Text>
-                </View>
-              )}
-
-              {/* Show existing link warning */}
-              {fetchingExistingLink && (
-                <View style={{ padding: 16, backgroundColor: colors.muted, borderRadius: 12, marginBottom: 16 }}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={{ marginTop: 8, textAlign: "center", color: colors.foregroundMuted }}>
-                    Checking for active links...
-                  </Text>
-                </View>
-              )}
-
-              {!fetchingExistingLink && existingLink && !generatedLink && (
-                <View style={{ padding: 16, backgroundColor: "#FFF3CD", borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: "#FFC107" }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                    <Ionicons name="warning" size={20} color="#FF9800" />
-                    <Text style={{ marginLeft: 8, fontSize: 16, fontWeight: "600", color: "#F57C00" }}>
-                      Active Link Found
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 13, color: "#795548", marginBottom: 8 }}>
-                    An active link already exists for this session. Generating a new link will invalidate the current one.
-                  </Text>
-                  <View style={{ backgroundColor: "#FFF", padding: 12, borderRadius: 8, marginTop: 8 }}>
-                    <Text style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>Current Link:</Text>
-                    <Text style={{ fontSize: 12, color: "#333", fontFamily: "monospace" }} numberOfLines={1}>
-                      {existingLink.url}
-                    </Text>
-                    <View style={{ flexDirection: "row", marginTop: 8, gap: 16 }}>
-                      <Text style={{ fontSize: 11, color: "#666" }}>
-                        Uses: {existingLink.usageCount}/{existingLink.maxUses || '∞'}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: "#666" }}>
-                        Expires: {new Date(existingLink.expiresAt).toLocaleTimeString()}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {!generatedLink ? (
-                <>
-                  <View style={styles.linkOption}>
-                    <Text style={[styles.linkOptionLabel, { color: colors.foreground }]}>
-                      Link Expiration
-                    </Text>
-                    <View style={styles.expirationButtons}>
-                      {[
-                        { label: "30 min", value: "30" },
-                        { label: "1 hour", value: "60" },
-                        { label: "2 hours", value: "120" },
-                        { label: "Class duration", value: "180" },
-                      ].map((option) => (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.expirationButton,
-                            {
-                              backgroundColor:
-                                linkExpiration === option.value
-                                  ? colors.primary
-                                  : colors.muted,
-                            },
-                          ]}
-                          onPress={() => setLinkExpiration(option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.expirationButtonText,
-                              {
-                                color:
-                                  linkExpiration === option.value
-                                    ? "#fff"
-                                    : colors.foreground,
-                              },
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Security Settings Section */}
-                  <View style={[styles.securitySection, { backgroundColor: colors.card }]}>
-                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                      Security Settings
-                    </Text>
-                    
-                    {/* Geofencing Toggle */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-                          Enable Location Validation
-                        </Text>
-                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
-                          Restrict attendance to within a specific radius
-                        </Text>
-                      </View>
-                      <Switch
-                        value={securitySettings.enableGeofencing}
-                        onValueChange={(value) => 
-                          setSecuritySettings({...securitySettings, enableGeofencing: value})
-                        }
-                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
-                        thumbColor={securitySettings.enableGeofencing ? colors.primary : colors.foregroundMuted}
-                      />
-                    </View>
-
-                    {/* Radius Slider (conditional) */}
-                    {securitySettings.enableGeofencing && (
-                      <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                          <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-                            Validation Radius
-                          </Text>
-                          <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
-                            Students must be within this distance
-                          </Text>
-                        </View>
-                        <View style={styles.radiusInputContainer}>
-                          <TextInput
-                            style={[styles.radiusInput, { 
-                              color: colors.foreground,
-                              borderColor: colors.border,
-                              backgroundColor: colors.muted,
-                            }]}
-                            value={String(securitySettings.radius)}
-                            onChangeText={(text) => {
-                              const value = parseInt(text) || 50;
-                              const clampedValue = Math.max(10, Math.min(5000, value));
-                              setSecuritySettings({...securitySettings, radius: clampedValue});
-                            }}
-                            keyboardType="numeric"
-                            placeholder="50"
-                            maxLength={4}
-                          />
-                          <Text style={[styles.radiusUnit, { color: colors.foregroundMuted }]}>
-                            m
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-
-                    {/* Time Window Enforcement */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-                          Enforce Time Window
-                        </Text>
-                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
-                          Only allow attendance during class session times
-                        </Text>
-                      </View>
-                      <Switch
-                        value={securitySettings.enforceTimeWindow}
-                        onValueChange={(value) => 
-                          setSecuritySettings({...securitySettings, enforceTimeWindow: value})
-                        }
-                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
-                        thumbColor={securitySettings.enforceTimeWindow ? colors.primary : colors.foregroundMuted}
-                      />
-                    </View>
-
-                    {/* One Submission Only */}
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <Text style={[styles.settingLabel, { color: colors.foreground }]}>
-                          Prevent Duplicate Submissions
-                        </Text>
-                        <Text style={[styles.settingDescription, { color: colors.foregroundMuted }]}>
-                          Each student can only mark attendance once
-                        </Text>
-                      </View>
-                      <Switch
-                        value={securitySettings.oneSubmissionOnly}
-                        onValueChange={(value) => 
-                          setSecuritySettings({...securitySettings, oneSubmissionOnly: value})
-                        }
-                        trackColor={{ false: colors.muted, true: `${colors.primary}80` }}
-                        thumbColor={securitySettings.oneSubmissionOnly ? colors.primary : colors.foregroundMuted}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={[styles.linkInfoBox, { backgroundColor: colors.muted }]}>
-                    <Ionicons name="information-circle" size={20} color={colors.primary} />
-                    <Text style={[styles.linkInfoText, { color: colors.foreground }]}>
-                      Students will use this link to mark their attendance themselves
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.generatedLinkContainer}>
-                  <View style={[styles.linkDisplayBox, { backgroundColor: colors.muted }]}>
-                    <Text style={[styles.linkUrl, { color: colors.foreground }]}>
-                      {generatedLink}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.linkSuccessBox, { backgroundColor: `${colors.success}20` }]}>
-                    <Ionicons name="checkmark-circle" size={24} color={colors.success} />
-                    <Text style={[styles.linkSuccessText, { color: colors.success }]}>
-                      Link generated successfully!
-                    </Text>
-                  </View>
-
-                  <Text style={[styles.linkInstructions, { color: colors.foregroundMuted }]}>
-                    Share this link with your students via WhatsApp, email, or display it on the projector
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={[styles.modalActions, { borderTopColor: colors.border }]}>
-              {!generatedLink ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onPress={() => setShowLinkModal(false)}
-                    style={styles.modalButton}
-                    disabled={generatingLink}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="default"
-                    onPress={handleGenerateLink}
-                    style={styles.modalButton}
-                    disabled={generatingLink || capturingLocation}
-                  >
-                    {capturingLocation 
-                      ? "Capturing Location..." 
-                      : generatingLink 
-                      ? existingLink ? "Regenerating..." : "Generating..." 
-                      : existingLink ? "Regenerate Link" : "Generate Link"
-                    }
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    onPress={() => {
-                      setShowLinkModal(false);
-                      setGeneratedLink(null);
-                    }}
-                    style={styles.modalButton}
-                  >
-                    Done
-                  </Button>
-                  <Button
-                    variant="default"
-                    onPress={() => {
-                      if (generatedLink) {
-                        RNClipboard.setString(generatedLink);
-                        toast.success("Link copied to clipboard");
-                      }
-                    }}
-                    style={styles.modalButton}
-                  >
-                    Copy Link
-                  </Button>
-                </>
-              )}
-            </View>
-          </View>
-        </View>
-      </Modal>
+        session={selectedSessionForLink}
+        onClose={() => {
+          setShowLinkModal(false);
+          setSelectedSessionForLink(null);
+        }}
+        onLinkGenerated={(link) => {
+          toast.success(`Link generated: ${link.url || link.token}`);
+        }}
+      />
 
       {/* End Session Dialog */}
       {sessionToEnd && (
@@ -1666,7 +1569,7 @@ export default function AttendanceSessions() {
             setSessionToEnd(null);
           }}
           title="End Attendance Session"
-          message={`Are you sure you want to end this session?\n\nCourse: ${sessionToEnd.courseCode}${sessionToEnd.courseName ? ` - ${sessionToEnd.courseName}` : ""}\nDuration: ${formatDuration(sessionToEnd.startTime)}\nStudents Recorded: ${sessionToEnd.students?.length || 0}\n\nThis action cannot be undone.`}
+          message={`Are you sure you want to end this session?\n\nCourse: ${sessionToEnd.courseCode}${sessionToEnd.courseName ? ` - ${sessionToEnd.courseName}` : ""}\nDuration: ${formatDuration(sessionToEnd.startTime)}\nStudents Recorded: ${sessionToEnd.attendance?.length || 0}\n\nThis action cannot be undone.`}
           variant="warning"
           icon="stop-circle-outline"
           primaryAction={{
@@ -1692,7 +1595,7 @@ export default function AttendanceSessions() {
             setSessionToDelete(null);
           }}
           title="Delete Attendance Session"
-          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${sessionToDelete.courseCode}${sessionToDelete.courseName ? ` - ${sessionToDelete.courseName}` : ""}\nStudents Recorded: ${sessionToDelete.students?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
+          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${sessionToDelete.courseCode}${sessionToDelete.courseName ? ` - ${sessionToDelete.courseName}` : ""}\nStudents Recorded: ${sessionToDelete.attendance?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
           variant="error"
           icon="trash-outline"
           primaryAction={{
@@ -1708,6 +1611,120 @@ export default function AttendanceSessions() {
           }}
         />
       )}
+
+      {/* Save Template Dialog */}
+      {sessionToSaveAsTemplate && (
+        <Modal
+          visible={showSaveTemplateDialog}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            setShowSaveTemplateDialog(false);
+            setSessionToSaveAsTemplate(null);
+            setTemplateName("");
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <Card
+              elevation="lg"
+              style={{
+                margin: 20,
+                padding: 20,
+                backgroundColor: colors.background,
+              }}
+            >
+              <View style={{ gap: 16 }}>
+                <View style={{ gap: 8 }}>
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "bold",
+                      color: colors.foreground,
+                    }}
+                  >
+                    Save as Template
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: colors.foregroundMuted,
+                    }}
+                  >
+                    Course: {sessionToSaveAsTemplate.courseCode}
+                  </Text>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text
+                    style={[
+                      styles.label,
+                      { color: colors.foreground },
+                    ]}
+                  >
+                    Template Name
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: colors.muted,
+                        color: colors.foreground,
+                      },
+                    ]}
+                    value={templateName}
+                    onChangeText={setTemplateName}
+                    placeholder="Enter template name"
+                    placeholderTextColor={colors.foregroundMuted}
+                    autoFocus
+                  />
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <Button
+                    variant="outline"
+                    onPress={() => {
+                      setShowSaveTemplateDialog(false);
+                      setSessionToSaveAsTemplate(null);
+                      setTemplateName("");
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="default"
+                    onPress={confirmSaveTemplate}
+                    disabled={savingTemplate || !templateName.trim()}
+                    style={{ flex: 1 }}
+                  >
+                    {savingTemplate ? "Saving..." : "Save Template"}
+                  </Button>
+                </View>
+              </View>
+            </Card>
+          </View>
+        </Modal>
+      )}
+
+      {/* Create Session Drawer */}
+      <CreateSessionDrawer
+        visible={showCreateDrawer}
+        onClose={() => setShowCreateDrawer(false)}
+        onSuccess={(session) => {
+          setActiveSessions(prev => [session, ...prev]);
+          loadActiveSessions();
+        }}
+      />
+
+      {/* Template Selector */}
+      <TemplateSelector
+        visible={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onSelectTemplate={(session) => {
+          setActiveSessions(prev => [session, ...prev]);
+          loadActiveSessions();
+        }}
+      />
     </SafeAreaView>
   );
 }

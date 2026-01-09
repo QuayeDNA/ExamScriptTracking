@@ -13,7 +13,9 @@ import type {
   RecordAttendanceResponse,
   BulkConfirmRequest,
   UpdateStatusRequest,
-  Student
+  Student,
+  AnalyticsFilters,
+  AttendanceAnalyticsResponse
 } from '@/types';
 
 // Session Management
@@ -35,6 +37,16 @@ export async function getSessionDetails(sessionId: string): Promise<any> {
 export async function endSession(sessionId: string): Promise<{ message: string }> {
   const response = await apiClient.post<{ message?: string }>(`/class-attendance/sessions/${sessionId}/end`);
   return { message: response.message || 'Session ended successfully' };
+}
+
+export async function pauseSession(sessionId: string): Promise<{ message: string; data: any }> {
+  const response = await apiClient.post<{ message?: string; data?: any }>(`/class-attendance/sessions/${sessionId}/pause`);
+  return { message: response.message || 'Session paused successfully', data: response.data };
+}
+
+export async function resumeSession(sessionId: string): Promise<{ message: string; data: any }> {
+  const response = await apiClient.post<{ message?: string; data?: any }>(`/class-attendance/sessions/${sessionId}/resume`);
+  return { message: response.message || 'Session resumed successfully', data: response.data };
 }
 
 export async function deleteSession(sessionId: string): Promise<{ message: string }> {
@@ -147,6 +159,11 @@ export async function deleteAttendance(attendanceId: string): Promise<{ message:
 }
 
 // Templates
+export async function getSessionTemplates(): Promise<any[]> {
+  const response = await apiClient.get<{ data?: any[] }>('/class-attendance/templates');
+  return response.data || [];
+}
+
 export async function saveSessionTemplate(
   data: { name: string; courseCode: string; courseName: string; venue?: string; expectedStudentCount?: number }
 ): Promise<{ templateId: string; message: string }> {
@@ -168,6 +185,20 @@ export async function createFromTemplate(templateId: string): Promise<CreateSess
   return response;
 }
 
+export async function getAttendanceAnalytics(filters: AnalyticsFilters): Promise<AttendanceAnalyticsResponse> {
+  const params = new URLSearchParams();
+
+  params.append('startDate', filters.startDate);
+  params.append('endDate', filters.endDate);
+  if (filters.courseCode) params.append('courseCode', filters.courseCode);
+  if (filters.lecturerId) params.append('lecturerId', filters.lecturerId);
+  if (filters.groupBy) params.append('groupBy', filters.groupBy);
+
+  const query = `?${params.toString()}`;
+  const response = await apiClient.get<AttendanceAnalyticsResponse>(`/class-attendance/sessions/analytics${query}`);
+  return response;
+}
+
 // History & Export
 export async function getAttendanceHistory(params?: {
   page?: number;
@@ -182,19 +213,21 @@ export async function getAttendanceHistory(params?: {
   totalPages: number;
 }> {
   const response = await apiClient.get<{
-    data?: {
-      sessions: AttendanceSession[];
-      total: number;
+    success?: boolean;
+    data?: AttendanceSession[];
+    pagination?: {
       page: number;
-      totalPages: number;
+      limit: number;
+      total: number;
+      pages: number;
     }
   }>('/class-attendance/history', { params });
   
-  return response.data || {
-    sessions: [],
-    total: 0,
-    page: 1,
-    totalPages: 0
+  return {
+    sessions: response.data || [],
+    total: response.pagination?.total || 0,
+    page: response.pagination?.page || 1,
+    totalPages: response.pagination?.pages || 0
   };
 }
 
@@ -206,3 +239,31 @@ export async function exportSession(sessionId: string): Promise<Blob> {
   );
   return response.data;
 }
+
+// Export all functions as a single API object for convenience
+export const classAttendanceApi = {
+  createSession,
+  getActiveSessions,
+  getSessionDetails,
+  endSession,
+  pauseSession,
+  resumeSession,
+  deleteSession,
+  recordAttendance,
+  recordBulkAttendance,
+  searchStudents,
+  generateAttendanceLink,
+  getActiveLinks,
+  revokeLink,
+  addAssistant,
+  removeAssistant,
+  bulkConfirmAttendance,
+  updateAttendanceStatus,
+  deleteAttendance,
+  getSessionTemplates,
+  saveSessionTemplate,
+  createFromTemplate,
+  getAttendanceAnalytics,
+  getAttendanceHistory,
+  exportSession,
+};

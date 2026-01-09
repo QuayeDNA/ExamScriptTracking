@@ -13,42 +13,68 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Alert,
+  Share,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
-import { classAttendanceApi, type ClassAttendanceRecord } from "@/api/classAttendance";
+import { classAttendanceApi } from "@/api/classAttendance";
+import type { AttendanceSession, StudentAttendance, AttendanceLink, AttendanceStatus } from "@/types";
 import { useSocket } from "@/hooks/useSocket";
 import { getFileUrl } from "@/lib/api-client";
 import { toast } from "@/utils/toast";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dialog } from "@/components/ui/dialog";
+import GenerateLinkDrawer from "@/components/GenerateLinkDrawer";
+// File export will use Share API for React Native
 
 export default function SessionDetailsScreen() {
   const colors = useThemeColors();
   const socket = useSocket();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   
-  const [session, setSession] = useState<ClassAttendanceRecord | null>(null);
+  const [session, setSession] = useState<AttendanceSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
+  const [showLinkDrawer, setShowLinkDrawer] = useState(false);
+  const [activeLinks, setActiveLinks] = useState<AttendanceLink[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [selectedAttendanceIds, setSelectedAttendanceIds] = useState<string[]>([]);
+  const [showBulkConfirmDialog, setShowBulkConfirmDialog] = useState(false);
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [showUpdateStatusDialog, setShowUpdateStatusDialog] = useState(false);
+  const [attendanceToUpdate, setAttendanceToUpdate] = useState<StudentAttendance | null>(null);
+  const [newStatus, setNewStatus] = useState<AttendanceStatus>("PRESENT");
 
   const loadSessionDetails = useCallback(async () => {
     if (!sessionId) return;
     
     try {
       setLoading(true);
-      // Fetch specific session by ID
-      const response = await classAttendanceApi.getSession(sessionId);
+      // Fetch specific session by ID using correct endpoint
+      const response = await classAttendanceApi.getSessionDetails(sessionId);
       console.log("Session response:", JSON.stringify(response, null, 2));
       
-      // Handle both wrapped and unwrapped responses
-      const sessionData = response.record || response;
-      if (sessionData && sessionData.id) {
-        setSession(sessionData as ClassAttendanceRecord);
+      // Handle response - ensure arrays are initialized
+      if (response && response.id) {
+        const sessionData: AttendanceSession = {
+          ...response,
+          attendance: Array.isArray(response.attendance) ? response.attendance : [],
+          assistants: Array.isArray(response.assistants) ? response.assistants : [],
+          links: Array.isArray(response.links) ? response.links : [],
+        };
+        setSession(sessionData);
+        
+        // Load active links if session is active
+        if (sessionData.status === "IN_PROGRESS") {
+          loadActiveLinks(sessionData.id);
+        }
       } else {
         console.error("Invalid response structure:", response);
         setSession(null);
@@ -73,16 +99,21 @@ export default function SessionDetailsScreen() {
     const unsubscribers: (() => void)[] = [];
 
     unsubscribers.push(socket.on("attendance:recorded", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
-      if (typedData.record.id === sessionId) {
-        setSession(typedData.record);
-      }
+      const typedData = data as { data: StudentAttendance };
+      // Update session attendance list
+      setSession(prev => {
+        if (!prev || typedData.data.sessionId !== sessionId) return prev;
+        return {
+          ...prev,
+          attendance: [...(prev.attendance || []), typedData.data]
+        };
+      });
     }));
 
-    unsubscribers.push(socket.on("session:ended", (data: unknown) => {
-      const typedData = data as { record: ClassAttendanceRecord };
-      if (typedData.record.id === sessionId) {
-        setSession(typedData.record);
+    unsubscribers.push(socket.on("attendance:sessionEnded", (data: unknown) => {
+      const typedData = data as { data: AttendanceSession };
+      if (typedData.data.id === sessionId) {
+        setSession(typedData.data);
       }
     }));
 
@@ -94,6 +125,179 @@ export default function SessionDetailsScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     loadSessionDetails();
+  };
+
+  const loadActiveLinks = useCallback(async (sessionId: string) => {
+    try {
+      setLoadingLinks(true);
+      const links = await classAttendanceApi.getActiveLinks(sessionId);
+      setActiveLinks(links);
+    } catch (error: any) {
+      console.error("Failed to load active links:", error);
+    } finally {
+      setLoadingLinks(false);
+    }
+  }, []);
+
+  const handleExportSession = async () => {
+    if (!session) return;
+
+    try {
+      setExporting(true);
+      const blob = await classAttendanceApi.exportSession(session.id);
+      
+      // Convert blob to text
+      const text = await blob.text();
+      
+      // Share the CSV content
+      try {
+        await Share.share({
+          message: text,
+          title: `Attendance Export - ${session.courseCode}`,
+        });
+        toast.success("Attendance data exported successfully");
+      } catch (shareError) {
+        // If sharing fails, show the content in an alert (fallback)
+        Alert.alert(
+          "Export Complete",
+          "CSV data ready. Please use the share dialog to save or send the file.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (error: any) {
+      console.error("Failed to export session:", error);
+      toast.error(error?.error || "Failed to export session");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePauseResumeSession = async () => {
+    if (!session) return;
+    
+    const isPaused = session.status === 'PAUSED';
+    const action = isPaused ? 'resume' : 'pause';
+    
+    Alert.alert(
+      isPaused ? 'Resume Session' : 'Pause Session',
+      `Are you sure you want to ${action} this session?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isPaused ? 'Resume' : 'Pause',
+          onPress: async () => {
+            try {
+              if (isPaused) {
+                await classAttendanceApi.resumeSession(session.id);
+                toast.success('Session resumed successfully');
+              } else {
+                await classAttendanceApi.pauseSession(session.id);
+                toast.success('Session paused successfully');
+              }
+              loadSessionDetails();
+            } catch (error: any) {
+              console.error(`Failed to ${action} session:`, error);
+              toast.error(error?.error || `Failed to ${action} session`);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRevokeLink = async (linkToken: string) => {
+    Alert.alert(
+      "Revoke Link",
+      "Are you sure you want to revoke this link? Students will no longer be able to use it.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Revoke",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await classAttendanceApi.revokeLink(linkToken);
+              toast.success("Link revoked successfully");
+              if (session) {
+                loadActiveLinks(session.id);
+              }
+            } catch (error: any) {
+              console.error("Failed to revoke link:", error);
+              toast.error(error?.error || "Failed to revoke link");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleBulkConfirm = async (confirm: boolean) => {
+    if (!session || selectedAttendanceIds.length === 0) return;
+
+    try {
+      setBulkConfirming(true);
+      await classAttendanceApi.bulkConfirmAttendance(session.id, {
+        attendanceIds: selectedAttendanceIds,
+        confirm,
+      });
+      
+      toast.success(
+        confirm 
+          ? `${selectedAttendanceIds.length} attendance records confirmed`
+          : `${selectedAttendanceIds.length} attendance records rejected`
+      );
+      
+      setSelectedAttendanceIds([]);
+      setShowBulkConfirmDialog(false);
+      loadSessionDetails();
+    } catch (error: any) {
+      console.error("Failed to bulk confirm:", error);
+      toast.error(error?.error || "Failed to update attendance");
+    } finally {
+      setBulkConfirming(false);
+    }
+  };
+
+  const handleUpdateAttendanceStatus = async () => {
+    if (!attendanceToUpdate) return;
+
+    try {
+      await classAttendanceApi.updateAttendanceStatus(attendanceToUpdate.id, {
+        status: newStatus,
+      });
+      
+      toast.success("Attendance status updated");
+      setShowUpdateStatusDialog(false);
+      setAttendanceToUpdate(null);
+      loadSessionDetails();
+    } catch (error: any) {
+      console.error("Failed to update attendance:", error);
+      toast.error(error?.error || "Failed to update attendance");
+    }
+  };
+
+  const handleDeleteAttendance = async (attendanceId: string) => {
+    Alert.alert(
+      "Delete Attendance Record",
+      "Are you sure you want to delete this attendance record? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await classAttendanceApi.deleteAttendance(attendanceId);
+              toast.success("Attendance record deleted");
+              loadSessionDetails();
+            } catch (error: any) {
+              console.error("Failed to delete attendance:", error);
+              toast.error(error?.error || "Failed to delete attendance");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDeleteSession = async () => {
@@ -186,12 +390,13 @@ export default function SessionDetailsScreen() {
     );
   }
 
-  const students = session.students || [];
+  const students = session.attendance || [];
   const totalRecorded = students.length;
-  const presentStudents = students.filter((s: any) => s.status === "PRESENT");
-  const lateStudents = students.filter((s: any) => s.status === "LATE");
-  const excusedStudents = students.filter((s: any) => s.status === "EXCUSED");
-  const totalExpected = session.totalStudents || 0;
+  const presentStudents = students.filter((s: StudentAttendance) => s.status === "PRESENT");
+  const lateStudents = students.filter((s: StudentAttendance) => s.status === "LATE");
+  const excusedStudents = students.filter((s: StudentAttendance) => s.status === "EXCUSED");
+  const pendingConfirmations = students.filter((s: StudentAttendance) => s.requiresConfirmation && !s.confirmedAt);
+  const totalExpected = session.expectedStudentCount || 0;
   const attendancePercentage = totalExpected > 0 ? Math.round((totalRecorded / totalExpected) * 100) : 0;
 
   return (
@@ -229,7 +434,12 @@ export default function SessionDetailsScreen() {
               <Text style={[styles.courseName, { color: colors.foreground }]}>
                 {session.courseName}
               </Text>
-              {session.lecturerName && (
+              {session.creator && (
+                <Text style={[styles.lecturer, { color: colors.foregroundMuted }]}>
+                  {session.creator.firstName} {session.creator.lastName}
+                </Text>
+              )}
+              {!session.creator && session.lecturerName && (
                 <Text style={[styles.lecturer, { color: colors.foregroundMuted }]}>
                   {session.lecturerName}
                 </Text>
@@ -287,12 +497,36 @@ export default function SessionDetailsScreen() {
           <View style={[styles.actionsCard, { backgroundColor: colors.card }]}>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                toast.info("Coming Soon: Export feature is in development");
-              }}
+              onPress={handleExportSession}
+              disabled={exporting}
             >
               <Ionicons name="download-outline" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Export Data</Text>
+              <Text style={styles.actionButtonText}>
+                {exporting ? "Exporting..." : "Export Data"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.accent }]}
+              onPress={() => setShowLinkDrawer(true)}
+            >
+              <Ionicons name="link-outline" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>Generate Link</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { 
+                backgroundColor: session.status === 'PAUSED' ? colors.success : colors.warning,
+                opacity: 0.9 
+              }]}
+              onPress={handlePauseResumeSession}
+            >
+              <Ionicons 
+                name={session.status === 'PAUSED' ? "play-circle-outline" : "pause-circle-outline"} 
+                size={20} 
+                color="#fff" 
+              />
+              <Text style={styles.actionButtonText}>
+                {session.status === 'PAUSED' ? 'Resume' : 'Pause'}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.error, opacity: 0.9 }]}
@@ -302,7 +536,7 @@ export default function SessionDetailsScreen() {
                   return;
                 }
                 try {
-                  await classAttendanceApi.endSession({ recordId: session.id });
+                  await classAttendanceApi.endSession(session.id);
                   // Clear recent recordings from AsyncStorage
                   await AsyncStorage.removeItem(`attendance_recent_${session.id}`);
                   toast.success("Session ended: Attendance session completed successfully");
@@ -414,7 +648,7 @@ export default function SessionDetailsScreen() {
                   Present ({presentStudents.length})
                 </Text>
               </View>
-              {presentStudents.map((record: any) => (
+              {presentStudents.map((record: StudentAttendance) => (
                 <View
                   key={record.id}
                   style={[
@@ -447,9 +681,9 @@ export default function SessionDetailsScreen() {
                           {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {(record.confirmedAt || record.scanTime) && (
+                      {record.markedAt && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(record.confirmedAt || record.scanTime)}
+                          {formatTime(record.markedAt)}
                         </Text>
                       )}
                     </View>
@@ -468,7 +702,7 @@ export default function SessionDetailsScreen() {
                   Late ({lateStudents.length})
                 </Text>
               </View>
-              {lateStudents.map((record: any) => (
+              {lateStudents.map((record: StudentAttendance) => (
                 <View
                   key={record.id}
                   style={[
@@ -501,13 +735,144 @@ export default function SessionDetailsScreen() {
                           {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {(record.confirmedAt || record.scanTime) && (
+                      {record.markedAt && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(record.confirmedAt || record.scanTime)}
+                          {formatTime(record.markedAt)}
+                        </Text>
+                      )}
+                      {record.requiresConfirmation && !record.confirmedAt && (
+                        <View style={[styles.pendingBadge, { backgroundColor: colors.warning }]}>
+                          <Text style={[styles.pendingBadgeText, { color: "#fff" }]}>Pending</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  {session.status === "IN_PROGRESS" && (
+                    <View style={styles.studentActions}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setAttendanceToUpdate(record);
+                          setNewStatus(record.status);
+                          setShowUpdateStatusDialog(true);
+                        }}
+                        style={[styles.studentActionButton, { backgroundColor: colors.muted }]}
+                      >
+                        <Ionicons name="create-outline" size={16} color={colors.foreground} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteAttendance(record.id)}
+                        style={[styles.studentActionButton, { backgroundColor: `${colors.error}20` }]}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Pending Confirmations */}
+          {pendingConfirmations.length > 0 && (
+            <View style={styles.studentCategory}>
+              <View style={styles.categoryHeader}>
+                <Ionicons name="time-outline" size={20} color={colors.warning} />
+                <Text style={[styles.categoryTitle, { color: colors.foreground }]}>
+                  Pending Confirmation ({pendingConfirmations.length})
+                </Text>
+                {session.status === "IN_PROGRESS" && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const ids = pendingConfirmations.map(a => a.id);
+                      setSelectedAttendanceIds(ids);
+                      setShowBulkConfirmDialog(true);
+                    }}
+                    style={[styles.bulkActionButton, { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={[styles.bulkActionText, { color: "#fff" }]}>Bulk Confirm</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {pendingConfirmations.map((record: StudentAttendance) => (
+                <View
+                  key={record.id}
+                  style={[
+                    styles.studentItem,
+                    { backgroundColor: colors.background, borderLeftColor: colors.warning }
+                  ]}
+                >
+                  <View style={[styles.studentPhoto, { backgroundColor: colors.muted }]}>
+                    {record.student?.profilePicture ? (
+                      <Image source={{ uri: getFileUrl(record.student.profilePicture) }} style={styles.studentPhotoImage} />
+                    ) : (
+                      <Ionicons name="person" size={24} color={colors.foregroundMuted} />
+                    )}
+                  </View>
+                  <View style={styles.studentInfo}>
+                    <Text style={[styles.studentName, { color: colors.foreground }]}>
+                      {record.student ? `${record.student.firstName} ${record.student.lastName}` : 'Unknown'}
+                    </Text>
+                    <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                      {record.student?.indexNumber || ''}
+                    </Text>
+                    <View style={styles.studentMeta}>
+                      <View style={styles.verificationBadge}>
+                        <Ionicons
+                          name={getVerificationIcon(record.verificationMethod)}
+                          size={12}
+                          color={colors.foregroundMuted}
+                        />
+                        <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                          {getVerificationLabel(record.verificationMethod)}
+                        </Text>
+                      </View>
+                      {record.markedAt && (
+                        <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
+                          {formatTime(record.markedAt)}
                         </Text>
                       )}
                     </View>
                   </View>
+                  {session.status === "IN_PROGRESS" && (
+                    <View style={styles.studentActions}>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          try {
+                            await classAttendanceApi.bulkConfirmAttendance(session.id, {
+                              attendanceIds: [record.id],
+                              confirm: true,
+                            });
+                            toast.success("Attendance confirmed");
+                            loadSessionDetails();
+                          } catch (error: any) {
+                            console.error("Failed to confirm attendance:", error);
+                            toast.error(error?.error || "Failed to confirm attendance");
+                          }
+                        }}
+                        style={[styles.studentActionButton, { backgroundColor: `${colors.success}20` }]}
+                      >
+                        <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          try {
+                            await classAttendanceApi.bulkConfirmAttendance(session.id, {
+                              attendanceIds: [record.id],
+                              confirm: false,
+                            });
+                            toast.success("Attendance rejected");
+                            loadSessionDetails();
+                          } catch (error: any) {
+                            console.error("Failed to reject attendance:", error);
+                            toast.error(error?.error || "Failed to reject attendance");
+                          }
+                        }}
+                        style={[styles.studentActionButton, { backgroundColor: `${colors.error}20` }]}
+                      >
+                        <Ionicons name="close-circle" size={16} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -522,7 +887,7 @@ export default function SessionDetailsScreen() {
                   Excused ({excusedStudents.length})
                 </Text>
               </View>
-              {excusedStudents.map((record: any) => (
+              {excusedStudents.map((record: StudentAttendance) => (
                 <View
                   key={record.id}
                   style={[
@@ -555,13 +920,33 @@ export default function SessionDetailsScreen() {
                           {getVerificationLabel(record.verificationMethod)}
                         </Text>
                       </View>
-                      {(record.confirmedAt || record.scanTime) && (
+                      {record.markedAt && (
                         <Text style={[styles.studentMetaText, { color: colors.foregroundMuted }]}>
-                          {formatTime(record.confirmedAt || record.scanTime)}
+                          {formatTime(record.markedAt)}
                         </Text>
                       )}
                     </View>
                   </View>
+                  {session.status === "IN_PROGRESS" && (
+                    <View style={styles.studentActions}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setAttendanceToUpdate(record);
+                          setNewStatus(record.status);
+                          setShowUpdateStatusDialog(true);
+                        }}
+                        style={[styles.studentActionButton, { backgroundColor: colors.muted }]}
+                      >
+                        <Ionicons name="create-outline" size={16} color={colors.foreground} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteAttendance(record.id)}
+                        style={[styles.studentActionButton, { backgroundColor: `${colors.error}20` }]}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -580,7 +965,103 @@ export default function SessionDetailsScreen() {
             </View>
           )}
         </View>
+
+        {/* Active Links Section */}
+        {session.status === "IN_PROGRESS" && (
+          <View style={[styles.linksCard, { backgroundColor: colors.card }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                Active Links
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowLinkDrawer(true)}
+                style={[styles.addButton, { backgroundColor: colors.primary }]}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            {loadingLinks ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
+            ) : activeLinks.length > 0 ? (
+              <View style={styles.linksList}>
+                {activeLinks.map((link) => (
+                  <View
+                    key={link.id}
+                    style={[styles.linkItem, { backgroundColor: colors.background }]}
+                  >
+                    <View style={styles.linkInfo}>
+                      <Text style={[styles.linkToken, { color: colors.primary }]}>
+                        {link.linkToken || link.token}
+                      </Text>
+                      <Text style={[styles.linkMeta, { color: colors.foregroundMuted }]}>
+                        Uses: {link.usesCount || link.usageCount || 0} / {link.maxUses || link.maxUsage || "∞"}
+                      </Text>
+                      <Text style={[styles.linkMeta, { color: colors.foregroundMuted }]}>
+                        Expires: {new Date(link.expiresAt).toLocaleString()}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleRevokeLink(link.linkToken || link.token || '')}
+                      style={[styles.revokeButton, { backgroundColor: `${colors.error}20` }]}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="link-outline" size={32} color={colors.foregroundMuted} />
+                <Text style={[styles.emptyStateText, { color: colors.foregroundMuted }]}>
+                  No active links
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowLinkDrawer(true)}
+                  style={[styles.addLinkButton, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={[styles.addLinkButtonText, { color: "#fff" }]}>
+                    Generate Link
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Assistants Section */}
+        {session.assistants && session.assistants.length > 0 && (
+          <View style={[styles.assistantsCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+              Assistants ({session.assistants.length})
+            </Text>
+            {session.assistants.map((assistant) => (
+              <View
+                key={assistant.id}
+                style={[styles.assistantItem, { backgroundColor: colors.background }]}
+              >
+                <View style={styles.assistantInfo}>
+                  <Text style={[styles.assistantName, { color: colors.foreground }]}>
+                    {assistant.user?.firstName} {assistant.user?.lastName}
+                  </Text>
+                  <Text style={[styles.assistantRole, { color: colors.foregroundMuted }]}>
+                    {assistant.role} • {assistant.recordedCount} recorded
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
+
+      {/* Generate Link Drawer */}
+      <GenerateLinkDrawer
+        visible={showLinkDrawer}
+        session={session}
+        onClose={() => setShowLinkDrawer(false)}
+        onLinkGenerated={(link) => {
+          toast.success(`Link generated with code: ${link.token}`);
+        }}
+      />
 
       {/* Delete Session Dialog */}
       {session && (
@@ -588,7 +1069,7 @@ export default function SessionDetailsScreen() {
           visible={showDeleteDialog}
           onClose={() => setShowDeleteDialog(false)}
           title="Delete Attendance Session"
-          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${session.courseCode}${session.courseName ? ` - ${session.courseName}` : ""}\nStudents Recorded: ${session.students?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
+          message={`Are you sure you want to permanently delete this session?\n\nCourse: ${session.courseCode}${session.courseName ? ` - ${session.courseName}` : ""}\nStudents Recorded: ${session.attendance?.length || 0}\n\nThis will delete:\n• All attendance records\n• All attendance links\n• Session history\n\nThis action CANNOT be undone!`}
           variant="error"
           icon="trash-outline"
           primaryAction={{
@@ -598,6 +1079,53 @@ export default function SessionDetailsScreen() {
           secondaryAction={{
             label: "Cancel",
             onPress: () => setShowDeleteDialog(false),
+          }}
+        />
+      )}
+
+      {/* Bulk Confirm Dialog */}
+      <Dialog
+        visible={showBulkConfirmDialog}
+        onClose={() => {
+          setShowBulkConfirmDialog(false);
+          setSelectedAttendanceIds([]);
+        }}
+        title="Confirm Attendance"
+        message={`Confirm ${selectedAttendanceIds.length} pending attendance record(s)?`}
+        variant="default"
+        icon="checkmark-circle-outline"
+        primaryAction={{
+          label: bulkConfirming ? "Confirming..." : "Confirm",
+          onPress: () => handleBulkConfirm(true),
+        }}
+        secondaryAction={{
+          label: "Reject",
+          onPress: () => handleBulkConfirm(false),
+        }}
+      />
+
+      {/* Update Status Dialog */}
+      {attendanceToUpdate && (
+        <Dialog
+          visible={showUpdateStatusDialog}
+          onClose={() => {
+            setShowUpdateStatusDialog(false);
+            setAttendanceToUpdate(null);
+          }}
+          title="Update Attendance Status"
+          message={`Update status for ${attendanceToUpdate.student?.firstName} ${attendanceToUpdate.student?.lastName}?`}
+          variant="default"
+          icon="create-outline"
+          primaryAction={{
+            label: "Update",
+            onPress: handleUpdateAttendanceStatus,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onPress: () => {
+              setShowUpdateStatusDialog(false);
+              setAttendanceToUpdate(null);
+            },
           }}
         />
       )}
@@ -830,9 +1358,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   actionsCard: {
+    marginHorizontal: 16,
     marginBottom: 16,
     padding: 16,
     borderRadius: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   actionButton: {
@@ -842,10 +1373,130 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 10,
     gap: 8,
+    flex: 1,
+    minWidth: "30%",
   },
   actionButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  pendingBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  pendingBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  studentActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginLeft: 8,
+  },
+  studentActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  bulkActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  bulkActionText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  linksCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  linksList: {
+    gap: 8,
+  },
+  linkItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 8,
+  },
+  linkInfo: {
+    flex: 1,
+  },
+  linkToken: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  linkMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  revokeButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addLinkButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  addLinkButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  assistantsCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  assistantItem: {
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  assistantInfo: {
+    flex: 1,
+  },
+  assistantName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  assistantRole: {
+    fontSize: 12,
   },
 });

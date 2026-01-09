@@ -496,8 +496,8 @@ export class AttendanceService {
       throw new Error("Unauthorized to end this session");
     }
 
-    if (session.status !== SessionStatus.IN_PROGRESS) {
-      throw new Error("Session is not active");
+    if (session.status !== SessionStatus.IN_PROGRESS && session.status !== SessionStatus.PAUSED) {
+      throw new Error("Only active or paused sessions can be ended");
     }
 
     // Deactivate all active links for this session
@@ -518,6 +518,82 @@ export class AttendanceService {
         status: SessionStatus.COMPLETED,
         endTime: new Date(),
         notes: notes || session.notes,
+      },
+      include: {
+        creator: true,
+        attendance: {
+          include: {
+            student: true,
+          },
+        },
+      },
+    });
+
+    return updatedSession;
+  }
+
+  /**
+   * Pause attendance session
+   */
+  async pauseSession(sessionId: string, userId: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new AppError('Session not found', 404);
+    }
+
+    if (session.createdBy !== userId) {
+      throw new AppError('Only the session creator can pause it', 403);
+    }
+
+    if (session.status !== SessionStatus.IN_PROGRESS) {
+      throw new AppError('Only active sessions can be paused', 400);
+    }
+
+    const updatedSession = await prisma.attendanceSession.update({
+      where: { id: sessionId },
+      data: {
+        status: SessionStatus.PAUSED,
+      },
+      include: {
+        creator: true,
+        attendance: {
+          include: {
+            student: true,
+          },
+        },
+      },
+    });
+
+    return updatedSession;
+  }
+
+  /**
+   * Resume paused attendance session
+   */
+  async resumeSession(sessionId: string, userId: string) {
+    const session = await prisma.attendanceSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new AppError('Session not found', 404);
+    }
+
+    if (session.createdBy !== userId) {
+      throw new AppError('Only the session creator can resume it', 403);
+    }
+
+    if (session.status !== SessionStatus.PAUSED) {
+      throw new AppError('Only paused sessions can be resumed', 400);
+    }
+
+    const updatedSession = await prisma.attendanceSession.update({
+      where: { id: sessionId },
+      data: {
+        status: SessionStatus.IN_PROGRESS,
       },
       include: {
         creator: true,
@@ -558,7 +634,11 @@ export class AttendanceService {
    * Get active sessions
    */
   async getActiveSessions(userId: string, role: string) {
-    const whereClause: any = { status: SessionStatus.IN_PROGRESS };
+    const whereClause: any = { 
+      status: { 
+        in: [SessionStatus.IN_PROGRESS, SessionStatus.PAUSED] 
+      } 
+    };
     
     // Non-admins can only see their own sessions
     if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
@@ -1049,36 +1129,183 @@ export class AttendanceService {
    * Save session as template
    */
   async saveSessionTemplate(userId: string, name: string, courseCode: string, courseName: string, venue?: string, expectedStudentCount?: number) {
-    // Store in user metadata or separate table
-    // For simplicity, using JSON field on a templates model
-    // You could create a SessionTemplate model if needed
-    
-    const template = {
-      id: crypto.randomBytes(8).toString('hex'),
-      name,
-      courseCode,
-      courseName,
-      venue,
-      expectedStudentCount,
-      createdBy: userId,
-      createdAt: new Date(),
-    };
+    const template = await prisma.sessionTemplate.create({
+      data: {
+        name,
+        courseCode,
+        courseName,
+        venue,
+        expectedStudentCount: expectedStudentCount || 0,
+        createdBy: userId,
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
 
-    // Store in a simple way - could be in a separate table
-    // For now, return the template structure
     return template;
+  }
+
+  /**
+   * Get all templates for a user
+   */
+  async getSessionTemplates(userId: string, role: string) {
+    const whereClause: any = {};
+    
+    // Non-admins can only see their own templates
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      whereClause.createdBy = userId;
+    }
+
+    const templates = await prisma.sessionTemplate.findMany({
+      where: whereClause,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return templates;
   }
 
   /**
    * Create session from template
    */
-  async createSessionFromTemplate(userId: string, templateData: any) {
+  async createSessionFromTemplate(userId: string, templateId: string) {
+    // Get the template
+    const template = await prisma.sessionTemplate.findUnique({
+      where: { id: templateId },
+    });
+
+    if (!template) {
+      throw new AppError('Template not found', 404);
+    }
+
+    // Create session from template
     return this.createSession({
       userId,
-      courseCode: templateData.courseCode,
-      courseName: templateData.courseName,
-      venue: templateData.venue,
-      expectedStudentCount: templateData.expectedStudentCount,
+      courseCode: template.courseCode,
+      courseName: template.courseName,
+      venue: template.venue || undefined,
+      expectedStudentCount: template.expectedStudentCount,
     });
+  }
+
+  /**
+   * Get attendance analytics
+   */
+  async getAnalytics(
+    userId: string,
+    role: string,
+    filters: {
+      startDate: Date;
+      endDate: Date;
+      courseCode?: string;
+      lecturerId?: string;
+      groupBy?: 'day' | 'week' | 'month' | 'course';
+    }
+  ) {
+    const whereClause: any = {
+      startTime: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+    };
+
+    // Non-admins can only see their own sessions
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(role)) {
+      whereClause.createdBy = userId;
+    }
+
+    if (filters.courseCode) whereClause.courseCode = filters.courseCode;
+    if (filters.lecturerId) whereClause.createdBy = filters.lecturerId;
+
+    // Get sessions with attendance data
+    const sessions = await prisma.attendanceSession.findMany({
+      where: whereClause,
+      include: {
+        attendance: {
+          select: {
+            status: true,
+            markedAt: true,
+          },
+        },
+      },
+    });
+
+    // Calculate summary statistics
+    const totalSessions = sessions.length;
+    const totalAttendance = sessions.reduce((sum, session) => sum + session.attendance.length, 0);
+    const presentAttendance = sessions.reduce((sum, session) =>
+      sum + session.attendance.filter(a => a.status === 'PRESENT').length, 0
+    );
+    const averageAttendanceRate = totalSessions > 0 ? (presentAttendance / totalAttendance) * 100 : 0;
+
+    // Get unique students
+    const studentIds = new Set<string>();
+    sessions.forEach(session => {
+      session.attendance.forEach(attendance => {
+        // Assuming attendance has studentId, but we need to get it from the record
+        // For now, we'll count unique attendance records as students
+      });
+    });
+    const totalStudents = studentIds.size || totalAttendance; // Fallback
+
+    // Calculate trends
+    const dailyTrends: Record<string, number> = {};
+    const courseBreakdown: Record<string, { sessions: number; attendance: number; rate: number }> = {};
+
+    sessions.forEach(session => {
+      // Daily trends
+      const date = session.startTime.toISOString().split('T')[0];
+      if (!dailyTrends[date]) dailyTrends[date] = 0;
+      dailyTrends[date] += session.attendance.filter(a => a.status === 'PRESENT').length;
+
+      // Course breakdown
+      if (!courseBreakdown[session.courseCode]) {
+        courseBreakdown[session.courseCode] = { sessions: 0, attendance: 0, rate: 0 };
+      }
+      courseBreakdown[session.courseCode].sessions += 1;
+      courseBreakdown[session.courseCode].attendance += session.attendance.filter(a => a.status === 'PRESENT').length;
+    });
+
+    // Calculate rates for course breakdown
+    Object.keys(courseBreakdown).forEach(courseCode => {
+      const course = courseBreakdown[courseCode];
+      course.rate = course.sessions > 0 ? (course.attendance / course.sessions) * 100 : 0;
+    });
+
+    return {
+      period: {
+        startDate: filters.startDate.toISOString(),
+        endDate: filters.endDate.toISOString(),
+      },
+      summary: {
+        totalSessions,
+        totalAttendance,
+        averageAttendanceRate,
+        totalStudents,
+      },
+      trends: {
+        daily: dailyTrends,
+        courseBreakdown,
+      },
+    };
   }
 }

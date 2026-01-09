@@ -43,6 +43,7 @@ model User {
   createdLinks                AttendanceLink[]
   recordedAttendance          StudentAttendance[]        @relation("RecordedBy")
   confirmedAttendance         StudentAttendance[]        @relation("ConfirmedBy")
+  createdTemplates            SessionTemplate[]          @relation("CreatedTemplates")
   
   // Existing Relations (Keep these if you're using exam/incident features)
   createdRegistrationSessions RegistrationSession[]
@@ -261,11 +262,36 @@ model AttendanceLink {
 }
 
 // ============================================================================
+// SESSION TEMPLATES (for quick session creation)
+// ============================================================================
+model SessionTemplate {
+  id                    String    @id @default(uuid())
+  name                  String
+  
+  // Template data
+  courseCode            String
+  courseName            String
+  venue                 String?
+  expectedStudentCount  Int       @default(0)
+  
+  // Creator
+  createdBy             String
+  creator               User      @relation("CreatedTemplates", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  @@index([createdBy])
+  @@index([courseCode])
+}
+
+// ============================================================================
 // ENUMS FOR ATTENDANCE SYSTEM
 // ============================================================================
 
 enum SessionStatus {
   IN_PROGRESS
+  PAUSED
   COMPLETED
   CANCELLED
 }

@@ -96,7 +96,7 @@ export const createSession = async (req: Request, res: Response) => {
 export const endSession = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body;
+    const { notes } = req.body || {};
     const userId = req.user!.userId;
 
     const session = await attendanceService.endSession(id, userId, notes);
@@ -108,6 +108,48 @@ export const endSession = async (req: Request, res: Response) => {
     });
   } catch (error) {
     handleError(res, error, "Failed to end session");
+  }
+};
+
+/**
+ * Pause attendance session
+ * POST /api/attendance/sessions/:id/pause
+ */
+export const pauseSession = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const session = await attendanceService.pauseSession(id, userId);
+
+    res.json({
+      success: true,
+      message: "Session paused successfully",
+      data: session,
+    });
+  } catch (error) {
+    handleError(res, error, "Failed to pause session");
+  }
+};
+
+/**
+ * Resume paused attendance session
+ * POST /api/attendance/sessions/:id/resume
+ */
+export const resumeSession = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const session = await attendanceService.resumeSession(id, userId);
+
+    res.json({
+      success: true,
+      message: "Session resumed successfully",
+      data: session,
+    });
+  } catch (error) {
+    handleError(res, error, "Failed to resume session");
   }
 };
 
@@ -498,6 +540,33 @@ export const removeAssistant = async (req: Request, res: Response) => {
 // ============================================================================
 
 /**
+ * Get attendance analytics
+ * GET /api/attendance/sessions/analytics
+ */
+export const getAttendanceAnalytics = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+    const filters = {
+      startDate: req.query.startDate ? new Date(req.query.startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default to last 30 days
+      endDate: req.query.endDate ? new Date(req.query.endDate as string) : new Date(),
+      courseCode: req.query.courseCode as string,
+      lecturerId: req.query.lecturerId as string,
+      groupBy: req.query.groupBy as 'day' | 'week' | 'month' | 'course',
+    };
+
+    const analytics = await attendanceService.getAnalytics(userId, role, filters);
+
+    res.json({
+      success: true,
+      data: analytics,
+    });
+  } catch (error) {
+    handleError(res, error, "Failed to fetch analytics");
+  }
+};
+
+/**
  * Bulk confirm or reject attendance
  * POST /api/attendance/sessions/:id/confirm-bulk
  */
@@ -653,15 +722,42 @@ export const saveTemplate = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get session templates
+ * GET /api/attendance/templates
+ */
+export const getTemplates = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    const templates = await attendanceService.getSessionTemplates(userId, role);
+
+    res.json({
+      success: true,
+      data: templates,
+    });
+  } catch (error) {
+    handleError(res, error, "Failed to get templates");
+  }
+};
+
+/**
  * Create session from template
  * POST /api/attendance/sessions/from-template
  */
 export const createFromTemplate = async (req: Request, res: Response) => {
   try {
-    const templateData = req.body;
+    const { templateId } = req.body;
     const userId = req.user!.userId;
 
-    const session = await attendanceService.createSessionFromTemplate(userId, templateData);
+    if (!templateId) {
+      return res.status(400).json({
+        success: false,
+        error: "Template ID is required",
+      });
+    }
+
+    const session = await attendanceService.createSessionFromTemplate(userId, templateId);
 
     res.status(201).json({
       success: true,
@@ -671,7 +767,7 @@ export const createFromTemplate = async (req: Request, res: Response) => {
   } catch (error) {
     handleError(res, error, "Failed to create session from template");
   }
-};
+};;
 
 // ============================================================================
 // HELPER FUNCTIONS

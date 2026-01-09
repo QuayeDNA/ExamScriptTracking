@@ -298,6 +298,7 @@ export interface StartSessionRequest {
 // Enums
 export enum SessionStatus {
   IN_PROGRESS = 'IN_PROGRESS',
+  PAUSED = 'PAUSED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED'
 }
@@ -384,7 +385,9 @@ export interface AttendanceSessionAssistant {
 
 export interface AttendanceLink {
   id: string;
-  linkToken: string;
+  linkToken: string; // 5-digit code (e.g., "12345")
+  token?: string; // Alias for linkToken used in some API responses
+  url?: string; // Full URL including the token
   linkType: LinkType;
   sessionId?: string;
   studentId?: string;
@@ -392,7 +395,9 @@ export interface AttendanceLink {
   creator?: User;
   expiresAt: string;
   maxUses?: number;
+  maxUsage?: number; // Alias for maxUses
   usesCount: number;
+  usageCount?: number; // Alias for usesCount
   requiresLocation: boolean;
   geofence?: { lat: number; lng: number; radiusMeters: number };
   isActive: boolean;
@@ -436,7 +441,7 @@ export interface RecordAttendanceResponse {
     student: {
       id: string;
       indexNumber: string;
-      name: string;
+      name: string; // Full name: "FirstName LastName"
     };
   };
 }
@@ -635,4 +640,36 @@ export interface HistoryResponse {
   total: number;
   page: number;
   totalPages: number;
+}
+
+export interface AnalyticsFilters {
+  startDate: string;
+  endDate: string;
+  courseCode?: string;
+  lecturerId?: string;
+  groupBy?: 'day' | 'week' | 'month' | 'course';
+}
+
+export interface AttendanceAnalyticsResponse {
+  success: boolean;
+  data: {
+    period: {
+      startDate: string;
+      endDate: string;
+    };
+    summary: {
+      totalSessions: number;
+      totalAttendance: number;
+      averageAttendanceRate: number;
+      totalStudents: number;
+    };
+    trends: {
+      daily: Record<string, number>;
+      courseBreakdown: Record<string, {
+        sessions: number;
+        attendance: number;
+        rate: number;
+      }>;
+    };
+  };
 }

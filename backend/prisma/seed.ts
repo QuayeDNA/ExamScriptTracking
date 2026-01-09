@@ -14,6 +14,12 @@ async function main() {
   const classRepEmail =
     process.env.CLASS_REP_EMAIL || "attendance@elms.com";
   const classRepPassword = process.env.CLASS_REP_PASSWORD || "Attendance@123";
+  const lecturerEmail = process.env.LECTURER_EMAIL || "lecturer@elms.com";
+  const lecturerPassword = process.env.LECTURER_PASSWORD || "Lecturer@123";
+  const invigilatorEmail =
+    process.env.INVIGILATOR_EMAIL || "invigilator@elms.com";
+  const invigilatorPassword =
+    process.env.INVIGILATOR_PASSWORD || "Invigilator@123";
 
   // Create Super Admin
   const hashedSuperPassword = await bcrypt.hash(superAdminPassword, 10);
@@ -64,6 +70,56 @@ async function main() {
   console.log(
     "📱 Use these shared credentials on mobile devices for class attendance"
   );
+
+  // Create lecturer account
+  const hashedLecturerPassword = await bcrypt.hash(lecturerPassword, 10);
+
+  const lecturer = await prisma.user.upsert({
+    where: { email: lecturerEmail },
+    update: {},
+    create: {
+      email: lecturerEmail,
+      password: hashedLecturerPassword,
+      role: Role.LECTURER,
+      firstName: "Test",
+      lastName: "Lecturer",
+      phone: "+1234567892",
+      department: "Computer Science",
+      isSuperAdmin: false,
+      isActive: true,
+      passwordChanged: false,
+    },
+  });
+
+  console.log("\n✅ LECTURER account created:", lecturer.email);
+  console.log("📧 Email:", lecturerEmail);
+  console.log("🔑 Password:", lecturerPassword);
+  console.log("👨‍🏫 Use these credentials to test lecturer features");
+
+  // Create invigilator account
+  const hashedInvigilatorPassword = await bcrypt.hash(invigilatorPassword, 10);
+
+  const invigilator = await prisma.user.upsert({
+    where: { email: invigilatorEmail },
+    update: {},
+    create: {
+      email: invigilatorEmail,
+      password: hashedInvigilatorPassword,
+      role: Role.INVIGILATOR,
+      firstName: "Test",
+      lastName: "Invigilator",
+      phone: "+1234567893",
+      department: "General",
+      isSuperAdmin: false,
+      isActive: true,
+      passwordChanged: false,
+    },
+  });
+
+  console.log("\n✅ INVIGILATOR account created:", invigilator.email);
+  console.log("📧 Email:", invigilatorEmail);
+  console.log("🔑 Password:", invigilatorPassword);
+  console.log("🔍 Use these credentials to test invigilator features");
 
   console.log("\n✨ Database seed completed!");
 }

@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   createSession,
   endSession,
+  pauseSession,
+  resumeSession,
   deleteSession,
   recordAttendance,
   recordBulkAttendance,
@@ -21,7 +23,9 @@ import {
   deleteAttendance,
   searchStudents,
   saveTemplate,
+  getTemplates,
   createFromTemplate,
+  getAttendanceAnalytics,
 } from "../controllers/classAttendanceController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
@@ -73,6 +77,26 @@ router.post(
 );
 
 /**
+ * Pause attendance session
+ * POST /api/attendance/sessions/:id/pause
+ */
+router.post(
+  "/sessions/:id/pause",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  pauseSession
+);
+
+/**
+ * Resume paused attendance session
+ * POST /api/attendance/sessions/:id/resume
+ */
+router.post(
+  "/sessions/:id/resume",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  resumeSession
+);
+
+/**
  * Get active sessions
  * GET /api/attendance/sessions/active
  */
@@ -80,6 +104,16 @@ router.get(
   "/sessions/active",
   authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
   getActiveSessions
+);
+
+/**
+ * Get attendance analytics (must be before :id route)
+ * GET /api/attendance/sessions/analytics
+ */
+router.get(
+  "/sessions/analytics",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  getAttendanceAnalytics
 );
 
 /**
@@ -257,6 +291,16 @@ router.get("/students/search", searchStudents);
 // ============================================================================
 // SESSION TEMPLATES
 // ============================================================================
+
+/**
+ * Get session templates
+ * GET /api/attendance/templates
+ */
+router.get(
+  "/templates",
+  authorize(Role.ADMIN, Role.LECTURER, Role.CLASS_REP),
+  getTemplates
+);
 
 /**
  * Save session as template
