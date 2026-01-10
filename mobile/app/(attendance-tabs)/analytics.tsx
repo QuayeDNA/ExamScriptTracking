@@ -1,6 +1,7 @@
 /**
  * Attendance Analytics Screen
- * View attendance statistics, insights, and export data
+ * View attendance statistics, insights, and trends
+ * Mobile-first responsive design with comprehensive metrics
  */
 
 import React, { useState, useEffect } from "react";
@@ -9,53 +10,181 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
-import { classAttendanceApi } from "@/api/classAttendance";
+import { LineChart, BarChart, PieChart } from "react-native-chart-kit";
 import { toast } from "@/utils/toast";
-import type {
-  ClassAttendanceRecord,
-  AttendanceStats,
-  RecordingStatus,
-} from "@/types";
+import type { VerificationMethod, AttendanceStatus } from "@/types";
 
-type ViewMode = "STATS" | "EXPORT";
+interface LecturerStats {
+  overview: {
+    totalSessions: number;
+    completedSessions: number;
+    activeSessions: number;
+    totalStudentsRecorded: number;
+    avgStudentsPerSession: number;
+    avgAttendanceRate: number;
+  };
+  byCourse: {
+    courseCode: string;
+    courseName: string;
+    sessionCount: number;
+    expectedStudents: number;
+    actualStudents: number;
+    attendanceRate: number;
+  }[];
+  methodBreakdown: {
+    method: VerificationMethod;
+    count: number;
+    percentage: number;
+  }[];
+  statusBreakdown: {
+    status: AttendanceStatus;
+    count: number;
+    percentage: number;
+  }[];
+  weeklyTrend: {
+    day: string;
+    sessions: number;
+    students: number;
+    rate: number;
+  }[];
+  monthlyTrend: {
+    month: string;
+    sessions: number;
+    students: number;
+    rate: number;
+  }[];
+  peakTimes: {
+    hour: string;
+    count: number;
+  }[];
+}
+
+type TimeRange = "week" | "month" | "semester";
 
 export default function AttendanceAnalytics() {
   const colors = useThemeColors();
-  const [viewMode, setViewMode] = useState<ViewMode>("STATS");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [history, setHistory] = useState<ClassAttendanceRecord[]>([]);
-  const [lecturerStats, setLecturerStats] = useState<any>(null);
+  const [lecturerStats, setLecturerStats] = useState<LecturerStats | null>(null);
+  const [timeRange, setTimeRange] = useState<TimeRange>("week");
+
+  // Chart dimensions - responsive
+  const screenWidth = Dimensions.get("window").width;
+  const chartWidth = Math.min(screenWidth - 48, 400); // Max 400px wide
+
+  // Chart configuration
+  const chartConfig = {
+    backgroundColor: colors.background,
+    backgroundGradientFrom: colors.background,
+    backgroundGradientTo: colors.background,
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
+    labelColor: (opacity = 1) => colors.foregroundMuted,
+    style: {
+      borderRadius: 16,
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: colors.primary,
+    },
+  };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [timeRange]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [historyResponse, lecturerStatsResponse] = await Promise.all([
-        classAttendanceApi.getAttendanceHistory({ limit: 20 }),
-        classAttendanceApi.getLecturerStats(),
-      ]);
 
-      console.log("History response:", historyResponse);
-      console.log("Lecturer stats response:", lecturerStatsResponse);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      setHistory(historyResponse.records || []);
-      setLecturerStats(lecturerStatsResponse);
+      // Generate comprehensive dummy data
+      const dummyStats: LecturerStats = {
+        overview: {
+          totalSessions: 24,
+          completedSessions: 22,
+          activeSessions: 2,
+          totalStudentsRecorded: 1248,
+          avgStudentsPerSession: 52,
+          avgAttendanceRate: 87,
+        },
+        byCourse: [
+          {
+            courseCode: "CS301",
+            courseName: "Data Structures & Algorithms",
+            sessionCount: 10,
+            expectedStudents: 550,
+            actualStudents: 492,
+            attendanceRate: 89,
+          },
+          {
+            courseCode: "MATH201",
+            courseName: "Linear Algebra",
+            sessionCount: 8,
+            expectedStudents: 360,
+            actualStudents: 298,
+            attendanceRate: 83,
+          },
+          {
+            courseCode: "PHYS101",
+            courseName: "Classical Mechanics",
+            sessionCount: 6,
+            expectedStudents: 280,
+            actualStudents: 258,
+            attendanceRate: 92,
+          },
+        ],
+        methodBreakdown: [
+          { method: "QR_SCAN" as VerificationMethod, count: 512, percentage: 41 },
+          { method: "LINK_SELF_MARK" as VerificationMethod, count: 386, percentage: 31 },
+          { method: "MANUAL_ENTRY" as VerificationMethod, count: 224, percentage: 18 },
+          { method: "BIOMETRIC_FACE" as VerificationMethod, count: 126, percentage: 10 },
+        ],
+        statusBreakdown: [
+          { status: "PRESENT" as AttendanceStatus, count: 1086, percentage: 87 },
+          { status: "LATE" as AttendanceStatus, count: 112, percentage: 9 },
+          { status: "EXCUSED" as AttendanceStatus, count: 50, percentage: 4 },
+        ],
+        weeklyTrend: [
+          { day: "Mon", sessions: 4, students: 198, rate: 88 },
+          { day: "Tue", sessions: 5, students: 246, rate: 85 },
+          { day: "Wed", sessions: 3, students: 152, rate: 91 },
+          { day: "Thu", sessions: 5, students: 252, rate: 89 },
+          { day: "Fri", sessions: 3, students: 145, rate: 82 },
+          { day: "Sat", sessions: 2, students: 96, rate: 78 },
+          { day: "Sun", sessions: 0, students: 0, rate: 0 },
+        ],
+        monthlyTrend: [
+          { month: "Jan", sessions: 5, students: 248, rate: 86 },
+          { month: "Feb", sessions: 6, students: 298, rate: 84 },
+          { month: "Mar", sessions: 7, students: 356, rate: 89 },
+          { month: "Apr", sessions: 6, students: 346, rate: 91 },
+        ],
+        peakTimes: [
+          { hour: "8:00", count: 45 },
+          { hour: "10:00", count: 128 },
+          { hour: "12:00", count: 86 },
+          { hour: "14:00", count: 156 },
+          { hour: "16:00", count: 92 },
+        ],
+      };
+
+      setLecturerStats(dummyStats);
     } catch (error: any) {
-      console.error("Failed to load data:", error);
-      const errorMessage = error.error || error.message || "Failed to load attendance data";
-      toast.error(errorMessage);
+      console.error("Failed to load analytics:", error);
+      toast.error(error.error || error.message || "Failed to load analytics");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -67,244 +196,356 @@ export default function AttendanceAnalytics() {
     loadData();
   };
 
-  const getStatusColor = (status: RecordingStatus) => {
-    switch (status) {
-      case "IN_PROGRESS":
-        return colors.success;
-      case "COMPLETED":
-        return colors.primary;
-      case "CANCELLED":
-        return colors.error;
-      default:
-        return colors.foregroundMuted;
-    }
+  const getMethodLabel = (method: VerificationMethod): string => {
+    const labels: Record<VerificationMethod, string> = {
+      QR_SCAN: "QR Scan",
+      MANUAL_ENTRY: "Manual",
+      BIOMETRIC_FINGERPRINT: "Fingerprint",
+      BIOMETRIC_FACE: "Face ID",
+      LINK_SELF_MARK: "Self-Mark",
+    };
+    return labels[method] || method;
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString()}`;
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return `Yesterday, ${date.toLocaleTimeString()}`;
-    } else {
-      return date.toLocaleDateString() + ", " + date.toLocaleTimeString();
-    }
+  const getStatusLabel = (status: AttendanceStatus): string => {
+    const labels: Record<AttendanceStatus, string> = {
+      PRESENT: "Present",
+      LATE: "Late",
+      EXCUSED: "Excused",
+      ABSENT: "Absent",
+    };
+    return labels[status] || status;
   };
 
-  const calculateAttendanceRate = (record: ClassAttendanceRecord): number => {
-    const total = record.totalStudents || 0;
-    const attended = record.students?.length || 0;
-    return total > 0 ? Math.round((attended / total) * 100) : 0;
+  const getStatusColor = (status: AttendanceStatus): string => {
+    const statusColors: Record<AttendanceStatus, string> = {
+      PRESENT: colors.success,
+      LATE: "#f59e0b", // Amber
+      EXCUSED: colors.primary,
+      ABSENT: colors.error,
+    };
+    return statusColors[status] || colors.foregroundMuted;
   };
 
-  const renderHistory = () => {
-    if (history.length === 0) {
-      return (
-        <Card elevation="sm">
-          <View style={styles.emptyState}>
-            <Ionicons name="time-outline" size={64} color={colors.foregroundMuted} />
-            <Text style={[styles.emptyText, { color: colors.foregroundMuted }]}>
-              No history yet
-            </Text>
-            <Text style={[styles.emptySubtext, { color: colors.foregroundMuted }]}>
-              Completed attendance sessions will appear here
-            </Text>
-          </View>
-        </Card>
-      );
-    }
+  const renderTimeRangeSelector = () => (
+    <View style={[styles.timeRangeSelector, { backgroundColor: colors.muted }]}>
+      {(["week", "month", "semester"] as TimeRange[]).map((range) => (
+        <TouchableOpacity
+          key={range}
+          style={[
+            styles.timeRangeButton,
+            timeRange === range && {
+              backgroundColor: colors.background,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 3,
+            },
+          ]}
+          onPress={() => setTimeRange(range)}
+        >
+          <Text
+            style={[
+              styles.timeRangeText,
+              {
+                color: timeRange === range ? colors.primary : colors.foregroundMuted,
+                fontWeight: timeRange === range ? "700" : "500",
+              },
+            ]}
+          >
+            {range.charAt(0).toUpperCase() + range.slice(1)}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderOverviewCards = () => {
+    if (!lecturerStats) return null;
+
+    const { overview } = lecturerStats;
+
+    const cards = [
+      {
+        icon: "calendar-outline" as const,
+        label: "Total Sessions",
+        value: overview.totalSessions.toString(),
+        color: colors.primary,
+        subtitle: `${overview.completedSessions} completed`,
+      },
+      {
+        icon: "people-outline" as const,
+        label: "Students Recorded",
+        value: overview.totalStudentsRecorded.toString(),
+        color: colors.success,
+        subtitle: `Avg. ${overview.avgStudentsPerSession}/session`,
+      },
+      {
+        icon: "checkmark-circle-outline" as const,
+        label: "Attendance Rate",
+        value: `${overview.avgAttendanceRate}%`,
+        color: overview.avgAttendanceRate >= 80 ? colors.success : "#f59e0b",
+        subtitle: overview.avgAttendanceRate >= 80 ? "Excellent" : "Good",
+      },
+    ];
 
     return (
-      <View style={styles.historyList}>
-        {history.map((record) => (
-          <Card key={record.id} elevation="sm" style={styles.historyCard}>
-            <View style={styles.historyHeader}>
-              <View style={styles.historyTitleRow}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: `${getStatusColor(record.status)}20` },
-                  ]}
-                >
-                  <Text style={[styles.statusText, { color: getStatusColor(record.status) }]}>
-                    {record.status}
-                  </Text>
-                </View>
-                <Text style={[styles.attendanceRate, { color: colors.foregroundMuted }]}>
-                  {calculateAttendanceRate(record)}% attended
-                </Text>
+      <View style={styles.overviewGrid}>
+        {cards.map((card, index) => (
+          <Card key={index} elevation="sm" style={styles.overviewCard}>
+            <View style={styles.overviewCardContent}>
+              <View style={[styles.iconContainer, { backgroundColor: `${card.color}15` }]}>
+                <Ionicons name={card.icon} size={24} color={card.color} />
               </View>
-              <Text style={[styles.courseCode, { color: colors.foreground }]}>
-                {record.courseCode}
-              </Text>
-              {record.courseName && (
-                <Text style={[styles.courseName, { color: colors.foregroundMuted }]}>
-                  {record.courseName}
+              <View style={styles.overviewCardText}>
+                <Text style={[styles.overviewValue, { color: card.color }]}>
+                  {card.value}
                 </Text>
-              )}
-            </View>
-
-            <View style={styles.historyInfo}>
-              {record.lecturerName && (
-                <View style={styles.infoRow}>
-                  <Ionicons name="person-outline" size={16} color={colors.foregroundMuted} />
-                  <Text style={[styles.infoText, { color: colors.foregroundMuted }]}>
-                    {record.lecturerName}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.infoRow}>
-                <Ionicons name="time-outline" size={16} color={colors.foregroundMuted} />
-                <Text style={[styles.infoText, { color: colors.foregroundMuted }]}>
-                  {formatDate(record.startTime)}
+                <Text style={[styles.overviewLabel, { color: colors.foregroundMuted }]}>
+                  {card.label}
                 </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="people-outline" size={16} color={colors.foregroundMuted} />
-                <Text style={[styles.infoText, { color: colors.foregroundMuted }]}>
-                  {record.students?.length || 0} / {record.totalStudents || 0} students
+                <Text style={[styles.overviewSubtitle, { color: colors.foregroundMuted }]}>
+                  {card.subtitle}
                 </Text>
               </View>
             </View>
-
-            {record.notes && (
-              <View style={[styles.notesContainer, { backgroundColor: colors.muted }]}>
-                <Text style={[styles.notesText, { color: colors.foregroundMuted }]}>
-                  {record.notes}
-                </Text>
-              </View>
-            )}
           </Card>
         ))}
       </View>
     );
   };
 
-  const renderStats = () => {
-    if (!lecturerStats) {
-      return (
-        <Card elevation="sm">
-          <View style={styles.emptyState}>
-            <Ionicons name="bar-chart-outline" size={64} color={colors.foregroundMuted} />
-            <Text style={[styles.emptyText, { color: colors.foregroundMuted }]}>
-              No statistics yet
-            </Text>
-            <Text style={[styles.emptySubtext, { color: colors.foregroundMuted }]}>
-              Statistics will appear after recording attendance
-            </Text>
-          </View>
-        </Card>
-      );
-    }
+  const renderTrendChart = () => {
+    if (!lecturerStats) return null;
 
-    const overview = lecturerStats.overview || lecturerStats;
-    const byCourse = lecturerStats.byCourse || [];
-    const methodBreakdown = lecturerStats.methodBreakdown || [];
+    const data = timeRange === "week" ? lecturerStats.weeklyTrend : lecturerStats.monthlyTrend;
 
     return (
-      <View style={styles.statsContainer}>
-        {/* Overview Stats */}
-        <Card elevation="sm" style={styles.statsCard}>
-          <Text style={[styles.statsTitle, { color: colors.foreground }]}>Overview</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>
-                {overview.totalSessions || overview.completedSessions || 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-                Total Sessions
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.success }]}>
-                {overview.totalStudentsRecorded || 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-                Students Recorded
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.primary }]}>
-                {Math.round(overview.averageAttendanceRate || lecturerStats.averageAttendanceRate || 0)}%
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.foregroundMuted }]}>
-                Avg. Attendance
-              </Text>
-            </View>
-          </View>
-        </Card>
+      <Card elevation="sm" style={styles.chartCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>
+          Attendance Trend
+        </Text>
+        <Text style={[styles.chartSubtitle, { color: colors.foregroundMuted }]}>
+          {timeRange === "week" ? "Last 7 days" : "Last 4 months"}
+        </Text>
+        <LineChart
+          data={{
+            labels: data.map((item) => 'day' in item ? item.day : item.month),
+            datasets: [
+              {
+                data: data.map((item) => item.rate),
+                color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+                strokeWidth: 3,
+              },
+            ],
+          }}
+          width={chartWidth}
+          height={220}
+          chartConfig={{
+            ...chartConfig,
+            color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+          }}
+          bezier
+          style={styles.chart}
+          withInnerLines={false}
+          withOuterLines={true}
+          withVerticalLabels={true}
+          withHorizontalLabels={true}
+          fromZero={true}
+          yAxisSuffix="%"
+        />
+      </Card>
+    );
+  };
 
-        {/* Recording Methods */}
-        {methodBreakdown.length > 0 && (
-          <Card elevation="sm" style={styles.statsCard}>
-            <Text style={[styles.statsTitle, { color: colors.foreground }]}>Recording Methods</Text>
-            <View style={{ gap: 12, marginTop: 12 }}>
-              {methodBreakdown.map((method: any) => {
-                const total = methodBreakdown.reduce((sum: number, m: any) => sum + m.count, 0);
-                const percentage = total > 0 ? (method.count / total) * 100 : 0;
-                const methodName = method.method === 'QR_CODE' ? 'QR Code' : 
-                                  method.method === 'MANUAL_INDEX' ? 'Index Number' : 
-                                  method.method === 'BIOMETRIC' ? 'Biometric' : method.method;
-                return (
-                  <View key={method.method}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: '500' }}>
-                        {methodName}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: colors.foregroundMuted }}>
-                        {method.count} ({Math.round(percentage)}%)
-                      </Text>
-                    </View>
-                    <View style={{ height: 8, backgroundColor: colors.muted, borderRadius: 4, overflow: 'hidden' }}>
-                      <View style={{ 
-                        height: '100%', 
-                        width: `${percentage}%`, 
-                        backgroundColor: colors.primary,
-                        borderRadius: 4
-                      }} />
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </Card>
-        )}
+  const renderMethodBreakdown = () => {
+    if (!lecturerStats) return null;
 
-        {/* By Course */}
-        {byCourse.length > 0 && (
-          <Card elevation="sm" style={styles.statsCard}>
-            <Text style={[styles.statsTitle, { color: colors.foreground }]}>By Course</Text>
-            <View style={styles.courseList}>
-              {byCourse.map((course: any) => (
-                <View key={course.courseCode} style={styles.courseItem}>
-                  <View style={styles.courseItemHeader}>
-                    <Text style={[styles.courseCodeText, { color: colors.foreground }]}>
-                      {course.courseCode}
-                    </Text>
-                    <Text style={[styles.courseRate, { color: colors.primary }]}>
-                      {Math.round(course.attendanceRate)}%
-                    </Text>
-                  </View>
-                  {course.courseName && (
-                    <Text style={[styles.courseNameText, { color: colors.foregroundMuted }]}>
-                      {course.courseName}
-                    </Text>
-                  )}
-                  <View style={styles.courseStats}>
-                    <Text style={[styles.courseStatText, { color: colors.foregroundMuted }]}>
-                      {course.sessions} sessions • {course.totalStudents} students
-                    </Text>
-                  </View>
+    const colors_array = [
+      "rgba(59, 130, 246, 0.9)",   // Blue
+      "rgba(34, 197, 94, 0.9)",    // Green
+      "rgba(251, 191, 36, 0.9)",   // Amber
+      "rgba(168, 85, 247, 0.9)",   // Purple
+    ];
+
+    return (
+      <Card elevation="sm" style={styles.chartCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>
+          Recording Methods
+        </Text>
+        <Text style={[styles.chartSubtitle, { color: colors.foregroundMuted }]}>
+          How attendance was recorded
+        </Text>
+        <PieChart
+          data={lecturerStats.methodBreakdown.map((method, index) => ({
+            name: getMethodLabel(method.method),
+            population: method.count,
+            color: colors_array[index % colors_array.length],
+            legendFontColor: colors.foreground,
+            legendFontSize: 13,
+          }))}
+          width={chartWidth}
+          height={220}
+          chartConfig={chartConfig}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
+          center={[10, 0]}
+          absolute
+          style={styles.chart}
+        />
+      </Card>
+    );
+  };
+
+  const renderStatusBreakdown = () => {
+    if (!lecturerStats) return null;
+
+    return (
+      <Card elevation="sm" style={styles.chartCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>
+          Attendance Status
+        </Text>
+        <Text style={[styles.chartSubtitle, { color: colors.foregroundMuted }]}>
+          Student attendance breakdown
+        </Text>
+        <View style={styles.statusList}>
+          {lecturerStats.statusBreakdown.map((status) => (
+            <View key={status.status} style={styles.statusItem}>
+              <View style={styles.statusItemLeft}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: getStatusColor(status.status) },
+                  ]}
+                />
+                <Text style={[styles.statusLabel, { color: colors.foreground }]}>
+                  {getStatusLabel(status.status)}
+                </Text>
+              </View>
+              <View style={styles.statusItemRight}>
+                <Text style={[styles.statusCount, { color: colors.foreground }]}>
+                  {status.count}
+                </Text>
+                <Text style={[styles.statusPercentage, { color: colors.foregroundMuted }]}>
+                  {status.percentage}%
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </Card>
+    );
+  };
+
+  const renderCoursePerformance = () => {
+    if (!lecturerStats) return null;
+
+    return (
+      <Card elevation="sm" style={styles.chartCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>
+          Course Performance
+        </Text>
+        <Text style={[styles.chartSubtitle, { color: colors.foregroundMuted }]}>
+          Attendance rates by course
+        </Text>
+        <View style={styles.courseList}>
+          {lecturerStats.byCourse.map((course) => (
+            <View key={course.courseCode} style={styles.courseItem}>
+              <View style={styles.courseHeader}>
+                <View>
+                  <Text style={[styles.courseCode, { color: colors.foreground }]}>
+                    {course.courseCode}
+                  </Text>
+                  <Text style={[styles.courseName, { color: colors.foregroundMuted }]}>
+                    {course.courseName}
+                  </Text>
                 </View>
-              ))}
+                <View style={styles.courseStats}>
+                  <Text
+                    style={[
+                      styles.courseRate,
+                      {
+                        color:
+                          course.attendanceRate >= 85
+                            ? colors.success
+                            : course.attendanceRate >= 70
+                            ? colors.primary
+                            : "#f59e0b",
+                      },
+                    ]}
+                  >
+                    {course.attendanceRate}%
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.courseDetails}>
+                <Text style={[styles.courseDetailText, { color: colors.foregroundMuted }]}>
+                  {course.sessionCount} sessions • {course.actualStudents}/{course.expectedStudents} students
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.progressBar,
+                  { backgroundColor: colors.muted },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${course.attendanceRate}%`,
+                      backgroundColor:
+                        course.attendanceRate >= 85
+                          ? colors.success
+                          : course.attendanceRate >= 70
+                          ? colors.primary
+                          : "#f59e0b",
+                    },
+                  ]}
+                />
+              </View>
             </View>
-          </Card>
-        )}
-      </View>
+          ))}
+        </View>
+      </Card>
+    );
+  };
+
+  const renderPeakTimes = () => {
+    if (!lecturerStats) return null;
+
+    return (
+      <Card elevation="sm" style={styles.chartCard}>
+        <Text style={[styles.chartTitle, { color: colors.foreground }]}>
+          Peak Attendance Times
+        </Text>
+        <Text style={[styles.chartSubtitle, { color: colors.foregroundMuted }]}>
+          When students mark attendance most
+        </Text>
+        <BarChart
+          data={{
+            labels: lecturerStats.peakTimes.map((item) => item.hour),
+            datasets: [
+              {
+                data: lecturerStats.peakTimes.map((item) => item.count),
+              },
+            ],
+          }}
+          width={chartWidth}
+          height={220}
+          chartConfig={{
+            ...chartConfig,
+            color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
+          }}
+          style={styles.chart}
+          showValuesOnTopOfBars
+          fromZero
+          yAxisLabel=""
+          yAxisSuffix=""
+        />
+      </Card>
     );
   };
 
@@ -313,6 +554,9 @@ export default function AttendanceAnalytics() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.foregroundMuted }]}>
+            Loading analytics...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -324,10 +568,12 @@ export default function AttendanceAnalytics() {
         <View>
           <Text style={[styles.title, { color: colors.foreground }]}>Analytics</Text>
           <Text style={[styles.subtitle, { color: colors.foregroundMuted }]}>
-            Insights and statistics
+            Attendance insights & trends
           </Text>
         </View>
       </View>
+
+      {renderTimeRangeSelector()}
 
       <ScrollView
         style={styles.content}
@@ -339,8 +585,16 @@ export default function AttendanceAnalytics() {
             tintColor={colors.primary}
           />
         }
+        showsVerticalScrollIndicator={false}
       >
-        {renderStats()}
+        {renderOverviewCards()}
+        {renderTrendChart()}
+        {renderCoursePerformance()}
+        {renderMethodBreakdown()}
+        {renderStatusBreakdown()}
+        {renderPeakTimes()}
+        
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -354,12 +608,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
   title: {
     fontSize: 28,
@@ -369,129 +626,115 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  tabSelector: {
+  timeRangeSelector: {
     flexDirection: "row",
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
+    marginHorizontal: 24,
+    marginVertical: 12,
+    padding: 4,
+    borderRadius: 12,
   },
-  tab: {
+  timeRangeButton: {
     flex: 1,
-    flexDirection: "row",
+    paddingVertical: 10,
+    borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
   },
-  tabText: {
+  timeRangeText: {
     fontSize: 14,
-    fontWeight: "600",
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 8,
   },
-  emptyState: {
+  overviewGrid: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  overviewCard: {
+    padding: 0,
+  },
+  overviewCardContent: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 60,
     gap: 16,
   },
-  emptyText: {
-    fontSize: 18,
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overviewCardText: {
+    flex: 1,
+    gap: 2,
+  },
+  overviewValue: {
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+  overviewLabel: {
+    fontSize: 13,
     fontWeight: "600",
   },
-  emptySubtext: {
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 24,
+  overviewSubtitle: {
+    fontSize: 12,
   },
-  historyList: {
-    gap: 16,
+  chartCard: {
+    marginBottom: 16,
+    padding: 16,
   },
-  historyCard: {
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  chartSubtitle: {
+    fontSize: 13,
     marginBottom: 16,
   },
-  historyHeader: {
-    marginBottom: 16,
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
   },
-  historyTitleRow: {
+  statusList: {
+    gap: 12,
+  },
+  statusItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    paddingVertical: 8,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  statusItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "600",
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  attendanceRate: {
-    fontSize: 12,
+  statusLabel: {
+    fontSize: 15,
     fontWeight: "500",
   },
-  courseCode: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 4,
-  },
-  courseName: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  historyInfo: {
-    gap: 4,
-    marginBottom: 16,
-  },
-  infoRow: {
+  statusItemRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 8,
   },
-  infoText: {
+  statusCount: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  statusPercentage: {
     fontSize: 14,
-  },
-  notesContainer: {
-    padding: 8,
-    borderRadius: 8,
-  },
-  notesText: {
-    fontSize: 13,
-    fontStyle: "italic",
-  },
-  statsContainer: {
-    gap: 16,
-  },
-  statsCard: {
-    marginBottom: 16,
-  },
-  statsTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: "bold",
-  },
-  statLabel: {
-    fontSize: 12,
-    textAlign: "center",
+    fontWeight: "500",
   },
   courseList: {
     gap: 16,
@@ -499,28 +742,43 @@ const styles = StyleSheet.create({
   courseItem: {
     paddingVertical: 8,
   },
-  courseItemHeader: {
+  courseHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
+    alignItems: "flex-start",
+    marginBottom: 8,
   },
-  courseCodeText: {
+  courseCode: {
     fontSize: 16,
     fontWeight: "bold",
   },
-  courseRate: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  courseNameText: {
-    fontSize: 14,
-    marginTop: 4,
+  courseName: {
+    fontSize: 13,
+    marginTop: 2,
   },
   courseStats: {
-    marginTop: 4,
+    alignItems: "flex-end",
   },
-  courseStatText: {
+  courseRate: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  courseDetails: {
+    marginBottom: 8,
+  },
+  courseDetailText: {
     fontSize: 12,
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  bottomSpacer: {
+    height: 24,
   },
 });
