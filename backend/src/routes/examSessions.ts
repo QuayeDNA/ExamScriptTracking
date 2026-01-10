@@ -90,17 +90,17 @@ router.post(
 // Update exam session (admin and lecturer only)
 router.put("/:id", authorize(Role.ADMIN, Role.LECTURER), updateExamSession);
 
-// Update exam session status (admin and invigilator only)
+// Update exam session status (admin, invigilator, and lecturer)
 router.patch(
   "/:id/status",
-  authorize(Role.ADMIN, Role.INVIGILATOR),
+  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
   updateExamSessionStatus
 );
 
-// End exam session (invigilator only) - auto-updates status to SUBMITTED
+// End exam session (invigilator and lecturer) - auto-updates status to SUBMITTED
 router.post(
   "/:id/end",
-  authorize(Role.ADMIN, Role.INVIGILATOR),
+  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
   endExamSession
 );
 

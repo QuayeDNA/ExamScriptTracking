@@ -18,23 +18,23 @@ router.use(authenticate);
 // Get attendance record
 router.get("/", getAttendance);
 
-// Record entry - INVIGILATOR, ADMIN
-router.post("/entry", authorize(Role.ADMIN, Role.INVIGILATOR), recordEntry);
+// Record entry - LECTURER, INVIGILATOR, ADMIN
+router.post("/entry", authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER), recordEntry);
 
-// Record exit - INVIGILATOR, ADMIN
-router.post("/exit", authorize(Role.ADMIN, Role.INVIGILATOR), recordExit);
+// Record exit - LECTURER, INVIGILATOR, ADMIN
+router.post("/exit", authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER), recordExit);
 
-// Record submission - INVIGILATOR, ADMIN
+// Record submission - LECTURER, INVIGILATOR, ADMIN
 router.post(
   "/submission",
-  authorize(Role.ADMIN, Role.INVIGILATOR),
+  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
   recordSubmission
 );
 
-// Update discrepancy note - INVIGILATOR, ADMIN
+// Update discrepancy note - LECTURER, INVIGILATOR, ADMIN
 router.patch(
   "/discrepancy",
-  authorize(Role.ADMIN, Role.INVIGILATOR),
+  authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
   updateDiscrepancy
 );
 
