@@ -541,15 +541,15 @@ export class AttendanceService {
     });
 
     if (!session) {
-      throw new AppError('Session not found', 404);
+      throw new Error('Session not found');
     }
 
     if (session.createdBy !== userId) {
-      throw new AppError('Only the session creator can pause it', 403);
+      throw new Error('Only the session creator can pause it');
     }
 
     if (session.status !== SessionStatus.IN_PROGRESS) {
-      throw new AppError('Only active sessions can be paused', 400);
+      throw new Error('Only active sessions can be paused');
     }
 
     const updatedSession = await prisma.attendanceSession.update({
@@ -579,15 +579,15 @@ export class AttendanceService {
     });
 
     if (!session) {
-      throw new AppError('Session not found', 404);
+      throw new Error('Session not found');
     }
 
     if (session.createdBy !== userId) {
-      throw new AppError('Only the session creator can resume it', 403);
+      throw new Error('Only the session creator can resume it');
     }
 
     if (session.status !== SessionStatus.PAUSED) {
-      throw new AppError('Only paused sessions can be resumed', 400);
+      throw new Error('Only paused sessions can be resumed');
     }
 
     const updatedSession = await prisma.attendanceSession.update({
@@ -852,7 +852,7 @@ export class AttendanceService {
       studentId,
       method: VerificationMethod.LINK_SELF_MARK,
       status: AttendanceStatus.PRESENT,
-      recordedBy: null, // Self-recorded, no user involved
+      recordedBy: "self", // Self-recorded, no user involved
       linkTokenUsed: linkToken,
       metadata: { location },
     });
@@ -1194,7 +1194,7 @@ export class AttendanceService {
     });
 
     if (!template) {
-      throw new AppError('Template not found', 404);
+      throw new Error('Template not found');
     }
 
     // Create session from template

@@ -57,7 +57,7 @@ interface StudentInfo {
   firstName: string;
   lastName: string;
   program?: string;
-  level?: string;
+  level?: number;
   profilePicture?: string;
 }
 
@@ -370,7 +370,6 @@ export default function MarkAttendancePage() {
                     }}
                     className="text-center text-3xl sm:text-4xl font-mono tracking-[0.5em] h-16 sm:h-20"
                     autoFocus
-                    disabled={step === 'validating'}
                   />
                   <p className="text-xs text-center text-muted-foreground">
                     {token.length}/5 digits
@@ -551,7 +550,7 @@ export default function MarkAttendancePage() {
                         <User className="w-12 h-12 text-gray-400" />
                       ) : (
                         <img
-                          src={getFileUrl(student.profilePicture)}
+                          src={getFileUrl(student.profilePicture || "")}
                           alt={`${student.firstName} ${student.lastName}`}
                           className="w-full h-full object-cover"
                           onError={() => setImageError(true)}
