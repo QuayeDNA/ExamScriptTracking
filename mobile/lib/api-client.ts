@@ -72,12 +72,18 @@ class ApiClient {
           error.response?.data
         );
 
-        // Only clear auth and notify if it's truly an auth failure (not network issues)
-        // Let the auth store's initialize method handle validation
-        if (error.response?.status === 401 && !error.config?.url?.includes("/auth/login")) {
-          // Only notify invalidation callback, don't clear storage immediately
-          // This allows the auth store to decide whether to keep cached credentials
-          this.onAuthInvalid?.();
+        // Handle authentication failures
+        if (error.response?.status === 401) {
+          const errorMessage = error.response?.data?.error || error.response?.data?.message || '';
+
+          // Check for user not found or invalid token errors
+          if (errorMessage.includes('User not found') ||
+              errorMessage.includes('Invalid token') ||
+              errorMessage.includes('Token expired') ||
+              errorMessage.includes('Unauthorized')) {
+            console.log('Authentication error detected:', errorMessage);
+            this.onAuthInvalid?.();
+          }
         }
 
         const apiError: ApiError = {

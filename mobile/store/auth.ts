@@ -86,17 +86,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, isAuthenticated: false, isLoading: false });
   },
 
-  invalidateAuth: () => {
-    // When API returns 401, attempt to re-validate
-    // If we have stored credentials, try to validate again
-    const currentState = useAuthStore.getState();
-    if (currentState.user) {
-      console.log("Auth invalidated by API, but keeping cached user for now");
-      // Don't immediately log out - let the user continue with cached data
-      // The next API call will attempt to use the token again
-    } else {
-      set({ user: null, isAuthenticated: false });
-    }
+  invalidateAuth: async () => {
+    console.log("Auth invalidated - clearing auth data and redirecting to login");
+
+    // Clear all auth data from storage
+    await storage.clearAuth();
+
+    // Reset auth state
+    set({ user: null, isAuthenticated: false, isLoading: false });
+
+    // Navigate to login (this will be handled by the protected route logic)
+    // The useProtectedRoute hook will detect the auth state change and redirect
   },
 
   validateToken: async () => {
