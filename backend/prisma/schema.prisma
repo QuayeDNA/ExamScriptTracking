@@ -1,10 +1,3 @@
-// ============================================================================
-// COMPLETE PRISMA SCHEMA FOR ATTENDANCE SYSTEM
-// ============================================================================
-// This is the FULL schema. Replace your existing schema.prisma with this.
-// All models related to attendance are included here.
-// ============================================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,61 +7,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// USER MODEL (Complete)
-// ============================================================================
 model User {
-  id                          String                     @id @default(uuid())
-  email                       String                     @unique
+  id                          String                       @id @default(uuid())
+  email                       String                       @unique
   password                    String
   role                        Role
   firstName                   String
   lastName                    String
   phone                       String?
-  isActive                    Boolean                    @default(true)
-  isSuperAdmin                Boolean                    @default(false)
-  passwordChanged             Boolean                    @default(false)
+  isActive                    Boolean                      @default(true)
+  isSuperAdmin                Boolean                      @default(false)
+  passwordChanged             Boolean                      @default(false)
   lastLogin                   DateTime?
-  failedLoginAttempts         Int                        @default(0)
+  failedLoginAttempts         Int                          @default(0)
   lockedUntil                 DateTime?
-  createdAt                   DateTime                   @default(now())
-  updatedAt                   DateTime                   @updatedAt
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
   profilePicture              String?
-  registrationToken           String?                    @unique
+  registrationToken           String?                      @unique
   department                  String?
-  
-  // Attendance Relations (NEW - replaces old relations)
-  createdSessions             AttendanceSession[]        @relation("SessionCreator")
-  assistedSessions            AttendanceSessionAssistant[]
   createdLinks                AttendanceLink[]
-  recordedAttendance          StudentAttendance[]        @relation("RecordedBy")
-  confirmedAttendance         StudentAttendance[]        @relation("ConfirmedBy")
-  createdTemplates            SessionTemplate[]          @relation("CreatedTemplates")
-  
-  // Existing Relations (Keep these if you're using exam/incident features)
-  createdRegistrationSessions RegistrationSession[]
-  passwordResetTokens         PasswordResetToken[]
-  refreshTokens               RefreshToken[]
+  createdSessions             AttendanceSession[]          @relation("SessionCreator")
+  assistedSessions            AttendanceSessionAssistant[]
   auditLogs                   AuditLog[]
-  createdExams                ExamSession[]              @relation("CreatedBy")
-  invigilatedExams            ExamSession[]              @relation("Invigilator")
+  handledBatches              BatchTransfer[]              @relation("Handler")
+  receivedBatches             BatchTransfer[]              @relation("Receiver")
+  createdExams                ExamSession[]                @relation("CreatedBy")
+  invigilatedExams            ExamSession[]                @relation("Invigilator")
   invigilatorHistory          ExamSessionInvigilator[]
-  assignedIncidents           Incident[]                 @relation("IncidentAssignee")
-  reportedIncidents           Incident[]                 @relation("IncidentReporter")
+  assignedIncidents           Incident[]                   @relation("IncidentAssignee")
+  reportedIncidents           Incident[]                   @relation("IncidentReporter")
   incidentAttachments         IncidentAttachment[]
   incidentComments            IncidentComment[]
   incidentStatusChanges       IncidentStatusHistory[]
-  handledBatches              BatchTransfer[]            @relation("Handler")
-  receivedBatches             BatchTransfer[]            @relation("Receiver")
+  passwordResetTokens         PasswordResetToken[]
+  refreshTokens               RefreshToken[]
+  createdRegistrationSessions RegistrationSession[]
+  createdTemplates            SessionTemplate[]            @relation("CreatedTemplates")
+  confirmedAttendance         StudentAttendance[]          @relation("ConfirmedBy")
+  recordedAttendance          StudentAttendance[]          @relation("RecordedBy")
+  createdArchives             ExamSessionArchive[]         @relation("ArchiveCreator")
 
   @@index([email])
   @@index([isActive])
   @@index([role])
 }
 
-// ============================================================================
-// STUDENT MODEL (Complete with biometric fields)
-// ============================================================================
 model Student {
   id                    String              @id @default(uuid())
   indexNumber           String              @unique
@@ -80,10 +64,8 @@ model Student {
   option                String?
   qrCode                String              @unique
   profilePicture        String?
-  
-  // Biometric fields
   biometricEnrolled     Boolean             @default(false)
-  biometricProvider     String?             // "FINGERPRINT" or "FACE"
+  biometricProvider     String?
   biometricTemplateHash String?             @unique
   biometricEnrolledAt   DateTime?
   biometricDeviceId     String?
@@ -91,17 +73,12 @@ model Student {
   biometricCredentialId String?             @unique
   biometricPublicKey    String?
   biometricTransports   String[]            @default([])
-  
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
-  
-  // Attendance Relations (NEW)
-  attendance            StudentAttendance[]
   enrollmentLinks       AttendanceLink[]    @relation("BiometricEnrollment")
-  
-  // Existing Relations (Keep these if you're using exam/incident features)
   attendances           ExamAttendance[]
   incidents             Incident[]
+  attendance            StudentAttendance[]
 
   @@index([indexNumber])
   @@index([biometricTemplateHash])
@@ -110,42 +87,26 @@ model Student {
   @@index([qrCode])
 }
 
-// ============================================================================
-// ATTENDANCE SESSION MODEL (Main session container)
-// ============================================================================
 model AttendanceSession {
-  id                    String                     @id @default(uuid())
-  
-  // Session Info
-  courseCode            String
-  courseName            String
-  venue                 String?
-  lecturerName          String?
-  notes                 String?
-  
-  // Creator
-  createdBy             String
-  creator               User                       @relation("SessionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  
-  // Timing
-  startTime             DateTime                   @default(now())
-  endTime               DateTime?
-  status                SessionStatus              @default(IN_PROGRESS)
-  
-  // Student tracking
-  expectedStudentCount  Int                        @default(0)
-  
-  // Metadata for analytics (store custom data as JSON)
-  metadata              Json?
-  
-  createdAt             DateTime                   @default(now())
-  updatedAt             DateTime                   @updatedAt
-  
-  // Relations
-  attendance            StudentAttendance[]
-  links                 AttendanceLink[]
-  assistants            AttendanceSessionAssistant[]
-  
+  id                   String                       @id @default(uuid())
+  courseCode           String
+  courseName           String
+  venue                String?
+  lecturerName         String?
+  notes                String?
+  createdBy            String
+  startTime            DateTime                     @default(now())
+  endTime              DateTime?
+  status               SessionStatus                @default(IN_PROGRESS)
+  expectedStudentCount Int                          @default(0)
+  metadata             Json?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  links                AttendanceLink[]
+  creator              User                         @relation("SessionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  assistants           AttendanceSessionAssistant[]
+  attendance           StudentAttendance[]
+
   @@index([createdBy, status])
   @@index([courseCode])
   @@index([startTime])
@@ -153,62 +114,42 @@ model AttendanceSession {
   @@index([createdBy])
 }
 
-// ============================================================================
-// SESSION ASSISTANTS (for collaborative marking - NEW)
-// ============================================================================
 model AttendanceSessionAssistant {
-  id                String            @id @default(uuid())
-  sessionId         String
-  userId            String
-  role              AssistantRole     @default(ASSISTANT)
-  addedAt           DateTime          @default(now())
-  recordedCount     Int               @default(0)
-  
-  session           AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id            String            @id @default(uuid())
+  sessionId     String
+  userId        String
+  role          AssistantRole     @default(ASSISTANT)
+  addedAt       DateTime          @default(now())
+  recordedCount Int               @default(0)
+  session       AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([sessionId, userId])
   @@index([sessionId])
   @@index([userId])
 }
 
-// ============================================================================
-// STUDENT ATTENDANCE RECORDS (Individual attendance marks)
-// ============================================================================
 model StudentAttendance {
-  id                    String              @id @default(uuid())
-  sessionId             String
-  studentId             String
-  
-  // Verification details
-  verificationMethod    VerificationMethod
-  status                AttendanceStatus    @default(PRESENT)
-  
-  // Timing
-  markedAt              DateTime            @default(now())
-  
-  // Confirmation (for self-marked attendance)
-  requiresConfirmation  Boolean             @default(false)
-  confirmedBy           String?
-  confirmedAt           DateTime?
-  confirmer             User?               @relation("ConfirmedBy", fields: [confirmedBy], references: [id], onDelete: SetNull)
-  
-  // Recording details
-  recordedBy            String?
-  recorder              User?               @relation("RecordedBy", fields: [recordedBy], references: [id], onDelete: SetNull)
-  
-  // Optional metadata
-  deviceId              String?
-  biometricConfidence   Float?
-  linkTokenUsed         String?
-  location              Json?               // { lat, lng }
-  
-  // Audit
-  metadata              Json?
-  
-  session               AttendanceSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student               Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  
+  id                   String             @id @default(uuid())
+  sessionId            String
+  studentId            String
+  verificationMethod   VerificationMethod
+  status               AttendanceStatus   @default(PRESENT)
+  markedAt             DateTime           @default(now())
+  requiresConfirmation Boolean            @default(false)
+  confirmedBy          String?
+  confirmedAt          DateTime?
+  recordedBy           String?
+  deviceId             String?
+  biometricConfidence  Float?
+  linkTokenUsed        String?
+  location             Json?
+  metadata             Json?
+  confirmer            User?              @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
+  recorder             User?              @relation("RecordedBy", fields: [recordedBy], references: [id])
+  session              AttendanceSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student              Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
   @@unique([sessionId, studentId])
   @@index([sessionId])
   @@index([studentId])
@@ -217,43 +158,25 @@ model StudentAttendance {
   @@index([status])
 }
 
-// ============================================================================
-// ATTENDANCE LINKS (Self-service and biometric enrollment)
-// ============================================================================
 model AttendanceLink {
-  id                String            @id @default(uuid())
-  
-  // Link details
-  linkToken         String            @unique
-  linkType          LinkType          @default(ATTENDANCE)
-  
-  // Association
+  id                String             @id @default(uuid())
+  linkToken         String             @unique
+  linkType          LinkType           @default(ATTENDANCE)
   sessionId         String?
-  studentId         String?           // For biometric enrollment links
-  
-  // Creator
+  studentId         String?
   createdBy         String
-  creator           User              @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  
-  // Settings
   expiresAt         DateTime
   maxUses           Int?
-  usesCount         Int               @default(0)
-  
-  // Geofencing
-  requiresLocation  Boolean           @default(false)
-  geofence          Json?             // { lat, lng, radiusMeters }
-  
-  // Status
-  isActive          Boolean           @default(true)
+  usesCount         Int                @default(0)
+  requiresLocation  Boolean            @default(false)
+  geofence          Json?
+  isActive          Boolean            @default(true)
   deactivatedAt     DateTime?
-  
-  createdAt         DateTime          @default(now())
-  
-  // Relations
+  createdAt         DateTime           @default(now())
+  creator           User               @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   session           AttendanceSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  enrollmentStudent Student?          @relation("BiometricEnrollment", fields: [studentId], references: [id], onDelete: Cascade)
-  
+  enrollmentStudent Student?           @relation("BiometricEnrollment", fields: [studentId], references: [id], onDelete: Cascade)
+
   @@index([linkToken])
   @@index([sessionId, isActive])
   @@index([expiresAt])
@@ -261,77 +184,20 @@ model AttendanceLink {
   @@index([createdBy])
 }
 
-// ============================================================================
-// SESSION TEMPLATES (for quick session creation)
-// ============================================================================
 model SessionTemplate {
-  id                    String    @id @default(uuid())
-  name                  String
-  
-  // Template data
-  courseCode            String
-  courseName            String
-  venue                 String?
-  expectedStudentCount  Int       @default(0)
-  
-  // Creator
-  createdBy             String
-  creator               User      @relation("CreatedTemplates", fields: [createdBy], references: [id], onDelete: Cascade)
-  
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  
+  id                   String   @id @default(uuid())
+  name                 String
+  courseCode           String
+  courseName           String
+  venue                String?
+  expectedStudentCount Int      @default(0)
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  creator              User     @relation("CreatedTemplates", fields: [createdBy], references: [id], onDelete: Cascade)
+
   @@index([createdBy])
   @@index([courseCode])
-}
-
-// ============================================================================
-// ENUMS FOR ATTENDANCE SYSTEM
-// ============================================================================
-
-enum SessionStatus {
-  IN_PROGRESS
-  PAUSED
-  COMPLETED
-  CANCELLED
-}
-
-enum AttendanceStatus {
-  PRESENT
-  LATE
-  EXCUSED
-  ABSENT
-}
-
-enum VerificationMethod {
-  QR_SCAN
-  MANUAL_ENTRY
-  BIOMETRIC_FINGERPRINT
-  BIOMETRIC_FACE
-  LINK_SELF_MARK
-}
-
-enum LinkType {
-  ATTENDANCE
-  BIOMETRIC_ENROLLMENT
-}
-
-enum AssistantRole {
-  ASSISTANT      // Can mark attendance
-  OBSERVER       // Can view only
-}
-
-// ============================================================================
-// EXISTING MODELS (Keep these unchanged if you're using them)
-// ============================================================================
-
-enum Role {
-  ADMIN
-  INVIGILATOR
-  DEPARTMENT_HEAD
-  FACULTY_OFFICER
-  LECTURER
-  CLASS_REP
 }
 
 model PasswordResetToken {
@@ -398,10 +264,6 @@ model AuditLog {
   @@index([userId])
 }
 
-// ============================================================================
-// EXAM MODELS (Keep if using exam features)
-// ============================================================================
-
 model ExamSession {
   id               String                   @id @default(uuid())
   batchQrCode      String                   @unique
@@ -419,10 +281,13 @@ model ExamSession {
   updatedAt        DateTime                 @updatedAt
   invigilatorId    String?
   invigilatorName  String?
+  archiveId        String?
+  isArchived       Boolean                  @default(false)
   transfers        BatchTransfer[]
   attendances      ExamAttendance[]
   createdBy        User                     @relation("CreatedBy", fields: [createdById], references: [id])
   invigilator      User?                    @relation("Invigilator", fields: [invigilatorId], references: [id])
+  archive          ExamSessionArchive?      @relation(fields: [archiveId], references: [id])
   invigilators     ExamSessionInvigilator[]
   expectedStudents ExamSessionStudent[]
   incidents        Incident[]
@@ -462,7 +327,7 @@ model ExamSessionInvigilator {
 }
 
 model ExamAttendance {
-  id              String           @id @default(uuid())
+  id              String               @id @default(uuid())
   studentId       String
   examSessionId   String
   entryTime       DateTime
@@ -470,8 +335,8 @@ model ExamAttendance {
   submissionTime  DateTime?
   status          ExamAttendanceStatus @default(PRESENT)
   discrepancyNote String?
-  examSession     ExamSession      @relation(fields: [examSessionId], references: [id])
-  student         Student          @relation(fields: [studentId], references: [id])
+  examSession     ExamSession          @relation(fields: [examSessionId], references: [id])
+  student         Student              @relation(fields: [studentId], references: [id])
   incidents       Incident[]
 
   @@unique([studentId, examSessionId])
@@ -496,10 +361,6 @@ model BatchTransfer {
 
   @@index([examSessionId])
 }
-
-// ============================================================================
-// INCIDENT MODELS (Keep if using incident features)
-// ============================================================================
 
 model Incident {
   id              String                  @id @default(uuid())
@@ -594,9 +455,61 @@ model IncidentStatusHistory {
   @@index([changedAt])
 }
 
-// ============================================================================
-// ADDITIONAL ENUMS
-// ============================================================================
+model ExamSessionArchive {
+  id          String   @id @default(uuid())
+  name        String   // Archive name (required, 3-100 chars)
+  description String?  // Optional description
+  createdById String
+  createdBy   User     @relation("ArchiveCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  sessions    ExamSession[]
+
+  @@map("exam_session_archives")
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  PAUSED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
+  ABSENT
+}
+
+enum VerificationMethod {
+  QR_SCAN
+  MANUAL_ENTRY
+  BIOMETRIC_FINGERPRINT
+  BIOMETRIC_FACE
+  LINK_SELF_MARK
+}
+
+enum LinkType {
+  ATTENDANCE
+  BIOMETRIC_ENROLLMENT
+}
+
+enum AssistantRole {
+  ASSISTANT
+  OBSERVER
+}
+
+enum Role {
+  ADMIN
+  INVIGILATOR
+  DEPARTMENT_HEAD
+  FACULTY_OFFICER
+  LECTURER
+  CLASS_REP
+}
 
 enum BatchStatus {
   NOT_STARTED
@@ -608,6 +521,7 @@ enum BatchStatus {
   GRADED
   RETURNED
   COMPLETED
+  ARCHIVED
 }
 
 enum InvigilatorRole {
