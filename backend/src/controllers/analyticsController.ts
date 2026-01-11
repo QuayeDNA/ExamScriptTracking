@@ -151,7 +151,7 @@ export const getOverview = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching overview analytics:", error);
-    res.status(500).json({ message: "Failed to fetch analytics overview" });
+    res.status(500).json({ error: "Failed to fetch analytics overview" });
   }
 };
 
@@ -292,7 +292,7 @@ export const getHandlerPerformance = async (req: Request, res: Response) => {
     console.error("Error fetching handler performance:", error);
     res
       .status(500)
-      .json({ message: "Failed to fetch handler performance data" });
+      .json({ error: "Failed to fetch handler performance data" });
   }
 };
 
@@ -421,7 +421,7 @@ export const getDiscrepancies = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching discrepancies:", error);
-    res.status(500).json({ message: "Failed to fetch discrepancy data" });
+    res.status(500).json({ error: "Failed to fetch discrepancy data" });
   }
 };
 
@@ -576,7 +576,7 @@ export const getExamStats = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching exam stats:", error);
-    res.status(500).json({ message: "Failed to fetch exam statistics" });
+    res.status(500).json({ error: "Failed to fetch exam statistics" });
   }
 };
 
@@ -595,7 +595,7 @@ export const getUserActivity = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
@@ -723,7 +723,7 @@ export const getUserActivity = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching user activity:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -738,7 +738,7 @@ export const clearUserActivity = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
@@ -759,7 +759,7 @@ export const clearUserActivity = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error clearing user activity:", error);
-    res.status(500).json({ message: "Failed to clear user activity" });
+    res.status(500).json({ error: "Failed to clear user activity" });
   }
 };
 

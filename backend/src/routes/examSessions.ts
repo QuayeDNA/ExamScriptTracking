@@ -14,6 +14,7 @@ import {
   getFaculties,
   exportExamSessionPDF,
 } from "../controllers/examSessionController";
+import { createArchive } from "../controllers/archiveController";
 import {
   addExpectedStudents,
   addExpectedStudentsByIndex,
@@ -23,6 +24,7 @@ import {
 } from "../controllers/examSessionStudentController";
 import { authenticate } from "../middleware/auth";
 import { authorize } from "../middleware/rbac";
+import { preventArchivedSessionOperations } from "../middleware/archivedSessionProtection";
 import { Role } from "@prisma/client";
 
 const router = express.Router();
@@ -41,25 +43,26 @@ router.get("/", getExamSessions);
 router.get("/:id", getExamSession);
 
 // Get batch QR code (accessible to all authenticated users)
-router.get("/:id/qr-code", generateBatchQRCodeEndpoint);
+router.get("/:id/qr-code", preventArchivedSessionOperations, generateBatchQRCodeEndpoint);
 
 // Export exam session as PDF (accessible to all authenticated users)
-router.get("/:id/export-pdf", exportExamSessionPDF);
+router.get("/:id/export-pdf", preventArchivedSessionOperations, exportExamSessionPDF);
 
 // Get exam session manifest (accessible to all authenticated users)
-router.get("/:id/manifest", getExamSessionManifest);
+router.get("/:id/manifest", preventArchivedSessionOperations, getExamSessionManifest);
 
 // Get attendance summary with expected vs actual (accessible to all)
-router.get("/:id/attendance-summary", getAttendanceSummary);
+router.get("/:id/attendance-summary", preventArchivedSessionOperations, getAttendanceSummary);
 
 // Expected Students Management
 // Get expected students for an exam session
-router.get("/:id/students", getExpectedStudents);
+router.get("/:id/students", preventArchivedSessionOperations, getExpectedStudents);
 
 // Add expected students (by student IDs) - admin and lecturer only
 router.post(
   "/:id/students",
   authorize(Role.ADMIN, Role.LECTURER),
+  preventArchivedSessionOperations,
   addExpectedStudents
 );
 
@@ -67,6 +70,7 @@ router.post(
 router.post(
   "/:id/students/bulk",
   authorize(Role.ADMIN, Role.LECTURER),
+  preventArchivedSessionOperations,
   addExpectedStudentsByIndex
 );
 
@@ -74,6 +78,7 @@ router.post(
 router.delete(
   "/:id/students/:studentId",
   authorize(Role.ADMIN, Role.LECTURER),
+  preventArchivedSessionOperations,
   removeExpectedStudent
 );
 
@@ -87,13 +92,21 @@ router.post(
   bulkCreateExamSessions
 );
 
+// Archive multiple exam sessions (admin only)
+router.post(
+  "/archive",
+  authorize(Role.ADMIN),
+  createArchive
+);
+
 // Update exam session (admin and lecturer only)
-router.put("/:id", authorize(Role.ADMIN, Role.LECTURER), updateExamSession);
+router.put("/:id", authorize(Role.ADMIN, Role.LECTURER), preventArchivedSessionOperations, updateExamSession);
 
 // Update exam session status (admin, invigilator, and lecturer)
 router.patch(
   "/:id/status",
   authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
+  preventArchivedSessionOperations,
   updateExamSessionStatus
 );
 
@@ -101,10 +114,11 @@ router.patch(
 router.post(
   "/:id/end",
   authorize(Role.ADMIN, Role.INVIGILATOR, Role.LECTURER),
+  preventArchivedSessionOperations,
   endExamSession
 );
 
 // Delete exam session (admin only)
-router.delete("/:id", authorize(Role.ADMIN), deleteExamSession);
+router.delete("/:id", authorize(Role.ADMIN), preventArchivedSessionOperations, deleteExamSession);
 
 export default router;

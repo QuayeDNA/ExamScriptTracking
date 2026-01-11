@@ -16,6 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth";
 import { useAppContext } from "@/store/appContext";
 import { authApi } from "@/api/auth";
+import { archiveApi } from "@/api/archives";
+import type { CreateArchiveRequest } from "@/api/archives";
 import { useThemeColors } from "@/constants/design-system";
 import { Card } from "@/components/ui/card";
 import { H2, H3, Text } from "@/components/ui/typography";
@@ -28,6 +30,7 @@ export default function ProfileScreen() {
   const { currentApp, switchApp, canAccessBothApps, canAccessAttendanceApp } = useAppContext();
   const colors = useThemeColors();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -48,6 +51,10 @@ export default function ProfileScreen() {
         text2: error.error || "An error occurred",
       });
     }
+  };
+
+  const handleArchiveManagement = () => {
+    setShowArchiveDialog(true);
   };
 
   return (
@@ -239,6 +246,37 @@ export default function ProfileScreen() {
             />
           </TouchableOpacity>
 
+          {/* Archive Management - Admin Only */}
+          {user?.role === "ADMIN" && (
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors.card }]}
+              onPress={handleArchiveManagement}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.actionIcon,
+                  { backgroundColor: `${colors.warning}15` },
+                ]}
+              >
+                <Ionicons name="archive" size={20} color={colors.warning} />
+              </View>
+              <Text
+                style={StyleSheet.flatten([
+                  styles.actionText,
+                  { color: colors.foreground },
+                ])}
+              >
+                Archive Management
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.foregroundMuted}
+              />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: colors.card }]}
             onPress={() =>
@@ -306,6 +344,20 @@ export default function ProfileScreen() {
         secondaryAction={{
           label: "Cancel",
           onPress: () => setShowLogoutDialog(false),
+        }}
+      />
+
+      {/* Archive Management Dialog */}
+      <Dialog
+        visible={showArchiveDialog}
+        onClose={() => setShowArchiveDialog(false)}
+        title="Archive Management"
+        message="Archive management is available in the web interface. Please use the web application for creating and managing exam session archives."
+        variant="info"
+        icon="archive"
+        primaryAction={{
+          label: "OK",
+          onPress: () => setShowArchiveDialog(false),
         }}
       />
     </SafeAreaView>

@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ArrowRight,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -254,9 +255,17 @@ export default function BatchTrackingPage() {
                           {session.courseName}
                         </p>
                       </div>
-                      <Badge variant={getStatusBadgeVariant(session.status)}>
-                        {session.status.replace(/_/g, " ")}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant={getStatusBadgeVariant(session.status)}>
+                          {session.status.replace(/_/g, " ")}
+                        </Badge>
+                        {session.isArchived && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Archive className="h-3 w-3 mr-1" />
+                            Archived
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Package className="h-3 w-3" />

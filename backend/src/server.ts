@@ -14,6 +14,7 @@ import analyticsRoutes from "./routes/analytics";
 import exportRoutes from "./routes/export";
 import incidentRoutes from "./routes/incident";
 import registrationRoutes from "./routes/registration";
+import archiveRoutes from "./routes/archives";
 import { cleanupBlacklistedTokens } from "./utils/cleanupBlacklistedTokens";
 import { initializeSocketServer } from "./socket/socketServer";
 import { templateRenderer } from "./utils/templateRenderer";
@@ -184,6 +185,7 @@ app.use("/api/class-attendance", classAttendanceRoutes);
 app.use("/api/batch-transfers", batchTransferRoutes);
 app.use("/api/incidents", incidentRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/archives", archiveRoutes);
 app.use("/api/registration", registrationRoutes);
 app.use("/api/reports/export", exportRoutes);
 

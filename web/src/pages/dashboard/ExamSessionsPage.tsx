@@ -10,6 +10,8 @@ import {
   type BatchStatus,
 } from "@/api/examSessions";
 import { usersApi } from "@/api/users";
+import { archiveApi } from "@/api/archives";
+import type { CreateArchiveRequest, ArchiveResponse, ApiError } from "@/types";
 import {
   Plus,
   Search,
@@ -24,6 +26,7 @@ import {
   Grid3X3,
   List,
   Upload,
+  Archive,
 } from "lucide-react";
 import { downloadExamSessionTemplate, parseExamSessionCSV, type ParsedExamSession } from "@/utils/csvTemplates";
 import { useAuthStore } from "@/store/auth";
@@ -121,6 +124,7 @@ export default function ExamSessionsPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
 
   // Form states
   const [selectedSession, setSelectedSession] = useState<ExamSession | null>(
@@ -149,6 +153,17 @@ export default function ExamSessionsPage() {
   const [newStatus, setNewStatus] = useState<BatchStatus>("IN_PROGRESS");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Archive form states
+  const [archiveFormData, setArchiveFormData] = useState<{
+    name: string;
+    description: string;
+    selectedSessionIds: string[];
+  }>({
+    name: "",
+    description: "",
+    selectedSessionIds: [],
+  });
 
   // Fetch exam sessions with filters
   const { data: sessionsData, isLoading } = useQuery({
@@ -203,8 +218,8 @@ export default function ExamSessionsPage() {
       setIsCreateModalOpen(false);
       resetForm();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to create exam session");
+    onError: (error: ApiError) => {
+      toast.error(error.error || "Failed to create exam session");
     },
   });
 
@@ -218,8 +233,8 @@ export default function ExamSessionsPage() {
       setIsEditModalOpen(false);
       resetForm();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to update exam session");
+    onError: (error: ApiError) => {
+      toast.error(error.error || "Failed to update exam session");
     },
   });
 
@@ -232,8 +247,8 @@ export default function ExamSessionsPage() {
       toast.success("Status updated successfully");
       setIsStatusModalOpen(false);
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to update status");
+    onError: (error: ApiError) => {
+      toast.error(error.error || "Failed to update status");
     },
   });
 
@@ -246,8 +261,8 @@ export default function ExamSessionsPage() {
       setIsDeleteModalOpen(false);
       setSelectedSession(null);
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to delete exam session");
+    onError: (error: ApiError) => {
+      toast.error(error.error || "Failed to delete exam session");
     },
   });
 
@@ -269,10 +284,24 @@ export default function ExamSessionsPage() {
         });
       }
     },
-    onError: (error: Error) => {
+    onError: (error: ApiError) => {
       toast.error("Import Failed", {
-        description: error.message,
+        description: error.error,
       });
+    },
+  });
+
+  // Create archive mutation
+  const createArchiveMutation = useMutation({
+    mutationFn: (data: CreateArchiveRequest) => archiveApi.createArchive(data),
+    onSuccess: (data: ArchiveResponse) => {
+      queryClient.invalidateQueries({ queryKey: ["examSessions"] });
+      toast.success(`Archive "${data.name}" created successfully with ${data.sessionCount} sessions`);
+      setIsArchiveModalOpen(false);
+      resetArchiveForm();
+    },
+    onError: (error: ApiError) => {
+      toast.error(error.error || "Failed to create archive");
     },
   });
 
@@ -284,7 +313,7 @@ export default function ExamSessionsPage() {
       setSelectedSession(session);
       setIsQRModalOpen(true);
     } catch (error) {
-      toast.error((error as Error).message || "Failed to fetch QR code");
+      toast.error((error as ApiError).error || "Failed to fetch QR code");
     }
   };
 
@@ -371,8 +400,8 @@ export default function ExamSessionsPage() {
 
           bulkImportMutation.mutate(sessions, {
             onSettled: () => setUploading(false),
-            onError: (error: Error) => {
-              setUploadError(error.message || "Failed to import exam sessions");
+            onError: (error: ApiError) => {
+              setUploadError(error.error || "Failed to import exam sessions");
             },
           });
         },
@@ -399,6 +428,14 @@ export default function ExamSessionsPage() {
       examDate: undefined,
     });
     setSelectedSession(null);
+  };
+
+  const resetArchiveForm = () => {
+    setArchiveFormData({
+      name: "",
+      description: "",
+      selectedSessionIds: [],
+    });
   };
 
   const openEditModal = (session: ExamSession) => {
@@ -463,6 +500,26 @@ export default function ExamSessionsPage() {
     }
   };
 
+  const handleArchiveSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!archiveFormData.name.trim()) {
+      toast.error("Archive name is required");
+      return;
+    }
+
+    if (archiveFormData.selectedSessionIds.length === 0) {
+      toast.error("Please select at least one exam session to archive");
+      return;
+    }
+
+    createArchiveMutation.mutate({
+      name: archiveFormData.name.trim(),
+      description: archiveFormData.description.trim() || undefined,
+      sessionIds: archiveFormData.selectedSessionIds,
+    });
+  };
+
   // Exam Session Card Component
   const ExamSessionCard = ({ session }: { session: ExamSession }) => (
     <Card className="h-full w-full min-w-[280px]">
@@ -476,12 +533,20 @@ export default function ExamSessionsPage() {
               {session.courseName}
             </CardDescription>
           </div>
-          <Badge
-            variant={getStatusBadgeVariant(session.status)}
-            className="text-xs"
-          >
-            {session.status.replace(/_/g, " ")}
-          </Badge>
+          <div className="flex flex-col items-end gap-1">
+            <Badge
+              variant={getStatusBadgeVariant(session.status)}
+              className="text-xs"
+            >
+              {session.status.replace(/_/g, " ")}
+            </Badge>
+            {session.isArchived && (
+              <Badge variant="secondary" className="text-xs">
+                <Archive className="h-3 w-3 mr-1" />
+                Archived
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -546,6 +611,7 @@ export default function ExamSessionsPage() {
               size="sm"
               className="h-8 w-8 p-0"
               title="View QR Code"
+              disabled={session.isArchived}
             >
               <QrCode className="h-3 w-3" />
             </Button>
@@ -557,6 +623,7 @@ export default function ExamSessionsPage() {
                   size="sm"
                   className="h-8 w-8 p-0"
                   title="Update Status"
+                  disabled={session.isArchived}
                 >
                   <Calendar className="h-3 w-3" />
                 </Button>
@@ -566,6 +633,7 @@ export default function ExamSessionsPage() {
                   size="sm"
                   className="h-8 w-8 p-0"
                   title="Edit"
+                  disabled={session.isArchived}
                 >
                   <Pencil className="h-3 w-3" />
                 </Button>
@@ -575,10 +643,13 @@ export default function ExamSessionsPage() {
                   size="sm"
                   className="h-8 w-8 p-0"
                   title="Delete"
-                  disabled={Boolean(
-                    session._count?.attendances &&
-                      session._count.attendances > 0
-                  )}
+                  disabled={
+                    session.isArchived ||
+                    Boolean(
+                      session._count?.attendances &&
+                        session._count.attendances > 0
+                    )
+                  }
                 >
                   <Trash2 className="h-3 w-3 text-destructive" />
                 </Button>
@@ -651,6 +722,12 @@ export default function ExamSessionsPage() {
                     Create Session
                   </Button>
                 </>
+              )}
+              {isAdmin && (
+                <Button onClick={() => setIsArchiveModalOpen(true)} variant="outline">
+                  <Archive className="h-4 w-4 mr-2" />
+                  Create Archive
+                </Button>
               )}
             </div>
           </div>
@@ -773,6 +850,7 @@ export default function ExamSessionsPage() {
                         <TableHead>Venue</TableHead>
                         <TableHead>Exam Date</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Archived</TableHead>
                         <TableHead>Students</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -799,6 +877,16 @@ export default function ExamSessionsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
+                            {session.isArchived ? (
+                              <Badge variant="secondary">
+                                <Archive className="h-3 w-3 mr-1" />
+                                Yes
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">No</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             {session._count?.attendances || 0}
                           </TableCell>
                           <TableCell className="text-right">
@@ -820,6 +908,7 @@ export default function ExamSessionsPage() {
                                 variant="ghost"
                                 size="icon"
                                 title="View QR Code"
+                                disabled={session.isArchived}
                               >
                                 <QrCode className="h-4 w-4" />
                               </Button>
@@ -831,6 +920,7 @@ export default function ExamSessionsPage() {
                                     variant="ghost"
                                     size="icon"
                                     title="Update Status"
+                                    disabled={session.isArchived}
                                   >
                                     <Calendar className="h-4 w-4" />
                                   </Button>
@@ -839,6 +929,7 @@ export default function ExamSessionsPage() {
                                     variant="ghost"
                                     size="icon"
                                     title="Edit"
+                                    disabled={session.isArchived}
                                   >
                                     <Pencil className="h-4 w-4" />
                                   </Button>
@@ -847,15 +938,20 @@ export default function ExamSessionsPage() {
                                     variant="ghost"
                                     size="icon"
                                     title={
-                                      session._count?.attendances &&
-                                      session._count.attendances > 0
+                                      session.isArchived
+                                        ? "Cannot delete archived session"
+                                        : session._count?.attendances &&
+                                          session._count.attendances > 0
                                         ? `Cannot delete: ${session._count.attendances} attendance record(s) exist`
                                         : "Delete"
                                     }
-                                    disabled={Boolean(
-                                      session._count?.attendances &&
-                                        session._count.attendances > 0
-                                    )}
+                                    disabled={
+                                      session.isArchived ||
+                                      Boolean(
+                                        session._count?.attendances &&
+                                          session._count.attendances > 0
+                                      )
+                                    }
                                   >
                                     <Trash2 className="h-4 w-4 text-destructive" />
                                   </Button>
@@ -1306,6 +1402,125 @@ export default function ExamSessionsPage() {
               Download QR Code
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive Modal */}
+      <Dialog open={isArchiveModalOpen} onOpenChange={setIsArchiveModalOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Archive</DialogTitle>
+            <DialogDescription>
+              Select exam sessions to archive. Archived sessions become read-only
+              and cannot be modified.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleArchiveSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="archive-name">Archive Name *</Label>
+              <Input
+                id="archive-name"
+                value={archiveFormData.name}
+                onChange={(e) =>
+                  setArchiveFormData((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                placeholder="e.g., Fall 2024 Semester Archives"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="archive-description">Description (Optional)</Label>
+              <Input
+                id="archive-description"
+                value={archiveFormData.description}
+                onChange={(e) =>
+                  setArchiveFormData((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Additional notes about this archive"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Select Sessions to Archive</Label>
+              <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
+                {sessionsData?.examSessions
+                  .filter((session) => !session.isArchived)
+                  .map((session) => (
+                    <div key={session.id} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`session-${session.id}`}
+                        checked={archiveFormData.selectedSessionIds.includes(
+                          session.id
+                        )}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setArchiveFormData((prev) => ({
+                              ...prev,
+                              selectedSessionIds: [
+                                ...prev.selectedSessionIds,
+                                session.id,
+                              ],
+                            }));
+                          } else {
+                            setArchiveFormData((prev) => ({
+                              ...prev,
+                              selectedSessionIds:
+                                prev.selectedSessionIds.filter(
+                                  (id) => id !== session.id
+                                ),
+                            }));
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <label
+                        htmlFor={`session-${session.id}`}
+                        className="text-sm cursor-pointer flex-1"
+                      >
+                        <span className="font-medium">
+                          {session.courseCode}
+                        </span>{" "}
+                        - {session.courseName} ({session.venue}) -{" "}
+                        {new Date(session.examDate).toLocaleDateString()}
+                      </label>
+                    </div>
+                  ))}
+                {sessionsData?.examSessions.filter((s) => !s.isArchived)
+                  .length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No sessions available to archive
+                  </p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsArchiveModalOpen(false);
+                  resetArchiveForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  createArchiveMutation.isPending ||
+                  archiveFormData.selectedSessionIds.length === 0
+                }
+              >
+                {createArchiveMutation.isPending ? "Creating..." : "Create Archive"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

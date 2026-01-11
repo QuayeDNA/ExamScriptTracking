@@ -52,6 +52,7 @@ import type {
   DiscrepanciesResponse,
   ExamStatisticsResponse,
   TransferStatus,
+  ApiError,
 } from "@/types";
 
 type DateRange = {
@@ -103,7 +104,7 @@ export default function AnalyticsDashboardPage() {
       console.error("Failed to load analytics:", error);
       toast.error("Failed to load analytics data", {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          (error as ApiError)?.error || (error as Error)?.message || "Unknown error occurred",
       });
     } finally {
       setLoading(false);
@@ -147,7 +148,7 @@ export default function AnalyticsDashboardPage() {
       console.error("Export failed:", error);
       toast.error("Failed to export report", {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          (error as ApiError)?.error || (error as Error)?.message || "Unknown error occurred",
       });
     }
   };

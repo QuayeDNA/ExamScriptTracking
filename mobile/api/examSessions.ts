@@ -13,6 +13,7 @@ export interface ExamSession {
   venue: string;
   examDate: string;
   status: BatchStatus;
+  isArchived: boolean;
   createdById: string;
   createdAt: string;
   updatedAt: string;

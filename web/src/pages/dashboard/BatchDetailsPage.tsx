@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   User,
   FileDown,
+  Archive,
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import Papa from "papaparse";
@@ -387,6 +388,12 @@ export default function BatchDetailsPage() {
                   <Badge variant={getStatusBadgeVariant(session.status)}>
                     {session.status.replace(/_/g, " ")}
                   </Badge>
+                  {session.isArchived && (
+                    <Badge variant="secondary">
+                      <Archive className="w-3 h-3 mr-1" />
+                      Archived
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -418,7 +425,7 @@ export default function BatchDetailsPage() {
                     updateStatusMutation.mutate(value);
                   }
                 }}
-                disabled={updateStatusMutation.isPending}
+                disabled={updateStatusMutation.isPending || session.isArchived}
               >
                 <SelectTrigger className="w-32 sm:w-40">
                   <SelectValue />
@@ -450,7 +457,7 @@ export default function BatchDetailsPage() {
                       endSessionMutation.mutate();
                     }
                   }}
-                  disabled={endSessionMutation.isPending}
+                  disabled={endSessionMutation.isPending || session.isArchived}
                   size="sm"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -473,7 +480,7 @@ export default function BatchDetailsPage() {
                 }}
                 variant="destructive"
                 size="sm"
-                disabled={deleteSessionMutation.isPending}
+                disabled={deleteSessionMutation.isPending || session.isArchived}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">
@@ -779,7 +786,7 @@ export default function BatchDetailsPage() {
                     <Button
                       variant="default"
                       size="sm"
-                      disabled={uploading}
+                      disabled={uploading || session.isArchived}
                       asChild
                     >
                       <span>
@@ -791,7 +798,7 @@ export default function BatchDetailsPage() {
                       type="file"
                       accept=".csv"
                       onChange={handleFileUpload}
-                      disabled={uploading}
+                      disabled={uploading || session.isArchived}
                       className="hidden"
                     />
                   </label>
@@ -902,7 +909,7 @@ export default function BatchDetailsPage() {
                                   }
                                   variant="ghost"
                                   size="icon"
-                                  disabled={removeStudentMutation.isPending}
+                                  disabled={removeStudentMutation.isPending || session.isArchived}
                                 >
                                   <Trash2 className="w-4 h-4 text-destructive" />
                                 </Button>

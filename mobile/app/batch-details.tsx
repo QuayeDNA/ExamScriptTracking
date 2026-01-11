@@ -100,6 +100,17 @@ export default function BatchDetailsScreen() {
   const handleStatusConfirm = async () => {
     if (!session || !pendingStatus) return;
 
+    if (session.isArchived) {
+      Toast.show({
+        type: "error",
+        text1: "Cannot Update",
+        text2: "Archived sessions cannot be modified",
+      });
+      setShowStatusDialog(false);
+      setPendingStatus(null);
+      return;
+    }
+
     try {
       setUpdating(true);
       setShowStatusDialog(false);
@@ -222,7 +233,7 @@ export default function BatchDetailsScreen() {
             <TouchableOpacity
               style={styles.statusBadge}
               onPress={() => setShowStatusDropdown(!showStatusDropdown)}
-              disabled={updating}
+              disabled={updating || session.isArchived}
             >
               <Badge
                 variant="default"
@@ -242,6 +253,14 @@ export default function BatchDetailsScreen() {
                 color={colors.foregroundMuted}
               />
             </TouchableOpacity>
+            {session.isArchived && (
+              <Badge variant="secondary" style={{ marginLeft: 8 }}>
+                <Ionicons name="archive" size={12} color={colors.foreground} />
+                <Text style={{ color: colors.foreground, fontSize: 12, marginLeft: 4 }}>
+                  Archived
+                </Text>
+              </Badge>
+            )}
           </View>
           <View style={styles.cardContent}>
             <InfoRow

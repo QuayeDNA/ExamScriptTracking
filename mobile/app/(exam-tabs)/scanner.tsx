@@ -80,6 +80,15 @@ function ScannerScreen() {
 
       setActiveExamSession(session);
 
+      // Show warning if session is archived
+      if (session.isArchived) {
+        Toast.show({
+          type: "warning",
+          text1: "Archived Session",
+          text2: "This exam session has been archived. Scanning is disabled.",
+        });
+      }
+
       // Cache expected students in Map for O(1) lookup by indexNumber
       const studentsMap = new Map();
       studentsData.expectedStudents.forEach((student: any) => {
@@ -119,6 +128,15 @@ function ScannerScreen() {
         type: "warning",
         text1: "No Active Session",
         text2: "Please scan the Batch QR Code first",
+      });
+      return;
+    }
+
+    if (activeExamSession.isArchived) {
+      Toast.show({
+        type: "error",
+        text1: "Session Archived",
+        text2: "This exam session has been archived and cannot accept new scans",
       });
       return;
     }

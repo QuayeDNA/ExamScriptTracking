@@ -86,6 +86,7 @@ export interface ExamSession {
   venue: string;
   examDate: string;
   status: BatchStatus;
+  isArchived: boolean;
   invigilatorId?: string;
   invigilatorName?: string;
   invigilators?: ExamSessionInvigilator[];
