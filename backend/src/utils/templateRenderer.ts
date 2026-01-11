@@ -7,8 +7,17 @@ import path from 'path';
 export class TemplateRenderer {
   private templatesDir: string;
 
-  constructor(templatesDir: string = path.join(__dirname, '../templates')) {
-    this.templatesDir = templatesDir;
+  constructor() {
+    // In production, templates are relative to the dist directory
+    // In development, templates are in the root templates directory
+    const isProduction = process.env.NODE_ENV === 'production' || !fs.existsSync(path.join(__dirname, '../../../templates'));
+    if (isProduction) {
+      // Production: look for templates relative to dist directory
+      this.templatesDir = path.join(__dirname, '../templates');
+    } else {
+      // Development: look for templates in root directory
+      this.templatesDir = path.join(__dirname, '../../../templates');
+    }
   }
 
   /**
