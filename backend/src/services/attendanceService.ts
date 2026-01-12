@@ -89,6 +89,18 @@ export class AttendanceService {
     // Determine if confirmation is required (self-marked attendance via link)
     const requiresConfirmation = !!linkTokenUsed;
 
+    // Verify the recordedBy user exists, otherwise set to null
+    let validRecordedBy = recordedBy;
+    if (recordedBy) {
+      const userExists = await prisma.user.findUnique({
+        where: { id: recordedBy },
+        select: { id: true }
+      });
+      if (!userExists) {
+        validRecordedBy = null;
+      }
+    }
+
     // Create attendance record
     const attendance = await prisma.studentAttendance.create({
       data: {
@@ -98,9 +110,9 @@ export class AttendanceService {
         deviceId,
         biometricConfidence,
         status,
-        recordedBy,
+        recordedBy: validRecordedBy,
         requiresConfirmation,
-        confirmedBy: requiresConfirmation ? null : recordedBy,
+        confirmedBy: requiresConfirmation ? null : validRecordedBy,
         confirmedAt: requiresConfirmation ? null : new Date(),
         linkTokenUsed,
         location: metadata?.location,

@@ -14,7 +14,7 @@ import {
 import { useThemeColors } from "@/constants/design-system";
 import { Ionicons } from "@expo/vector-icons";
 
-type DialogVariant = "default" | "success" | "warning" | "error";
+type DialogVariant = "default" | "success" | "warning" | "error" | "info";
 
 interface DialogProps {
   visible: boolean;
@@ -62,6 +62,10 @@ export function Dialog({
       iconColor: "#dc2626",
       iconBackground: "rgba(220, 38, 38, 0.1)",
     },
+    info: {
+      iconColor: "#2563eb",
+      iconBackground: "rgba(37, 99, 235, 0.1)",
+    },
   };
 
   const variantConfig = variantStyles[variant];
@@ -71,6 +75,7 @@ export function Dialog({
     success: "checkmark-circle",
     warning: "warning",
     error: "close-circle",
+    info: "information-circle",
   };
 
   const displayIcon = icon || iconNames[variant];

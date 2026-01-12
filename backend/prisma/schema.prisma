@@ -145,8 +145,8 @@ model StudentAttendance {
   linkTokenUsed        String?
   location             Json?
   metadata             Json?
-  confirmer            User?              @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
-  recorder             User?              @relation("RecordedBy", fields: [recordedBy], references: [id])
+  confirmer            User?              @relation("ConfirmedBy", fields: [confirmedBy], references: [id], onDelete: SetNull)
+  recorder             User?              @relation("RecordedBy", fields: [recordedBy], references: [id], onDelete: SetNull)
   session              AttendanceSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student              Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
