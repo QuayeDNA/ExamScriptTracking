@@ -90,7 +90,7 @@ export class AttendanceService {
     const requiresConfirmation = !!linkTokenUsed;
 
     // Verify the recordedBy user exists, otherwise set to null
-    let validRecordedBy = recordedBy;
+    let validRecordedBy: string | null = recordedBy;
     if (recordedBy) {
       const userExists = await prisma.user.findUnique({
         where: { id: recordedBy },
