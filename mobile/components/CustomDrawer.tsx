@@ -31,6 +31,7 @@ interface CustomDrawerProps {
   session: ExamSession | null;
   onViewDetails: () => void;
   onEndSession: () => void;
+  isEndingSession?: boolean;
 }
 
 export interface CustomDrawerRef {
@@ -39,7 +40,7 @@ export interface CustomDrawerRef {
 }
 
 const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
-  ({ session, onViewDetails, onEndSession }, ref) => {
+  ({ session, onViewDetails, onEndSession, isEndingSession = false }, ref) => {
     const colors = useThemeColors();
     const [drawerHeight] = useState(new Animated.Value(0));
     const [isVisible, setIsVisible] = useState(false);
@@ -201,6 +202,7 @@ const CustomDrawer = forwardRef<CustomDrawerRef, CustomDrawerProps>(
           stats={stats}
           onViewDetails={onViewDetails}
           onEndSession={onEndSession}
+          isEndingSession={isEndingSession}
         />
       </>
     );

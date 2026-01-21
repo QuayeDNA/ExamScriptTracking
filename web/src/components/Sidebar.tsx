@@ -117,7 +117,7 @@ export function Sidebar({ className }: { className?: string }) {
             <FileText className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="text-lg font-semibold text-foreground">
-            Script Tracker
+            ELMS
           </span>
         </Link>
       </div>

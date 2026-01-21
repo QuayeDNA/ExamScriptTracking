@@ -248,12 +248,17 @@ export const apiClient = new ApiClient();
 export const getFileUrl = (relativePath: string): string => {
   if (!relativePath) return "";
 
-  // If it's already a full URL (e.g., from Cloudinary), return as-is
+  // If it's already a full URL, extract the pathname for proxy compatibility
   if (
     relativePath.startsWith("http://") ||
     relativePath.startsWith("https://")
   ) {
-    return relativePath;
+    try {
+      const url = new URL(relativePath);
+      return url.pathname; // e.g., /uploads/students/image.png
+    } catch {
+      return relativePath; // fallback
+    }
   }
 
   // Remove leading slash if present and construct full URL

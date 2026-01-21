@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { examSessionsApi } from "@/api/examSessions";
+import { getFileUrl } from "@/lib/api-client";
 import {
   ArrowLeft,
   Download,
@@ -862,7 +863,7 @@ export default function BatchDetailsPage() {
                                         <AvatarImage
                                           src={
                                             item.profilePicture
-                                              ? `http://localhost:5000${item.profilePicture}`
+                                              ? getFileUrl(item.profilePicture)
                                               : ""
                                           }
                                           alt={`${item.firstName} ${item.lastName}`}

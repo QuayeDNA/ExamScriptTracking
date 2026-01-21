@@ -20,6 +20,7 @@ import { examSessionsApi, type ExamSession } from "@/api/examSessions";
 import { useThemeColors } from "@/constants/design-system";
 
 const CAMERA_PERMISSION_KEY = "camera_permission_granted";
+const ACTIVE_SESSION_KEY = "active_exam_session_id";
 
 function ScannerScreen() {
   const colors = useThemeColors();
@@ -33,6 +34,8 @@ function ScannerScreen() {
   const [expectedStudents, setExpectedStudents] = useState<Map<string, any>>(new Map());
   const [lastScannedStudent, setLastScannedStudent] = useState<any>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isGrantingPermission, setIsGrantingPermission] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
   const drawerRef = useRef<CustomDrawerRef>(null);
   const router = useRouter();
   const scanAreaHeight = useRef(new Animated.Value(0)).current;
@@ -40,10 +43,12 @@ function ScannerScreen() {
   // Check for existing camera permission on mount
   useEffect(() => {
     checkCameraPermission();
+    loadStoredSession();
   }, []);
 
   const checkCameraPermission = async () => {
     try {
+      setIsGrantingPermission(true);
       // Check if we've already granted permission
       const granted = await SecureStore.getItemAsync(CAMERA_PERMISSION_KEY);
 
@@ -65,6 +70,46 @@ function ScannerScreen() {
       }
     } catch {
       setHasPermission(false);
+    } finally {
+      setIsGrantingPermission(false);
+    }
+  };
+
+  const loadStoredSession = async () => {
+    try {
+      const storedSessionId = await SecureStore.getItemAsync(ACTIVE_SESSION_KEY);
+      if (storedSessionId) {
+        // Validate the stored session is still valid
+        const session = await examSessionsApi.getExamSession(storedSessionId);
+        
+        // Only restore if session is active and not archived
+        if (session.status === "IN_PROGRESS" && !session.isArchived) {
+          await loadExamSession(storedSessionId);
+        } else {
+          // Clear invalid stored session
+          await SecureStore.deleteItemAsync(ACTIVE_SESSION_KEY);
+        }
+      }
+    } catch (error) {
+      // If session loading fails, clear stored session
+      console.log("Failed to load stored session:", error);
+      await SecureStore.deleteItemAsync(ACTIVE_SESSION_KEY);
+    }
+  };
+
+  const storeActiveSession = async (sessionId: string) => {
+    try {
+      await SecureStore.setItemAsync(ACTIVE_SESSION_KEY, sessionId);
+    } catch (error) {
+      console.log("Failed to store active session:", error);
+    }
+  };
+
+  const clearStoredSession = async () => {
+    try {
+      await SecureStore.deleteItemAsync(ACTIVE_SESSION_KEY);
+    } catch (error) {
+      console.log("Failed to clear stored session:", error);
     }
   };
 
@@ -79,6 +124,9 @@ function ScannerScreen() {
       ]);
 
       setActiveExamSession(session);
+
+      // Store the active session for persistence
+      await storeActiveSession(batchId);
 
       // Show warning if session is archived
       if (session.isArchived) {
@@ -319,6 +367,7 @@ function ScannerScreen() {
     }
 
     try {
+      setIsEndingSession(true);
       await examSessionsApi.endExamSession(activeExamSession.id);
       Toast.show({
         type: "success",
@@ -327,6 +376,9 @@ function ScannerScreen() {
       });
       setActiveExamSession(null);
       drawerRef.current?.close();
+
+      // Clear stored session
+      await clearStoredSession();
 
       // Reset scan area
       Animated.spring(scanAreaHeight, {
@@ -341,6 +393,8 @@ function ScannerScreen() {
         text1: "End Session Failed",
         text2: error.error || "Failed to end exam session",
       });
+    } finally {
+      setIsEndingSession(false);
     }
   };
 
@@ -385,8 +439,13 @@ function ScannerScreen() {
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary }]}
             onPress={checkCameraPermission}
+            disabled={isGrantingPermission}
           >
-            <Text style={styles.buttonText}>Grant Access</Text>
+            {isGrantingPermission ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Grant Access</Text>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -565,6 +624,7 @@ function ScannerScreen() {
         session={activeExamSession}
         onViewDetails={handleViewDetails}
         onEndSession={handleEndSession}
+        isEndingSession={isEndingSession}
       />
 
       {/* Profile Picture Modal */}

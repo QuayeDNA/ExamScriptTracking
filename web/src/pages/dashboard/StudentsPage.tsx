@@ -23,6 +23,7 @@ import {
   List,
   MoreHorizontal,
   User,
+  Users,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import {
@@ -454,14 +455,14 @@ export default function StudentsPage() {
       {/* Header */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div className="text-center sm:text-left">
               <CardTitle>Students</CardTitle>
               <CardDescription>
                 Manage student records and QR codes
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 justify-center sm:justify-end">
               {/* View Mode Toggle */}
               <div className="flex border rounded-md">
                 <Button
@@ -482,11 +483,11 @@ export default function StudentsPage() {
                 </Button>
               </div>
 
-              <Button onClick={handleExportCSV} variant="outline">
+              <Button onClick={handleExportCSV} variant="outline" size="sm">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-              <Button onClick={handleExportPDF} variant="outline">
+              <Button onClick={handleExportPDF} variant="outline" size="sm">
                 <FileDown className="h-4 w-4 mr-2" />
                 Export PDF
               </Button>
@@ -495,11 +496,12 @@ export default function StudentsPage() {
                   <Button
                     onClick={() => setIsBulkImportModalOpen(true)}
                     variant="outline"
+                    size="sm"
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     Bulk Import
                   </Button>
-                  <Button onClick={() => setIsCreateModalOpen(true)}>
+                  <Button onClick={() => setIsCreateModalOpen(true)} size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Student
                   </Button>
@@ -511,7 +513,7 @@ export default function StudentsPage() {
 
         {/* Filters */}
         <CardContent>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -533,7 +535,7 @@ export default function StudentsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="All Programs" />
                 </SelectTrigger>
                 <SelectContent>
@@ -566,7 +568,7 @@ export default function StudentsPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue placeholder="All Levels" />
                 </SelectTrigger>
                 <SelectContent>
@@ -601,6 +603,28 @@ export default function StudentsPage() {
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">
               Loading students...
+            </div>
+          ) : studentsData?.students.length === 0 ? (
+            <div className="p-8 text-center">
+              {search || programFilter || levelFilter ? (
+                <>
+                  <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No students found</h3>
+                  <p className="text-muted-foreground mb-4">Try adjusting your search or filters.</p>
+                  <div className="flex gap-2 justify-center">
+                    {search && <Button variant="outline" onClick={() => { setSearch(""); setPage(1); }}>Clear Search</Button>}
+                    {programFilter && <Button variant="outline" onClick={() => { setProgramFilter(""); setPage(1); }}>Clear Program Filter</Button>}
+                    {levelFilter && <Button variant="outline" onClick={() => { setLevelFilter(""); setPage(1); }}>Clear Level Filter</Button>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No students yet</h3>
+                  <p className="text-muted-foreground mb-4">Get started by adding your first student.</p>
+                  {isAdmin && <Button onClick={() => setIsCreateModalOpen(true)}>Add Student</Button>}
+                </>
+              )}
             </div>
           ) : viewMode === "table" ? (
             <>

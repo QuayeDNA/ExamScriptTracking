@@ -10,6 +10,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import * as Notifications from "expo-notifications";
 import Toast, { BaseToast, ErrorToast } from "react-native-toast-message";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -160,7 +161,8 @@ export default function RootLayout() {
   useProtectedRoute();
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />
@@ -270,5 +272,6 @@ export default function RootLayout() {
         />
       </ThemeProvider>
     </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }

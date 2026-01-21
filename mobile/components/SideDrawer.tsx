@@ -9,6 +9,7 @@ import {
   Animated,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,6 +29,7 @@ interface SideDrawerProps {
   stats: any;
   onViewDetails: () => void;
   onEndSession: () => void;
+  isEndingSession?: boolean;
 }
 
 const SideDrawer = ({
@@ -38,6 +40,7 @@ const SideDrawer = ({
   stats,
   onViewDetails,
   onEndSession,
+  isEndingSession = false,
 }: SideDrawerProps) => {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -319,9 +322,16 @@ const SideDrawer = ({
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: "#ef4444" }]}
                   onPress={onEndSession}
+                  disabled={isEndingSession}
                 >
-                  <Ionicons name="stop-circle" size={20} color="#fff" />
-                  <Text style={styles.actionButtonText}>End Session</Text>
+                  {isEndingSession ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="stop-circle" size={20} color="#fff" />
+                  )}
+                  <Text style={styles.actionButtonText}>
+                    {isEndingSession ? "Ending..." : "End Session"}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>

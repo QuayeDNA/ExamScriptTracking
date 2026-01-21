@@ -27,6 +27,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: true, // Enable WebSocket proxying
       },
+      '/uploads': {
+        target: 'http://192.168.43.153:5000',  // Proxy uploads for images
+        changeOrigin: true,
+        secure: false,
+      },
     },
     fs: {
       // Allow serving files from the mobile directory
