@@ -1,5 +1,6 @@
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { seedIncidentTemplates } from "./seed-incident-templates";
 
 const prisma = new PrismaClient();
 
@@ -120,6 +121,9 @@ async function main() {
   console.log("📧 Email:", invigilatorEmail);
   console.log("🔑 Password:", invigilatorPassword);
   console.log("🔍 Use these credentials to test invigilator features");
+
+  // Seed incident templates
+  await seedIncidentTemplates();
 
   console.log("\n✨ Database seed completed!");
 }

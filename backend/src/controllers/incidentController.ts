@@ -32,12 +32,12 @@ const ALLOWED_FILE_TYPES = [
 // Severity mapping by incident type
 const INCIDENT_TYPE_SEVERITY: Record<IncidentType, IncidentSeverity> = {
   MALPRACTICE: 'CRITICAL',
-  HEALTH_ISSUE: 'HIGH',
+  HEALTH_ISSUE: 'MEDIUM',
   EXAM_DAMAGE: 'HIGH',
   EQUIPMENT_FAILURE: 'MEDIUM',
   DISRUPTION: 'HIGH',
   SECURITY_BREACH: 'CRITICAL',
-  PROCEDURAL_VIOLATION: 'MEDIUM',
+  PROCEDURAL_VIOLATION: 'HIGH',
   OTHER: 'MEDIUM',
 };
 
@@ -89,6 +89,19 @@ const assignIncidentSchema = z.object({
 const addCommentSchema = z.object({
   comment: z.string().min(1, "Comment cannot be empty"),
   isInternal: z.boolean().optional().default(false),
+});
+
+// Incident Template schemas
+const createIncidentTemplateSchema = z.object({
+  type: z.nativeEnum(IncidentType),
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+});
+
+const updateIncidentTemplateSchema = z.object({
+  type: z.nativeEnum(IncidentType).optional(),
+  title: z.string().min(3).optional(),
+  description: z.string().min(10).optional(),
 });
 
 /**
@@ -904,5 +917,254 @@ export const exportIncidentsBulkPDF = async (req: Request, res: Response) => {
     if (!res.headersSent) {
       res.status(500).json({ error: "Failed to export incidents" });
     }
+  }
+};
+
+/**
+ * Get all incident templates
+ * GET /api/incidents/templates
+ */
+export const getIncidentTemplates = async (req: Request, res: Response) => {
+  try {
+    const { type } = req.query;
+
+    const where: any = {};
+    if (type) {
+      where.type = type as IncidentType;
+    }
+
+    const templates = await prisma.incidentTemplate.findMany({
+      where,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: [
+        { isDefault: 'desc' }, // Default templates first
+        { createdAt: 'desc' },
+      ],
+    });
+
+    res.json({
+      templates,
+      total: templates.length,
+    });
+  } catch (error: any) {
+    console.error("Error fetching incident templates:", error);
+    res.status(500).json({ error: "Failed to fetch incident templates" });
+  }
+};
+
+/**
+ * Get single incident template by ID
+ * GET /api/incidents/templates/:id
+ */
+export const getIncidentTemplateById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const template = await prisma.incidentTemplate.findUnique({
+      where: { id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!template) {
+      return res.status(404).json({ error: "Incident template not found" });
+    }
+
+    res.json({ template });
+  } catch (error: any) {
+    console.error("Error fetching incident template:", error);
+    res.status(500).json({ error: "Failed to fetch incident template" });
+  }
+};
+
+/**
+ * Create a new incident template
+ * POST /api/incidents/templates
+ */
+export const createIncidentTemplate = async (req: Request, res: Response) => {
+  try {
+    const validated = createIncidentTemplateSchema.parse(req.body);
+
+    const template = await prisma.incidentTemplate.create({
+      data: {
+        ...validated,
+        createdBy: req.user!.userId,
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: "CREATE_INCIDENT_TEMPLATE",
+        entity: "IncidentTemplate",
+        entityId: template.id,
+        details: {
+          type: template.type,
+          title: template.title,
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    res.status(201).json({
+      message: "Incident template created successfully",
+      template,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues });
+    }
+    console.error("Error creating incident template:", error);
+    res.status(500).json({ error: "Failed to create incident template" });
+  }
+};
+
+/**
+ * Update incident template
+ * PATCH /api/incidents/templates/:id
+ */
+export const updateIncidentTemplate = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const validated = updateIncidentTemplateSchema.parse(req.body);
+
+    // Check if template exists and is not a default template
+    const existingTemplate = await prisma.incidentTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!existingTemplate) {
+      return res.status(404).json({ error: "Incident template not found" });
+    }
+
+    if (existingTemplate.isDefault) {
+      return res.status(403).json({ error: "Cannot modify default templates" });
+    }
+
+    // Check if user owns this template or is super admin
+    if (existingTemplate.createdBy !== req.user!.userId && !req.user!.isSuperAdmin) {
+      return res.status(403).json({ error: "You can only modify your own templates" });
+    }
+
+    const template = await prisma.incidentTemplate.update({
+      where: { id },
+      data: validated,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: "UPDATE_INCIDENT_TEMPLATE",
+        entity: "IncidentTemplate",
+        entityId: template.id,
+        details: {
+          type: template.type,
+          title: template.title,
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    res.json({
+      message: "Incident template updated successfully",
+      template,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues });
+    }
+    console.error("Error updating incident template:", error);
+    res.status(500).json({ error: "Failed to update incident template" });
+  }
+};
+
+/**
+ * Delete incident template
+ * DELETE /api/incidents/templates/:id
+ */
+export const deleteIncidentTemplate = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if template exists and is not a default template
+    const existingTemplate = await prisma.incidentTemplate.findUnique({
+      where: { id },
+    });
+
+    if (!existingTemplate) {
+      return res.status(404).json({ error: "Incident template not found" });
+    }
+
+    if (existingTemplate.isDefault) {
+      return res.status(403).json({ error: "Cannot delete default templates" });
+    }
+
+    // Check if user owns this template or is super admin
+    if (existingTemplate.createdBy !== req.user!.userId && !req.user!.isSuperAdmin) {
+      return res.status(403).json({ error: "You can only delete your own templates" });
+    }
+
+    await prisma.incidentTemplate.delete({
+      where: { id },
+    });
+
+    // Log audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.userId,
+        action: "DELETE_INCIDENT_TEMPLATE",
+        entity: "IncidentTemplate",
+        entityId: id,
+        details: {
+          type: existingTemplate.type,
+          title: existingTemplate.title,
+        },
+        ipAddress: req.ip,
+      },
+    });
+
+    res.json({ message: "Incident template deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting incident template:", error);
+    res.status(500).json({ error: "Failed to delete incident template" });
   }
 };

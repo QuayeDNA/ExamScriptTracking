@@ -4,20 +4,7 @@
  */
 
 import { apiClient } from "@/lib/api-client";
-
-// ============================================
-// Types & Enums
-// ============================================
-
-export type IncidentType =
-  | "MISSING_SCRIPT"
-  | "DAMAGED_SCRIPT"
-  | "MALPRACTICE"
-  | "STUDENT_ILLNESS"
-  | "VENUE_ISSUE"
-  | "COUNT_DISCREPANCY"
-  | "LATE_SUBMISSION"
-  | "OTHER";
+import type { IncidentType } from "@/types";
 
 export type IncidentSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -377,13 +364,13 @@ export const deleteIncident = async (id: string): Promise<void> => {
  */
 export const getIncidentTypeLabel = (type: IncidentType): string => {
   const labels: Record<IncidentType, string> = {
-    MISSING_SCRIPT: "Missing Script",
-    DAMAGED_SCRIPT: "Damaged Script",
     MALPRACTICE: "Malpractice",
-    STUDENT_ILLNESS: "Student Illness",
-    VENUE_ISSUE: "Venue Issue",
-    COUNT_DISCREPANCY: "Count Discrepancy",
-    LATE_SUBMISSION: "Late Submission",
+    HEALTH_ISSUE: "Health Issue",
+    EXAM_DAMAGE: "Exam Damage",
+    EQUIPMENT_FAILURE: "Equipment Failure",
+    DISRUPTION: "Disruption",
+    SECURITY_BREACH: "Security Breach",
+    PROCEDURAL_VIOLATION: "Procedural Violation",
     OTHER: "Other",
   };
   return labels[type];
@@ -421,13 +408,13 @@ export const getSeverityColor = (severity: IncidentSeverity): string => {
  */
 export const getSeverityFromType = (type: IncidentType): IncidentSeverity => {
   const severityMap: Record<IncidentType, IncidentSeverity> = {
-    MISSING_SCRIPT: 'CRITICAL',
-    DAMAGED_SCRIPT: 'HIGH',
     MALPRACTICE: 'CRITICAL',
-    STUDENT_ILLNESS: 'MEDIUM',
-    VENUE_ISSUE: 'HIGH',
-    COUNT_DISCREPANCY: 'HIGH',
-    LATE_SUBMISSION: 'MEDIUM',
+    HEALTH_ISSUE: 'MEDIUM',
+    EXAM_DAMAGE: 'HIGH',
+    EQUIPMENT_FAILURE: 'MEDIUM',
+    DISRUPTION: 'HIGH',
+    SECURITY_BREACH: 'CRITICAL',
+    PROCEDURAL_VIOLATION: 'HIGH',
     OTHER: 'MEDIUM',
   };
   return severityMap[type];
@@ -446,6 +433,104 @@ export const getStatusColor = (status: IncidentStatus): string => {
   };
   return colors[status];
 };
+
+export interface IncidentTemplate {
+  id: string;
+  type: IncidentType;
+  title: string;
+  description: string;
+  isDefault: boolean;
+  creatorId?: string;
+  creator?: {
+    firstName: string;
+    lastName: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================
+// Template API Functions
+// ============================================
+
+/**
+ * Get all incident templates, optionally filtered by type
+ */
+export async function getIncidentTemplates(type?: IncidentType): Promise<IncidentTemplate[]> {
+  try {
+    const params = type ? `?type=${type}` : '';
+    const response = await apiClient.get(`/incidents/templates${params}`);
+    return (response as { templates: IncidentTemplate[] }).templates || [];
+  } catch (error) {
+    console.error('Failed to fetch incident templates:', error);
+    return [];
+  }
+}
+
+/**
+ * Get templates for a specific incident type
+ */
+export async function getTemplatesForType(type: IncidentType): Promise<IncidentTemplate[]> {
+  return getIncidentTemplates(type);
+}
+
+/**
+ * Search templates by query string
+ */
+export async function searchIncidentTemplates(query: string, type?: IncidentType): Promise<IncidentTemplate[]> {
+  try {
+    // Fetch all templates and filter client-side since no search endpoint exists
+    const allTemplates = await getIncidentTemplates();
+
+    let filtered = allTemplates;
+
+    // Filter by type if specified
+    if (type) {
+      filtered = filtered.filter(template => template.type === type);
+    }
+
+    // Filter by search query if specified
+    if (query && query.trim()) {
+      const searchTerm = query.toLowerCase().trim();
+      filtered = filtered.filter(template =>
+        template.title.toLowerCase().includes(searchTerm) ||
+        template.description.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // Sort by relevance: exact title matches first, then keyword matches, then partial matches
+    filtered.sort((a, b) => {
+      const aTitle = a.title.toLowerCase();
+      const bTitle = b.title.toLowerCase();
+      const searchTerm = query.toLowerCase().trim();
+
+      // Exact title match gets highest priority
+      const aExactTitle = aTitle === searchTerm ? 1 : 0;
+      const bExactTitle = bTitle === searchTerm ? 1 : 0;
+      if (aExactTitle !== bExactTitle) return bExactTitle - aExactTitle;
+
+      // Title starts with search term
+      const aStartsWith = aTitle.startsWith(searchTerm) ? 1 : 0;
+      const bStartsWith = bTitle.startsWith(searchTerm) ? 1 : 0;
+      if (aStartsWith !== bStartsWith) return bStartsWith - aStartsWith;
+
+      // Keyword matches - removed since keywords field doesn't exist
+      // const aKeywordMatch = a.keywords?.some(k => k.toLowerCase().includes(searchTerm)) ? 1 : 0;
+      // const bKeywordMatch = b.keywords?.some(k => k.toLowerCase().includes(searchTerm)) ? 1 : 0;
+      // if (aKeywordMatch !== bKeywordMatch) return bKeywordMatch - aKeywordMatch;
+
+      // Default templates get priority
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+
+      return 0;
+    });
+
+    return filtered.slice(0, 10); // Limit to 10 results
+  } catch (error) {
+    console.error('Failed to search incident templates:', error);
+    return [];
+  }
+}
 
 export default {
   getIncidents,

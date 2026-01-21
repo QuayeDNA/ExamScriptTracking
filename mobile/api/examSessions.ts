@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { ExamAttendance } from "@/types";
+import type { ExamAttendance } from "@/types/";
 
 export interface ExamSession {
   id: string;
@@ -61,7 +61,7 @@ export const examSessionsApi = {
 
   getExpectedStudents: async (examSessionId: string) => {
     return apiClient.get<{
-      expectedStudents: Array<{
+      expectedStudents: {
         id: string;
         indexNumber: string;
         firstName?: string | null;
@@ -75,7 +75,7 @@ export const examSessionsApi = {
           submissionTime: string | null;
           status: string;
         } | null;
-      }>;
+      }[];
     }>(`/exam-sessions/${examSessionId}/students`);
   },
 

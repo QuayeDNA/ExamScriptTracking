@@ -18,6 +18,11 @@ import {
   exportIncidentPDF,
   exportIncidentsSummaryExcel,
   exportIncidentsBulkPDF,
+  getIncidentTemplates,
+  getIncidentTemplateById,
+  createIncidentTemplate,
+  updateIncidentTemplate,
+  deleteIncidentTemplate,
 } from "../controllers/incidentController";
 
 const router = Router();
@@ -40,6 +45,16 @@ router.get("/statistics", getStatistics);
 router.get("/export/summary", exportIncidentsSummaryExcel);
 router.post("/export/bulk-pdf", exportIncidentsBulkPDF);
 router.get("/:id/export/pdf", exportIncidentPDF);
+
+/**
+ * Incident Templates
+ * Admin and faculty officers can manage templates
+ */
+router.get("/templates", getIncidentTemplates);
+router.get("/templates/:id", getIncidentTemplateById);
+router.post("/templates", authorize("ADMIN", "FACULTY_OFFICER"), createIncidentTemplate);
+router.patch("/templates/:id", authorize("ADMIN", "FACULTY_OFFICER"), updateIncidentTemplate);
+router.delete("/templates/:id", authorize("ADMIN", "FACULTY_OFFICER"), deleteIncidentTemplate);
 
 /**
  * Incident CRUD

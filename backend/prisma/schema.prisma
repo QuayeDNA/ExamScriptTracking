@@ -40,6 +40,7 @@ model User {
   incidentAttachments         IncidentAttachment[]
   incidentComments            IncidentComment[]
   incidentStatusChanges       IncidentStatusHistory[]
+  createdIncidentTemplates    IncidentTemplate[]
   passwordResetTokens         PasswordResetToken[]
   refreshTokens               RefreshToken[]
   createdRegistrationSessions RegistrationSession[]
@@ -145,8 +146,8 @@ model StudentAttendance {
   linkTokenUsed        String?
   location             Json?
   metadata             Json?
-  confirmer            User?              @relation("ConfirmedBy", fields: [confirmedBy], references: [id], onDelete: SetNull)
-  recorder             User?              @relation("RecordedBy", fields: [recordedBy], references: [id], onDelete: SetNull)
+  confirmer            User?              @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
+  recorder             User?              @relation("RecordedBy", fields: [recordedBy], references: [id])
   session              AttendanceSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student              Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
@@ -285,9 +286,9 @@ model ExamSession {
   isArchived       Boolean                  @default(false)
   transfers        BatchTransfer[]
   attendances      ExamAttendance[]
+  archive          ExamSessionArchive?      @relation(fields: [archiveId], references: [id])
   createdBy        User                     @relation("CreatedBy", fields: [createdById], references: [id])
   invigilator      User?                    @relation("Invigilator", fields: [invigilatorId], references: [id])
-  archive          ExamSessionArchive?      @relation(fields: [archiveId], references: [id])
   invigilators     ExamSessionInvigilator[]
   expectedStudents ExamSessionStudent[]
   incidents        Incident[]
@@ -455,17 +456,32 @@ model IncidentStatusHistory {
   @@index([changedAt])
 }
 
-model ExamSessionArchive {
-  id          String   @id @default(uuid())
-  name        String   // Archive name (required, 3-100 chars)
-  description String?  // Optional description
-  createdById String
-  createdBy   User     @relation("ArchiveCreator", fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model IncidentTemplate {
+  id          String       @id @default(uuid())
+  type        IncidentType
+  title       String
+  description String
+  isDefault   Boolean      @default(false) // Indicates if this is a seeded template
+  createdBy   String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  creator     User?        @relation(fields: [createdBy], references: [id])
 
-  // Relations
+  @@index([type])
+  @@index([isDefault])
+  @@index([createdBy])
+  @@unique([type, title]) // Ensure unique combination of type and title
+}
+
+model ExamSessionArchive {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   sessions    ExamSession[]
+  createdBy   User          @relation("ArchiveCreator", fields: [createdById], references: [id])
 
   @@map("exam_session_archives")
 }

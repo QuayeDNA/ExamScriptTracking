@@ -1,13 +1,13 @@
 import { apiClient } from "@/lib/api-client";
 
 export type IncidentType =
-  | "MISSING_SCRIPT"
-  | "DAMAGED_SCRIPT"
   | "MALPRACTICE"
-  | "STUDENT_ILLNESS"
-  | "VENUE_ISSUE"
-  | "COUNT_DISCREPANCY"
-  | "LATE_SUBMISSION"
+  | "HEALTH_ISSUE"
+  | "EXAM_DAMAGE"
+  | "EQUIPMENT_FAILURE"
+  | "DISRUPTION"
+  | "SECURITY_BREACH"
+  | "PROCEDURAL_VIOLATION"
   | "OTHER";
 
 export type IncidentSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -129,6 +129,35 @@ export interface IncidentStatusHistory {
     lastName: string;
     email: string;
   };
+}
+
+export interface IncidentTemplate {
+  id: string;
+  type: IncidentType;
+  title: string;
+  description: string;
+  isDefault: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  creator?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+export interface CreateIncidentTemplateData {
+  type: IncidentType;
+  title: string;
+  description: string;
+}
+
+export interface UpdateIncidentTemplateData {
+  type?: IncidentType;
+  title?: string;
+  description?: string;
 }
 
 export interface CreateIncidentData {
@@ -370,5 +399,52 @@ export const incidentsApi = {
     );
     if (!response.ok) throw new Error("Bulk export failed");
     return response.blob();
+  },
+
+  /**
+   * Get all incident templates
+   */
+  getIncidentTemplates: async (
+    type?: IncidentType
+  ): Promise<{
+    templates: IncidentTemplate[];
+    total: number;
+  }> => {
+    return apiClient.get("/incidents/templates", { params: { type } });
+  },
+
+  /**
+   * Get single incident template by ID
+   */
+  getIncidentTemplate: async (
+    id: string
+  ): Promise<{ template: IncidentTemplate }> => {
+    return apiClient.get(`/incidents/templates/${id}`);
+  },
+
+  /**
+   * Create new incident template
+   */
+  createIncidentTemplate: async (
+    data: CreateIncidentTemplateData
+  ): Promise<{ template: IncidentTemplate }> => {
+    return apiClient.post("/incidents/templates", data);
+  },
+
+  /**
+   * Update incident template
+   */
+  updateIncidentTemplate: async (
+    id: string,
+    data: UpdateIncidentTemplateData
+  ): Promise<{ template: IncidentTemplate }> => {
+    return apiClient.patch(`/incidents/templates/${id}`, data);
+  },
+
+  /**
+   * Delete incident template
+   */
+  deleteIncidentTemplate: async (id: string): Promise<{ message: string }> => {
+    return apiClient.delete(`/incidents/templates/${id}`);
   },
 };

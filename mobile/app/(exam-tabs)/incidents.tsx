@@ -23,11 +23,10 @@ import { IncidentCard, StatsCard } from "@/components/IncidentComponents";
 import {
   getIncidents,
   getStatistics,
-  type IncidentType,
   type IncidentSeverity,
   type IncidentStatus,
 } from "@/api/incidents";
-import type { Incident } from "@/types";
+import type { Incident, IncidentType } from "@/types";
 
 export default function IncidentsScreen() {
   const colors = useThemeColors();
@@ -288,7 +287,7 @@ export default function IncidentsScreen() {
                         "MISSING_SCRIPT",
                         "DAMAGED_SCRIPT",
                         "MALPRACTICE",
-                        "STUDENT_ILLNESS",
+                        "HEALTH_ISSUE",
                         "VENUE_ISSUE",
                         "COUNT_DISCREPANCY",
                         "LATE_SUBMISSION",

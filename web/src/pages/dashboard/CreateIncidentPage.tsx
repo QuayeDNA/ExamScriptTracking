@@ -38,44 +38,44 @@ const INCIDENT_TYPES: {
   description: string;
 }[] = [
   {
-    value: "MISSING_SCRIPT",
-    label: "Missing Script",
-    description: "A script cannot be located in the batch",
-  },
-  {
-    value: "DAMAGED_SCRIPT",
-    label: "Damaged Script",
-    description: "Script is torn, wet, or otherwise damaged",
-  },
-  {
     value: "MALPRACTICE",
     label: "Malpractice",
     description: "Suspected cheating or exam violation",
   },
   {
-    value: "STUDENT_ILLNESS",
-    label: "Student Illness",
+    value: "HEALTH_ISSUE",
+    label: "Health Issue",
     description: "Student became ill during examination",
   },
   {
-    value: "VENUE_ISSUE",
-    label: "Venue Issue",
-    description: "Problems with exam venue or facilities",
+    value: "EXAM_DAMAGE",
+    label: "Exam Damage",
+    description: "Examination materials are damaged or compromised",
   },
   {
-    value: "COUNT_DISCREPANCY",
-    label: "Count Discrepancy",
-    description: "Mismatch in expected vs actual script count",
+    value: "EQUIPMENT_FAILURE",
+    label: "Equipment Failure",
+    description: "Technical issues with exam equipment or systems",
   },
   {
-    value: "LATE_SUBMISSION",
-    label: "Late Submission",
-    description: "Student submitted script after deadline",
+    value: "DISRUPTION",
+    label: "Disruption",
+    description: "External disturbances affecting the examination",
+  },
+  {
+    value: "SECURITY_BREACH",
+    label: "Security Breach",
+    description: "Compromised exam security or unauthorized access",
+  },
+  {
+    value: "PROCEDURAL_VIOLATION",
+    label: "Procedural Violation",
+    description: "Failure to follow examination procedures",
   },
   {
     value: "OTHER",
     label: "Other",
-    description: "Other incident types",
+    description: "Other incident types not covered above",
   },
 ];
 

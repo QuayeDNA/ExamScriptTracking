@@ -3,7 +3,7 @@
  * Enhanced with: session selection, debounced lookup, manual student info, auto-severity, file validation, draft system
  */
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import {
   Typography,
   BorderRadius,
 } from "@/constants/design-system";
+import { useSessionStore } from "@/store/session";
 import { getFileUrl } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -36,17 +37,14 @@ import { Dialog } from "@/components/ui/dialog";
 import {
   createIncident,
   uploadAttachments,
-  type IncidentType,
   getIncidentTypeLabel,
   getSeverityFromType,
-} from "@/api/incidents";
-import { examSessionsApi, type ExamSession } from "@/api/examSessions";
-import { useSessionStore } from "@/store/session";
-import {
-  searchIncidentTemplates,
   getTemplatesForType,
+  searchIncidentTemplates,
   type IncidentTemplate,
-} from "@/constants/incident-templates";
+} from "@/api/incidents";
+import { examSessionsApi } from "@/api/examSessions";
+import type { ExamSession, IncidentType } from "@/types";
 import {
   lookupStudentForIncident,
   type Student,
@@ -73,9 +71,6 @@ const DRAFT_KEY = "incident_draft";
 export default function ReportIncidentScreen() {
   const colors = useThemeColors();
   const { currentSession } = useSessionStore();
-
-  // Ref to track if a suggestion is being selected
-  const selectingSuggestionRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
 
@@ -179,7 +174,7 @@ export default function ReportIncidentScreen() {
   useEffect(() => {
     const studentRelatedTypes: IncidentType[] = [
       "MALPRACTICE",
-      "STUDENT_ILLNESS",
+      "HEALTH_ISSUE",
     ];
     const shouldShow = studentRelatedTypes.includes(formData.type);
     setShowStudentField(shouldShow);
@@ -307,20 +302,26 @@ export default function ReportIncidentScreen() {
   };
 
   // Handle title input change with smart suggestions
-  const handleTitleChange = (text: string) => {
+  const handleTitleChange = async (text: string) => {
     handleChange("title", text);
 
     if (text.trim().length > 0) {
-      const allSuggestions = searchIncidentTemplates(text);
-      const typeSuggestions = searchIncidentTemplates(text, formData.type);
-      const combinedSuggestions = [
-        ...typeSuggestions,
-        ...allSuggestions.filter(
-          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
-        ),
-      ];
-      setTitleSuggestions(combinedSuggestions.slice(0, 5));
-      setShowSuggestions(combinedSuggestions.length > 0);
+      try {
+        const allSuggestions = await searchIncidentTemplates(text);
+        const typeSuggestions = await searchIncidentTemplates(text, formData.type);
+        const combinedSuggestions = [
+          ...typeSuggestions,
+          ...allSuggestions.filter(
+            (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+          ),
+        ];
+        setTitleSuggestions(combinedSuggestions.slice(0, 5));
+        setShowSuggestions(combinedSuggestions.length > 0);
+      } catch (error) {
+        console.error('Failed to search templates:', error);
+        setTitleSuggestions([]);
+        setShowSuggestions(false);
+      }
     } else {
       setTitleSuggestions([]);
       setShowSuggestions(false);
@@ -346,21 +347,27 @@ export default function ReportIncidentScreen() {
   };
 
   // Handle incident type change
-  const handleTypeChange = (type: IncidentType) => {
+  const handleTypeChange = async (type: IncidentType) => {
     handleChange("type", type);
     
     // Refresh suggestions
     if (formData.title.trim().length > 0) {
-      const allSuggestions = searchIncidentTemplates(formData.title);
-      const typeSuggestions = searchIncidentTemplates(formData.title, type);
-      const combinedSuggestions = [
-        ...typeSuggestions,
-        ...allSuggestions.filter(
-          (s) => !typeSuggestions.find((ts) => ts.id === s.id)
-        ),
-      ];
-      setTitleSuggestions(combinedSuggestions.slice(0, 5));
-      setShowSuggestions(combinedSuggestions.length > 0);
+      try {
+        const allSuggestions = await searchIncidentTemplates(formData.title);
+        const typeSuggestions = await searchIncidentTemplates(formData.title, type);
+        const combinedSuggestions = [
+          ...typeSuggestions,
+          ...allSuggestions.filter(
+            (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+          ),
+        ];
+        setTitleSuggestions(combinedSuggestions.slice(0, 5));
+        setShowSuggestions(combinedSuggestions.length > 0);
+      } catch (error) {
+        console.error('Failed to search templates:', error);
+        setTitleSuggestions([]);
+        setShowSuggestions(false);
+      }
     }
   };
 
@@ -640,7 +647,17 @@ export default function ReportIncidentScreen() {
             { 
               text: 'Restore', 
               onPress: () => {
-                setFormData(draft.formData);
+                // Validate and migrate old incident types
+                const validatedFormData = { ...draft.formData };
+                if (validatedFormData.type === "STUDENT_ILLNESS") {
+                  validatedFormData.type = "HEALTH_ISSUE";
+                }
+                // Migrate other old types if needed
+                const validTypes: IncidentType[] = ["MALPRACTICE", "HEALTH_ISSUE", "EXAM_DAMAGE", "EQUIPMENT_FAILURE", "DISRUPTION", "SECURITY_BREACH", "PROCEDURAL_VIOLATION", "OTHER"];
+                if (!validTypes.includes(validatedFormData.type as IncidentType)) {
+                  validatedFormData.type = "OTHER";
+                }
+                setFormData(validatedFormData as typeof formData);
                 if (draft.attachments) setAttachments(draft.attachments);
                 if (draft.studentIndexNumber) setStudentIndexNumber(draft.studentIndexNumber);
                 if (draft.manualStudentInfo) {
@@ -883,13 +900,13 @@ export default function ReportIncidentScreen() {
                 <View style={{ flexDirection: "row", gap: Spacing[2] }}>
                   {(
                     [
-                      "MISSING_SCRIPT",
-                      "DAMAGED_SCRIPT",
                       "MALPRACTICE",
-                      "STUDENT_ILLNESS",
-                      "VENUE_ISSUE",
-                      "COUNT_DISCREPANCY",
-                      "LATE_SUBMISSION",
+                      "HEALTH_ISSUE",
+                      "EXAM_DAMAGE",
+                      "EQUIPMENT_FAILURE",
+                      "DISRUPTION",
+                      "SECURITY_BREACH",
+                      "PROCEDURAL_VIOLATION",
                       "OTHER",
                     ] as IncidentType[]
                   ).map((type) => (
@@ -1281,31 +1298,38 @@ export default function ReportIncidentScreen() {
                            placeholderTextColor={colors.foregroundMuted}
                            value={formData.title}
                            onChangeText={handleTitleChange}
-                           onFocus={() => {
+                           onFocus={async () => {
                              // Show suggestions based on current title or show default suggestions for the incident type
                              if (formData.title.trim().length > 0) {
                                // Search across all types when user has typed something
-                               const allSuggestions = searchIncidentTemplates(
-                                 formData.title
-                               );
-                               const typeSuggestions = searchIncidentTemplates(
-                                 formData.title,
-                                 formData.type
-                               );
-                               const combinedSuggestions = [
-                                 ...typeSuggestions,
-                                 ...allSuggestions.filter(
-                                   (s) => !typeSuggestions.find((ts) => ts.id === s.id)
-                                 ),
-                               ];
-                               setTitleSuggestions(combinedSuggestions.slice(0, 5));
-                               setShowSuggestions(combinedSuggestions.length > 0);
+                               try {
+                                 const allSuggestions = await searchIncidentTemplates(formData.title);
+                                 const typeSuggestions = await searchIncidentTemplates(formData.title, formData.type);
+                                 const combinedSuggestions = [
+                                   ...typeSuggestions,
+                                   ...allSuggestions.filter(
+                                     (s) => !typeSuggestions.find((ts) => ts.id === s.id)
+                                   ),
+                                 ];
+                                 setTitleSuggestions(combinedSuggestions.slice(0, 5));
+                                 setShowSuggestions(combinedSuggestions.length > 0);
+                               } catch (error) {
+                                 console.error('Failed to search templates:', error);
+                                 setTitleSuggestions([]);
+                                 setShowSuggestions(false);
+                               }
                              } else {
                                // Show top templates for the selected incident type when field is focused
-                               const typeTemplates = getTemplatesForType(formData.type);
-                               const defaultSuggestions = typeTemplates.slice(0, 3); // Show top 3 templates
-                               setTitleSuggestions(defaultSuggestions);
-                               setShowSuggestions(defaultSuggestions.length > 0);
+                               try {
+                                 const typeTemplates = await getTemplatesForType(formData.type);
+                                 const defaultSuggestions = typeTemplates.slice(0, 3); // Show top 3 templates
+                                 setTitleSuggestions(defaultSuggestions);
+                                 setShowSuggestions(defaultSuggestions.length > 0);
+                               } catch (error) {
+                                 console.error('Failed to get templates for type:', error);
+                                 setTitleSuggestions([]);
+                                 setShowSuggestions(false);
+                               }
                              }
                            }}
                          />
@@ -1314,7 +1338,7 @@ export default function ReportIncidentScreen() {
          
                      {/* Smart Suggestions - positioned outside the Card to avoid overflow:hidden clipping */}
                      {showSuggestions && titleSuggestions.length > 0 && (
-                       <Card
+                       <View
                          style={{
                            position: "absolute",
                            top: "100%",
@@ -1322,7 +1346,16 @@ export default function ReportIncidentScreen() {
                            right: Spacing[4],
                            zIndex: 9999,
                            marginTop: Spacing[1],
-                           maxHeight: 200,
+                           maxHeight: 240,
+                           backgroundColor: colors.card,
+                           borderRadius: BorderRadius.lg,
+                           borderWidth: 1,
+                           borderColor: colors.border,
+                           shadowColor: colors.foreground,
+                           shadowOffset: { width: 0, height: 2 },
+                           shadowOpacity: 0.1,
+                           shadowRadius: 8,
+                           elevation: 8,
                          }}
                        >
                          <ScrollView
@@ -1331,9 +1364,12 @@ export default function ReportIncidentScreen() {
                            nestedScrollEnabled={true}
                            scrollEnabled={true}
                            bounces={false}
-                           contentContainerStyle={{ paddingVertical: Spacing[2] }}
+                           contentContainerStyle={{
+                             paddingVertical: Spacing[3],
+                             paddingHorizontal: Spacing[2]
+                           }}
                          >
-                           {titleSuggestions.map((template) => (
+                           {titleSuggestions.map((template, index) => (
                              <Pressable
                                key={template.id}
                                onPress={() => {
@@ -1342,59 +1378,73 @@ export default function ReportIncidentScreen() {
                                }}
                                style={({ pressed }) => [
                                  {
-                                   padding: Spacing[3],
-                                   borderBottomWidth: 1,
-                                   borderBottomColor: colors.border,
+                                   paddingVertical: Spacing[3],
+                                   paddingHorizontal: Spacing[3],
+                                   borderRadius: BorderRadius.md,
+                                   marginVertical: Spacing[1],
+                                   marginHorizontal: Spacing[1],
                                    backgroundColor: pressed ? colors.muted : "transparent",
                                  },
                                ]}
                              >
-                               <Text
-                                 style={{
-                                   fontSize: Typography.fontSize.sm,
-                                   fontWeight: Typography.fontWeight.medium,
-                                   color: colors.foreground,
-                                   marginBottom: Spacing[1],
-                                 }}
-                                 numberOfLines={1}
-                               >
-                                 {template.title}
-                               </Text>
-                               <Text
-                                 style={{
-                                   fontSize: Typography.fontSize.xs,
-                                   color: colors.foregroundMuted,
-                                 }}
-                                 numberOfLines={2}
-                               >
-                                 {template.description}
-                               </Text>
-                               <View
-                                 style={{
-                                   flexDirection: "row",
-                                   alignItems: "center",
-                                   marginTop: Spacing[1],
-                                 }}
-                               >
-                                 <Badge
-                                   variant={
-                                     template.severity === "CRITICAL"
-                                       ? "error"
-                                       : template.severity === "HIGH"
-                                         ? "warning"
-                                         : template.severity === "MEDIUM"
-                                           ? "default"
-                                           : "secondary"
-                                   }
-                                   style={{ marginRight: Spacing[2] }}
-                                 >
-                                   {template.severity}
-                                 </Badge>
+                               <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+                                 <View style={{ flex: 1, marginRight: Spacing[2] }}>
+                                   <Text
+                                     style={{
+                                       fontSize: 14,
+                                       fontWeight: "500",
+                                       color: colors.foreground,
+                                       marginBottom: Spacing[1],
+                                       lineHeight: 20,
+                                     }}
+                                     numberOfLines={2}
+                                   >
+                                     {template.title}
+                                   </Text>
+                                   <Text
+                                     style={{
+                                       fontSize: 12,
+                                       color: colors.foregroundMuted,
+                                       lineHeight: 16,
+                                     }}
+                                     numberOfLines={2}
+                                   >
+                                     {template.description}
+                                   </Text>
+                                 </View>
+                                 <View style={{ alignItems: "flex-end", minWidth: 60 }}>
+                                   {template.isDefault && (
+                                     <Badge
+                                       variant="secondary"
+                                       style={{
+                                         marginBottom: Spacing[1],
+                                         paddingHorizontal: Spacing[2],
+                                         paddingVertical: Spacing[1],
+                                       }}
+                                     >
+                                       <Text style={{ fontSize: 10 }}>
+                                         Default
+                                       </Text>
+                                     </Badge>
+                                   )}
+                                   {template.creator && (
+                                     <Text
+                                       style={{
+                                         fontSize: 10,
+                                         color: colors.foregroundMuted,
+                                         textAlign: "right",
+                                       }}
+                                       numberOfLines={1}
+                                     >
+                                       By {template.creator.firstName} {template.creator.lastName}
+                                     </Text>
+                                   )}
+                                 </View>
                                </View>
                              </Pressable>
                            ))}
                          </ScrollView>
-                       </Card>
+                       </View>
                      )}
                    </View>
          
